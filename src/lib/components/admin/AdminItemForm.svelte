@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { Category, Item, Tag } from '$lib/types/content';
 	import type { AdminFileRecord } from '$lib/server/services/admin-files';
 
@@ -17,6 +19,8 @@
 		form = null,
 		initialType = 'site',
 		initialCategoryId = '',
+		onSaved,
+		onCancel,
 		action
 	}: {
 		item?: Item | null;
@@ -25,6 +29,8 @@
 		form?: FormState;
 		initialType?: string;
 		initialCategoryId?: string;
+		onSaved?: () => void | Promise<void>;
+		onCancel?: () => void;
 		action: string;
 	} = $props();
 
@@ -82,9 +88,18 @@
 	function featuredChecked(): boolean {
 		return form?.values ? value('isFeatured') === 'on' : Boolean(item?.isFeatured);
 	}
+	const enhanceForm: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'redirect' || result.type === 'success') {
+				await onSaved?.();
+				return;
+			}
+			await update();
+		};
+	};
 </script>
 
-<form class="admin-form" method="POST" {action}>
+<form class="admin-form" method="POST" {action} use:enhance={enhanceForm}>
 	{#if item}<input type="hidden" name="id" value={item.id} />{/if}
 	{#if form?.message}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
 
@@ -298,7 +313,9 @@
 
 	<div class="admin-form-actions">
 		<button class="admin-primary-button" type="submit">保存内容</button>
-		<a class="admin-secondary-button" href={resolve('/admin/items')}>取消</a>
+		{#if onCancel}<button class="admin-secondary-button" type="button" onclick={onCancel}
+				>取消</button
+			>{:else}<a class="admin-secondary-button" href={resolve('/admin/items')}>取消</a>{/if}
 	</div>
 </form>
 

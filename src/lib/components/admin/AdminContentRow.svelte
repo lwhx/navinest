@@ -10,7 +10,8 @@
 		onDragStart,
 		onDragOver,
 		onDrop,
-		onMove
+		onMove,
+		onEdit
 	}: {
 		item: Item;
 		database?: boolean;
@@ -21,6 +22,7 @@
 		onDragOver?: (event: DragEvent) => void;
 		onDrop?: (id: number) => void;
 		onMove?: (id: number, direction: -1 | 1) => void;
+		onEdit?: (item: Item) => void;
 	} = $props();
 	const typeLabels = {
 		site: '网址',
@@ -95,7 +97,7 @@
 		>
 	</div>
 	{#if database}<div class="content-row-actions">
-			<a href={resolve(`/admin/items?edit=${item.id}`)}>编辑</a>
+			<button type="button" onclick={() => onEdit?.(item)}>编辑</button>
 			<a href={resolve(previewPath as '/')}>前台预览</a>
 			<form
 				method="POST"

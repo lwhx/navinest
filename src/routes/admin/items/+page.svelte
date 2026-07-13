@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { invalidateAll } from '$app/navigation';
 	import AdminItemForm from '$lib/components/admin/AdminItemForm.svelte';
 	import AdminContentRow from '$lib/components/admin/AdminContentRow.svelte';
 	import { moveOrderedItem } from '$lib/content-ordering';
@@ -23,7 +23,11 @@
 		orderedItems = $state<Item[]>([]),
 		draggedItemId = $state<number | null>(null),
 		sortSaving = $state(false),
-		sortMessage = $state('');
+		sortMessage = $state(''),
+		sortingMode = $state(false),
+		editingItem = $state<Item | null>(null),
+		creatingModal = $state(false),
+		editorScrollY = $state(0);
 	$effect(() => {
 		if (filtersInitialized) return;
 		activeType = (
@@ -59,11 +63,10 @@
 			])
 		)
 	);
-	let createHref = $derived(
-		`/admin/items?create=1${activeType !== 'all' ? `&type=${activeType}` : ''}${contentCategoryFilter !== 'all' ? `&category=${contentCategoryFilter}` : ''}`
-	);
+
 	let sortableScope = $derived(
-		data.source === 'database' &&
+		sortingMode &&
+			data.source === 'database' &&
 			activeType !== 'all' &&
 			contentCategoryFilter !== 'all' &&
 			!contentSearch.trim() &&
@@ -123,7 +126,63 @@
 		if (target === undefined) return;
 		applyOrder(moveOrderedItem(ids, id, target));
 	}
+
+	function enterSortingMode() {
+		sortingMode = true;
+		contentSearch = '';
+		contentStatusFilter = 'all';
+		contentVisibilityFilter = 'all';
+		if (activeType === 'all') activeType = 'site';
+		const firstCategory = data.categories.find(
+			(category) =>
+				category.type === activeType &&
+				orderedItems.filter((item) => item.type === activeType && item.categoryId === category.id)
+					.length > 1
+		);
+		if (
+			contentCategoryFilter === 'all' ||
+			!data.categories.some(
+				(category) => String(category.id) === contentCategoryFilter && category.type === activeType
+			)
+		)
+			contentCategoryFilter = firstCategory ? String(firstCategory.id) : 'all';
+		sortMessage = '';
+	}
+
+	function selectSortingType(type: ContentType) {
+		activeType = type;
+		const category = data.categories.find(
+			(entry) =>
+				entry.type === type &&
+				orderedItems.filter((item) => item.type === type && item.categoryId === entry.id).length > 1
+		);
+		contentCategoryFilter = category ? String(category.id) : 'all';
+		sortMessage = '';
+	}
+
+	function openEditor(item: Item | null) {
+		editorScrollY = window.scrollY;
+		editingItem = item;
+		creatingModal = item === null;
+	}
+
+	function closeEditor() {
+		editingItem = null;
+		creatingModal = false;
+		requestAnimationFrame(() => window.scrollTo({ top: editorScrollY }));
+	}
+
+	async function savedEditor() {
+		closeEditor();
+		await invalidateAll();
+	}
 </script>
+
+<svelte:window
+	onkeydown={(event) => {
+		if ((editingItem || creatingModal) && event.key === 'Escape') closeEditor();
+	}}
+/>
 
 <header class="admin-page-header">
 	<div>
@@ -131,9 +190,17 @@
 		<h1>内容管理</h1>
 		<span>集中管理网址、文章、资源、书籍和公告。</span>
 	</div>
-	{#if data.source === 'database'}<a class="admin-primary-button" href={resolve(createHref as '/')}
-			>新增内容</a
-		>{/if}
+	{#if data.source === 'database'}<div class="content-header-actions">
+			<button
+				class="admin-secondary-button"
+				type="button"
+				onclick={sortingMode ? () => (sortingMode = false) : enterSortingMode}
+				>{sortingMode ? '退出排序' : '进入排序'}</button
+			>
+			<button class="admin-primary-button" type="button" onclick={() => openEditor(null)}
+				>新增内容</button
+			>
+		</div>{/if}
 </header>
 {#if data.source === 'fallback'}<p class="admin-notice">本地示例为只读数据。</p>{/if}
 {#if form?.message && !data.mode}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
@@ -221,10 +288,34 @@
 				></label
 			>
 		</div>
-		<div class="content-sort-bar" class:enabled={sortableScope} role="status">
-			{#if sortMessage}<span>{sortMessage}</span>{:else if sortableScope}<span
-					>拖动左侧手柄调整当前分类顺序；也可使用上移、下移按钮。</span
-				>{:else}<span>选择具体内容类型和分类，并清空其他筛选后可手动排序。</span>{/if}
+		<div class="content-sort-bar" class:enabled={sortingMode} role="status">
+			{#if sortingMode}<div class="content-sort-settings">
+					<strong>手动排序模式</strong>
+					<label
+						><span>内容类型</span><select
+							value={activeType}
+							onchange={(event) => selectSortingType(event.currentTarget.value as ContentType)}
+							><option value="site">网址</option><option value="post">文章</option><option
+								value="app">APP / 资源</option
+							><option value="book">书籍 / 影视</option><option value="bulletin">公告</option
+							></select
+						></label
+					>
+					<label
+						><span>分类</span><select bind:value={contentCategoryFilter}
+							><option value="all">请选择分类</option
+							>{#each data.categories.filter((category) => category.type === activeType) as category (category.id)}<option
+									value={String(category.id)}>{category.name}</option
+								>{/each}</select
+						></label
+					>
+					<span
+						>{sortMessage ||
+							(sortableScope
+								? '拖动手柄或使用上下按钮调整顺序，松开后自动保存。'
+								: '请选择至少包含两条内容的分类。')}</span
+					>
+				</div>{:else}<span>点击页面右上角“进入排序”，选择分类后即可直接拖拽。</span>{/if}
 		</div>
 		<div class="content-list" aria-live="polite">
 			{#each filteredItems as item, index (item.id)}<AdminContentRow
@@ -237,40 +328,47 @@
 					onDragOver={(event) => event.preventDefault()}
 					onDrop={dropOn}
 					onMove={moveItem}
+					onEdit={openEditor}
 				/>{:else}<div class="content-empty">
 					<strong>没有匹配内容</strong>
 					<p>调整类型、搜索词或筛选条件。</p>
 				</div>{/each}
 		</div>
 	</section>
+</div>
 
-	{#if data.source === 'database' && data.mode}<aside
-			class="content-editor"
+{#if editingItem || creatingModal}<div
+		class="content-editor-backdrop"
+		role="presentation"
+		onclick={(event) => {
+			if (event.target === event.currentTarget) closeEditor();
+		}}
+	>
+		<div
+			class="content-editor-modal"
+			role="dialog"
+			aria-modal="true"
 			aria-labelledby="item-editor-title"
+			tabindex="-1"
 		>
-			<div class="admin-editor-header">
+			<div class="content-modal-header">
 				<div>
 					<p class="eyebrow">Editor</p>
-					<h2 id="item-editor-title">{data.mode === 'create' ? '新增内容' : '编辑内容'}</h2>
+					<h2 id="item-editor-title">{editingItem ? `编辑：${editingItem.title}` : '新增内容'}</h2>
 				</div>
-				<a href={resolve('/admin/items')} aria-label="关闭编辑器" title="关闭">×</a>
+				<button type="button" aria-label="关闭编辑窗口" onclick={closeEditor}>×</button>
 			</div>
-			{#if data.mode === 'create' || data.editing}<AdminItemForm
-					item={data.editing as Item | null}
+			<div class="content-modal-body">
+				<AdminItemForm
+					item={editingItem}
 					categories={data.categories as Category[]}
 					tags={data.tags as Tag[]}
-					{form}
-					initialType={activeType === 'all'
-						? data.initialType === 'all'
-							? 'site'
-							: data.initialType
-						: activeType}
-					initialCategoryId={contentCategoryFilter === 'all'
-						? data.initialCategoryId
-						: contentCategoryFilter}
-					action={data.mode === 'create'
-						? '?create=1&/create'
-						: `?edit=${data.editing?.id}&/update`}
-				/>{:else}<p class="admin-notice">没有找到要编辑的内容。</p>{/if}
-		</aside>{/if}
-</div>
+					initialType={activeType === 'all' ? 'site' : activeType}
+					initialCategoryId={contentCategoryFilter === 'all' ? '' : contentCategoryFilter}
+					action={editingItem ? `?/update` : `?/create`}
+					onSaved={savedEditor}
+					onCancel={closeEditor}
+				/>
+			</div>
+		</div>
+	</div>{/if}
