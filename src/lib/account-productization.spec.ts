@@ -25,4 +25,13 @@ describe('account productization', () => {
 		expect(read('src/routes/user/submissions/+page.svelte')).toContain('/go?url=');
 		expect(read('src/routes/login/+page.svelte')).toContain('/api/auth/github');
 	});
+	it('shows the admin entry only for administrators', () => {
+		const shell = read('src/lib/components/AccountShell.svelte'),
+			page = read('src/routes/user/+page.svelte');
+		expect(shell).toContain('role?: string');
+		expect(shell).toContain("role === 'admin'");
+		expect(shell).toContain("resolve('/admin')");
+		expect(page).toContain('role={data.user.role}');
+		expect(page).toContain("data.user.role === 'admin'");
+	});
 });
