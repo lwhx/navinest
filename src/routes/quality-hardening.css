@@ -1,0 +1,36 @@
+/* Cross-page accessibility and motion safeguards. */
+.sidebar-brand small,
+.sidebar-shortcuts a,
+.module-title > a,
+.site-content > p,
+.type-chip,
+.tag-row a,
+.detail-link,
+.subcategory-tabs a,
+.card-metrics span,
+.rail-card > p,
+.site-stats span,
+.rail-title > a {
+	color: #5f656d !important;
+}
+.home-sidebar nav a:hover,
+.home-sidebar nav a.active {
+	color: #b32632 !important;
+}
+.hero-search-form button {
+	background: #b32632 !important;
+}
+.rail-list > li > span {
+	color: #a51f2b !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

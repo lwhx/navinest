@@ -1,0 +1,45 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "navinest",
+	"compatibility_date": "2026-07-12",
+	"compatibility_flags": ["nodejs_als"],
+	"main": "cloudflare/worker.ts",
+	"vars": {
+		"APP_NAME": "NaviNest",
+		"PUBLIC_SITE_URL": "https://nss.whks.de",
+		"GITHUB_CLIENT_ID": "Ov23li5a3AnNdqUzn86i"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "navinest",
+			"database_id": "03188e66-865b-445e-95ff-684e63b99df6"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "FILES",
+			"bucket_name": "navinest-files"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "95e10000fbd74acd88ecae7f8e36dd24"
+		}
+	],
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"triggers": {
+		"crons": ["15 1 * * *"]
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"routes": [{ "pattern": "nss.whks.de", "custom_domain": true }],
+	"workers_dev": false,
+	"preview_urls": false
+}

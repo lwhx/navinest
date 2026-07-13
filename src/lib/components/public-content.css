@@ -1,0 +1,128 @@
+.listing-hero {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 24px;
+	margin-bottom: 24px;
+	border-radius: 18px;
+	padding: 34px 38px;
+	color: #fff;
+	background: linear-gradient(120deg, #d83b62, #f1404b 48%, #ff8b62);
+	box-shadow: 0 16px 40px rgba(165, 45, 69, 0.16);
+}
+.listing-hero span {
+	font-size: 12px;
+	letter-spacing: 0.12em;
+	opacity: 0.8;
+}
+.listing-hero h1 {
+	margin: 6px 0 8px;
+	font-size: 30px;
+}
+.listing-hero p {
+	margin: 0;
+	opacity: 0.82;
+}
+.listing-hero > strong {
+	font-size: 34px;
+	text-align: center;
+}
+.listing-hero > strong small {
+	display: block;
+	margin-top: 4px;
+	font-size: 10px;
+	font-weight: 500;
+	opacity: 0.75;
+}
+.search-listing-hero {
+	grid-template-columns: minmax(0, 1fr) auto;
+}
+.public-search-form {
+	grid-column: 1/-1;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	max-width: 800px;
+	border-radius: 12px;
+	padding: 6px;
+	background: #fff;
+}
+.public-search-form input {
+	height: 46px;
+	border: 0;
+	padding: 0 14px;
+	outline: 0;
+}
+.public-search-form button {
+	border: 0;
+	border-radius: 9px;
+	padding: 0 24px;
+	color: #fff;
+	background: #f1404b;
+}
+.results-cards {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 12px;
+}
+.empty-state {
+	border-radius: 12px;
+	padding: 36px;
+	text-align: center;
+	background: #fff;
+}
+.empty-state p {
+	color: #93959a;
+}
+.category-child-tabs {
+	display: flex;
+	gap: 8px;
+	margin: 18px 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.category-child-tabs a {
+	flex: 0 0 auto;
+	border: 1px solid rgba(72, 75, 79, 0.1);
+	border-radius: 999px;
+	padding: 9px 15px;
+	background: #fff;
+	color: #676b71;
+	font-size: 13px;
+	font-weight: 750;
+}
+.category-child-tabs a:hover,
+.category-child-tabs a.active {
+	border-color: rgba(241, 64, 75, 0.18);
+	background: rgba(241, 64, 75, 0.08);
+	color: #f1404b;
+}
+@media (max-width: 1300px) {
+	.results-cards {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+@media (max-width: 900px) {
+	.listing-hero {
+		padding: 28px 22px;
+	}
+	.results-cards {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (max-width: 620px) {
+	.listing-hero {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+	.listing-hero h1 {
+		font-size: 25px;
+	}
+	.results-cards {
+		grid-template-columns: 1fr;
+	}
+	.public-search-form {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+	.public-search-form button {
+		padding: 0 17px;
+	}
+}
