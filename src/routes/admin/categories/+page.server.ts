@@ -19,10 +19,14 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ platform, url }) => {
 	const database = getDatabase(platform);
 	const data = database ? await loadAdminCategories(database) : fallbackAdminCategories();
-	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
+	const editId = parsePositiveId(url.searchParams.get('edit') ?? ''),
+		parentId = parsePositiveId(url.searchParams.get('parent') ?? '');
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
+		createParent: parentId
+			? (data.categories.find((category) => category.id === parentId) ?? null)
+			: null,
 		editing: editId ? (data.categories.find((category) => category.id === editId) ?? null) : null
 	};
 };
