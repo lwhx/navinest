@@ -6,6 +6,7 @@ import type { Database } from '$lib/server/db';
 import { listCategories } from '$lib/server/services/categories';
 import { listItems } from '$lib/server/services/items';
 import { listSearchEngines } from '$lib/server/services/search-engines';
+import { buildCategoryWorkbench } from '$lib/server/services/category-workbench';
 
 import { listTags } from '$lib/server/services/tags';
 import type { HomeModule } from '$lib/types/content';
@@ -77,27 +78,41 @@ export function fallbackAdminItems() {
 }
 
 export async function loadAdminCategories(database: Database) {
+	const [categories, usage] = await Promise.all([
+		listCategories(database, { visibleOnly: false }),
+		database
+			.prepare(
+				'SELECT category_id, COUNT(*) AS count FROM items WHERE category_id IS NOT NULL GROUP BY category_id'
+			)
+			.all<{ category_id: number; count: number }>()
+	]);
 	return {
-		categories: await listCategories(database, { visibleOnly: false }),
+		categories,
+		workbench: buildCategoryWorkbench(
+			categories,
+			usage.results.map((row) => ({ categoryId: row.category_id, count: row.count }))
+		),
 		source: 'database' as const
 	};
 }
 
 export function fallbackAdminCategories() {
+	const categories = fallbackCategories.map((category, index) => ({
+		id: index + 1,
+		type: fallbackItems.find((item) => item.category === category.name)?.type ?? 'site',
+		parentId: null,
+		name: category.name,
+		slug: category.slug,
+		icon: category.icon ?? null,
+		description: null,
+		isVisible: true,
+		sortOrder: (index + 1) * 10,
+		createdAt: '本地示例',
+		updatedAt: '本地示例'
+	}));
 	return {
-		categories: fallbackCategories.map((category, index) => ({
-			id: index + 1,
-			type: fallbackItems.find((item) => item.category === category.name)?.type ?? 'site',
-			parentId: null,
-			name: category.name,
-			slug: category.slug,
-			icon: category.icon ?? null,
-			description: null,
-			isVisible: true,
-			sortOrder: (index + 1) * 10,
-			createdAt: '本地示例',
-			updatedAt: '本地示例'
-		})),
+		categories,
+		workbench: buildCategoryWorkbench(categories, []),
 		source: 'fallback' as const
 	};
 }

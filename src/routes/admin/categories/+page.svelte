@@ -1,8 +1,36 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import CategoryTreeNode from '$lib/components/CategoryTreeNode.svelte';
+	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
 	const errors = $derived((form?.errors ?? {}) as Record<string, string>);
+	let categorySearch = $state(''),
+		categoryTypeFilter = $state('all'),
+		categoryVisibilityFilter = $state('all');
+
+	function matches(node: CategoryWorkbenchNode): CategoryWorkbenchNode | null {
+		const children = node.children.flatMap((child) => {
+			const match = matches(child);
+			return match ? [match] : [];
+		});
+		const query = categorySearch.trim().toLowerCase(),
+			textMatch = !query || `${node.name} ${node.slug} ${node.path}`.toLowerCase().includes(query),
+			typeMatch = categoryTypeFilter === 'all' || node.type === categoryTypeFilter,
+			visibilityMatch =
+				categoryVisibilityFilter === 'all' ||
+				(categoryVisibilityFilter === 'visible' ? node.isVisible : !node.isVisible);
+		return (textMatch && typeMatch && visibilityMatch) || children.length
+			? { ...node, children }
+			: null;
+	}
+	let filteredRoots = $derived(data.workbench.roots.flatMap((root) => matches(root) ?? []));
+	let selectedType = $derived(
+			value('type', data.editing?.type ?? data.createParent?.type ?? 'site')
+		),
+		selectedParent = $derived(
+			value('parentId', String(data.editing?.parentId ?? data.createParent?.id ?? ''))
+		);
 
 	function value(name: string, fallback = ''): string {
 		const submitted = form?.values?.[name];
@@ -43,22 +71,23 @@
 				{#if form?.message}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
 				<div class="admin-form-grid">
 					<label
-						><span>类型</span><select
-							name="type"
-							value={value('type', data.editing?.type ?? 'site')}
-							><option value="site">网址</option><option value="post">文章</option><option
-								value="app">APP / 资源</option
-							><option value="book">书籍 / 影视</option><option value="bulletin">公告</option
-							></select
+						><span>类型</span><select name="type"
+							><option value="site" selected={selectedType === 'site'}>网址</option><option
+								value="post"
+								selected={selectedType === 'post'}>文章</option
+							><option value="app" selected={selectedType === 'app'}>APP / 资源</option><option
+								value="book"
+								selected={selectedType === 'book'}>书籍 / 影视</option
+							><option value="bulletin" selected={selectedType === 'bulletin'}>公告</option></select
 						>{#if errors.type}<small class="field-error">{errors.type}</small>{/if}</label
 					>
 					<label
-						><span>父级分类</span><select
-							name="parentId"
-							value={value('parentId', String(data.editing?.parentId ?? ''))}
-							><option value="">无父级</option
+						><span>父级分类</span><select name="parentId"
+							><option value="" selected={selectedParent === ''}>无父级</option
 							>{#each data.categories.filter((category) => category.id !== data.editing?.id) as category (category.id)}<option
-									value={category.id}>{category.name} · {category.type}</option
+									value={category.id}
+									selected={selectedParent === String(category.id)}
+									>{category.name} · {category.type}</option
 								>{/each}</select
 						>{#if errors.parentId}<small class="field-error">{errors.parentId}</small>{/if}</label
 					>
@@ -116,35 +145,67 @@
 	</section>
 {/if}
 
-<div class="admin-table-wrap">
-	<table class="admin-table">
-		<thead
-			><tr
-				><th>名称</th><th>Slug</th><th>类型</th><th>排序</th><th>可见</th
-				>{#if data.source === 'database'}<th>操作</th>{/if}</tr
-			></thead
-		>
-		<tbody
-			>{#each data.categories as category (category.id)}<tr
-					><td><strong>{category.name}</strong></td><td>{category.slug}</td><td>{category.type}</td
-					><td>{category.sortOrder}</td><td>{category.isVisible ? '是' : '否'}</td
-					>{#if data.source === 'database'}<td
-							><div class="admin-row-actions">
-								<a href={resolve(`/admin/categories?edit=${category.id}`)}>编辑</a>
-								<form
-									method="POST"
-									action="?/delete"
-									onsubmit={(event) => {
-										if (!confirm(`确定删除分类“${category.name}”吗？`)) event.preventDefault();
-									}}
-								>
-									<input type="hidden" name="id" value={category.id} /><button type="submit"
-										>删除</button
-									>
-								</form>
-							</div></td
-						>{/if}</tr
-				>{/each}</tbody
-		>
-	</table>
+<section class="category-summary" aria-label="分类概览">
+	<div><strong>{data.workbench.summary.total}</strong><span>全部分类</span></div>
+	<div><strong>{data.workbench.summary.roots}</strong><span>一级分类</span></div>
+	<div><strong>{data.workbench.summary.children}</strong><span>二级分类</span></div>
+	<div><strong>{data.workbench.summary.hidden}</strong><span>已隐藏</span></div>
+</section>
+
+<div class="category-workbench" class:editor-open={Boolean(data.mode)}>
+	<section class="category-browser" aria-labelledby="category-browser-title">
+		<div class="category-browser-header">
+			<div>
+				<p class="eyebrow">Structure</p>
+				<h2 id="category-browser-title">分类结构</h2>
+			</div>
+			<span>{filteredRoots.length} 个匹配结果</span>
+		</div>
+		<div class="category-toolbar">
+			<label class="category-search"
+				><span class="sr-only">搜索分类</span><input
+					bind:value={categorySearch}
+					placeholder="搜索名称、Slug或路径"
+				/></label
+			>
+			<label
+				><span class="sr-only">内容类型</span><select
+					class="category-type-filter"
+					bind:value={categoryTypeFilter}
+					><option value="all">全部类型</option><option value="site">网址</option><option
+						value="post">文章</option
+					><option value="app">APP / 资源</option><option value="book">书籍 / 影视</option><option
+						value="bulletin">公告</option
+					></select
+				></label
+			>
+			<label
+				><span class="sr-only">可见性</span><select
+					class="category-visibility-filter"
+					bind:value={categoryVisibilityFilter}
+					><option value="all">全部状态</option><option value="visible">前台可见</option><option
+						value="hidden">已隐藏</option
+					></select
+				></label
+			>
+		</div>
+		<div class="category-tree" aria-live="polite">
+			{#each filteredRoots as root (root.id)}<CategoryTreeNode
+					node={root}
+					database={data.source === 'database'}
+				/>{:else}<div class="category-empty">
+					<strong>没有匹配分类</strong>
+					<p>调整搜索词或筛选条件后再试。</p>
+				</div>{/each}
+		</div>
+	</section>
+
+	{#if !data.mode}<aside class="category-guidance">
+			<strong>使用提示</strong>
+			<ul>
+				<li>点击“快速新增子分类”会自动预选父级。</li>
+				<li>内容数包含当前分类及其子分类内容。</li>
+				<li>有子分类或直属内容的分类不能直接删除。</li>
+			</ul>
+		</aside>{/if}
 </div>
