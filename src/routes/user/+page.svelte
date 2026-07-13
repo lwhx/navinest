@@ -64,7 +64,11 @@
 </script>
 
 <svelte:head><title>用户中心 | NaviNest 导航巢</title></svelte:head>
-<AccountShell title="个人空间" description="管理你的资料、收藏、浏览记录和专属导航。">
+<AccountShell
+	title="个人空间"
+	description="管理你的资料、收藏、浏览记录和专属导航。"
+	role={data.user.role}
+>
 	<div class="account-grid">
 		<section class="account-card">
 			<div class="account-profile-media">
@@ -154,6 +158,13 @@
 					</div>
 					<a href={resolve('/contribute')}>立即投稿</a>
 				</li>
+				{#if data.user.role === 'admin'}<li class="admin-overview-entry">
+						<div>
+							<strong>后台管理</strong>
+							<p>管理内容、分类、投稿、文件和运行状态。</p>
+						</div>
+						<a href={resolve('/admin')}>进入后台</a>
+					</li>{/if}
 			</ul>
 		</aside>
 	</div>

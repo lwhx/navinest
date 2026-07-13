@@ -7,8 +7,15 @@
 		title,
 		description,
 		eyebrow = 'ACCOUNT',
+		role,
 		children
-	}: { title: string; description: string; eyebrow?: string; children: Snippet } = $props();
+	}: {
+		title: string;
+		description: string;
+		eyebrow?: string;
+		role?: string;
+		children: Snippet;
+	} = $props();
 	const links = [
 		{ label: '个人空间', href: resolve('/user') },
 		{ label: '我的投稿', href: resolve('/user/submissions') },
@@ -28,6 +35,7 @@
 	</section>
 	<nav class="account-subnav" aria-label="账户导航">
 		{#each links as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
+		{#if role === 'admin'}<a class="admin-entry" href={resolve('/admin')}>管理后台</a>{/if}
 	</nav>
 	<div class="account-content">{@render children()}</div>
 </PublicShell>

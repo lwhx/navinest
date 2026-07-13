@@ -29,7 +29,7 @@ describe('home reference parity', () => {
 		expect(css).toContain('@media (max-width: 620px)');
 		expect(css).toContain('height: 510px');
 		expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-		expect(css).toContain('.home-sidebar {\n		display: none');
+		expect(css).toMatch(/\.home-sidebar\s*\{\s*display:\s*none/);
 	});
 	it('keeps anchored category headings below the fixed header', () => {
 		expect(css).toContain('scroll-margin-top: 104px');
@@ -42,5 +42,8 @@ describe('home reference parity', () => {
 		expect(flow).toContain("activeSubcategories[section.slug] ?? 'all'");
 		expect(flow).toContain('item.category === activeChildName');
 		expect(css).toContain('.subcategory-tabs button.active');
+		expect(css).toContain('.subcategory-tabs {');
+		expect(css).toContain('padding: 4px');
+		expect(css).toContain('background: #e8eaed');
 	});
 });

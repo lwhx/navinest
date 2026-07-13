@@ -72,6 +72,26 @@
 	color: #f1404b;
 	background: rgba(241, 64, 75, 0.07);
 }
+.account-subnav .admin-entry {
+	margin-left: auto;
+	color: #fff;
+	background: #343a45;
+}
+.account-subnav .admin-entry:hover {
+	color: #fff;
+	background: #f1404b;
+}
+.admin-overview-entry {
+	border: 1px solid rgba(241, 64, 75, 0.14);
+	background: #fff7f7 !important;
+}
+.admin-overview-entry > a {
+	flex: 0 0 auto;
+	border-radius: 8px;
+	padding: 7px 10px;
+	color: #fff;
+	background: #f1404b;
+}
 .account-content {
 	display: grid;
 	gap: 18px;
