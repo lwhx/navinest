@@ -447,6 +447,11 @@
   - 第二提交 `a791cb5` 已推送，Quality #2对Action v5版本真实运行成功（1m22s），本地main与origin/main保持一致
   - GitHub Classic main保护规则已创建：必须PR、0审批、严格最新分支、对话解决、禁止force push和删除；`verify`建议项未被GitHub组件保存为必需检查
   - GitHub明确标记该规则 `Not enforced`：私有个人仓库需升级GitHub Team/Enterprise才能执行保护规则；当前以Quality工作流真实通过作为门禁证据，不误报分支保护已生效
+  - 第十一批B重新以一为导航公开站做双视口实测：首页改为全宽604px Hero、桌面6列/移动2列紧凑卡、218px侧栏、310px右栏、移动抽屉和统一最终样式入口
+  - 新增幂等迁移0010，将排行榜排序调整为15；生产模块顺序为search→ranking→常用推荐→开发工具，迁移前后备份均verified=true
+  - 修复一级分类锚点被固定顶栏遮挡：scroll-margin-top=104px，生产点击开发工具后标题y=105、顶栏下方间距25px
+  - CDP真实核验一为导航二级分类使用当前页 `#term-*` + smooth交互；NaviNest改为模块内ARIA Tab原地过滤，桌面/移动URL和scrollY不变，前端开发由5条切为3条并可恢复全部
+  - 最终生产版本 `65acdf81-9b71-4a69-8eac-dd5d69af0533`；49个测试文件/135个测试、lint/check/build、Worker哈希、28页面+2机器+2保护路由冒烟全部通过，console错误和横向溢出均为0
 
 ## 重要技术决策
 

@@ -56,7 +56,7 @@ INSERT INTO home_modules (type, title, config_json, sort_order) VALUES
 	('search', '聚合搜索', '{"defaultGroup":"onsite"}', 10),
 	('content', '常用推荐', '{"type":"site","categorySlug":"favorites","limit":8}', 20),
 	('content', '开发工具', '{"type":"site","categorySlug":"dev-tools","limit":8}', 30),
-	('ranking', '排行榜', '{"range":"week","type":"site","limit":10}', 40);
+	('ranking', '排行榜', '{"range":"week","type":"site","limit":10}', 15);
 
 INSERT INTO settings (key, value_json) VALUES
 	('site', '{"name":"NaviNest","title":"NaviNest 导航巢","url":"https://nss.whks.de"}'),

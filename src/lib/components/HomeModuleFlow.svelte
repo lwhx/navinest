@@ -2,9 +2,10 @@
 	import { resolve } from '$app/paths';
 	import NavigationCard from './NavigationCard.svelte';
 	import type { HomeData } from '$lib/server/services/home';
-	let { home }: { home: HomeData } = $props();
+	let { home, mode }: { home: HomeData; mode: 'hero' | 'content' } = $props();
 	let query = $state(''),
-		engineKey = $state<string | null>(null);
+		engineKey = $state<string | null>(null),
+		activeSubcategories = $state<Record<string, string>>({});
 	let engine = $derived(
 		home.searchEngines.find((x) => x.key === engineKey) ?? home.searchEngines[0]
 	);
@@ -15,16 +16,28 @@
 			item: all.find((x) => x.slug === metrics.slug && x.type === metrics.type)
 		}))
 	);
+	let modules = $derived(
+		mode === 'hero'
+			? home.modulePlan.filter((module) => module.type === 'search')
+			: home.modulePlan.filter((module) => module.type !== 'search')
+	);
 	const words = ['AI 工具', '设计资源', '开发工具', '效率软件'];
 	function search() {
 		const value = query.trim();
 		if (value && engine)
 			location.href = engine.urlTemplate.replace('{query}', encodeURIComponent(value));
 	}
+	function selectSubcategory(sectionSlug: string, childSlug: string) {
+		activeSubcategories = { ...activeSubcategories, [sectionSlug]: childSlug };
+	}
 </script>
 
-<div class="home-module-flow category-sections">
-	{#each home.modulePlan as module (module.key)}
+<div
+	class:home-hero-flow={mode === 'hero'}
+	class:home-module-flow={mode === 'content'}
+	class="category-sections"
+>
+	{#each modules as module (module.key)}
 		{#if module.type === 'search'}<section class="search-hero" aria-label={module.title}>
 				<div class="search-core">
 					<div class="search-kicker">探索、收藏并整理互联网</div>
@@ -86,7 +99,13 @@
 			</section>
 		{:else if module.type === 'content'}{@const section = home.sections.find(
 				(x) => x.slug === module.categorySlug
-			)}{#if section}<section
+			)}{#if section}{@const activeChild =
+					activeSubcategories[section.slug] ?? 'all'}{@const activeChildName =
+					section.children.find((child) => child.slug === activeChild)?.name}{@const visibleItems =
+					activeChildName
+						? section.items.filter((item) => item.category === activeChildName)
+						: section.items}
+				<section
 					class="category-module"
 					id={section.slug}
 					data-category-section
@@ -96,19 +115,31 @@
 						<div>
 							<span class="module-icon">{section.name.slice(0, 1)}</span>
 							<h2 id={`${section.slug}-heading`}>{module.title}</h2>
-							{#if section.children.length}<nav
+							{#if section.children.length}<div
 									class="subcategory-tabs"
+									role="tablist"
 									aria-label={`${section.name}子分类`}
 								>
-									{#each section.children as child (child.slug)}<a
-											href={resolve('/categories/[slug]', { slug: child.slug })}>{child.name}</a
+									<button
+										type="button"
+										role="tab"
+										class:active={activeChild === 'all'}
+										aria-selected={activeChild === 'all'}
+										onclick={() => selectSubcategory(section.slug, 'all')}>全部</button
+									>{#each section.children as child (child.slug)}<button
+											type="button"
+											role="tab"
+											class:active={activeChild === child.slug}
+											aria-selected={activeChild === child.slug}
+											onclick={() => selectSubcategory(section.slug, child.slug)}
+											>{child.name}</button
 										>{/each}
-								</nav>{/if}
+								</div>{/if}
 						</div>
 						<a href={resolve('/categories/[slug]', { slug: section.slug })}>more+</a>
 					</div>
-					{#if section.items.length}<div class="site-grid">
-							{#each section.items as item (item.slug)}<NavigationCard {item} />{/each}
+					{#if visibleItems.length}<div class="site-grid" aria-live="polite">
+							{#each visibleItems as item (item.slug)}<NavigationCard {item} />{/each}
 						</div>{:else}<p class="inline-empty">此分类暂时没有内容。</p>{/if}
 				</section>{/if}
 		{:else if module.type === 'hot'}<section class="category-module">

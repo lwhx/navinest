@@ -69,7 +69,7 @@ export function fallbackHomeData(): HomeData {
 				config: { categorySlug: 'dev-tools' },
 				sortOrder: 30
 			},
-			{ id: 4, type: 'ranking', title: '排行榜', config: {}, sortOrder: 40 }
+			{ id: 4, type: 'ranking', title: '排行榜', config: {}, sortOrder: 15 }
 		];
 	const dashboard = {
 		modules,
