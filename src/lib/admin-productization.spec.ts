@@ -63,6 +63,13 @@ describe('administrator productization', () => {
 		expect(page).toContain('sortableScope');
 		expect(page).toContain("fetch('/api/admin/items/order'");
 		expect(page).toContain('orderedItems = previous');
+		expect(page).toContain('sortingMode');
+		expect(page).toContain('进入排序');
+		expect(page).toContain('content-editor-modal');
+		expect(page).toContain('role="dialog"');
+		expect(page).toContain('editingItem');
+		expect(row).toContain('onEdit');
+		expect(row).not.toContain('href={resolve(`/admin/items?edit=');
 		expect(row).toContain('content-drag-handle');
 		expect(row).toContain('上移');
 		expect(row).toContain('下移');
