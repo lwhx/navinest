@@ -5,8 +5,8 @@ describe('GitHub Actions quality gates', () => {
 	it('runs deterministic code quality gates and protects the worker entrypoint', () => {
 		const workflow = read('quality.yml');
 		for (const value of [
-			'actions/checkout@v4',
-			'actions/setup-node@v4',
+			'actions/checkout@v5',
+			'actions/setup-node@v5',
 			'node-version: 22',
 			'cache: npm',
 			'npm ci',
@@ -28,7 +28,7 @@ describe('GitHub Actions quality gates', () => {
 			'npm ci',
 			'playwright install --with-deps chromium',
 			'npm run --silent smoke:production',
-			'actions/upload-artifact@v4'
+			'actions/upload-artifact@v5'
 		])
 			expect(workflow).toContain(value);
 		expect(workflow).not.toMatch(/CLOUDFLARE|GITHUB_TOKEN|wrangler deploy|cf-access-client/i);

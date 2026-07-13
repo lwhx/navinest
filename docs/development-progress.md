@@ -438,6 +438,12 @@ NaviNest 已完成正式部署、认证与用户中心、投稿审核、排行�
   - 安全冒烟扩展检查CSP/HSTS/nosniff/frame/referrer/permissions头；sitemap加唯一query绕过历史边缘缓存，最终pages=28/machine=2/protected=2、错误0
   - 最终门禁47个测试文件/128个测试全部通过；当前生产版本 `75be0587-25f1-49f2-9c08-aacbaa27b70e`
   - 最新正式备份 `D:\ProgramData\hermes\navinest-backups\2026-07-13T08-38-12-459Z`：manifest17项、R2对象4个、SHA错误0，隔离恢复items=19/categories=17
+  - 第十一批A建立正式私有仓库 `https://github.com/lwhx/navinest`；提交前排除 `.dev-*.log`、`*.tmp`、`.hermes/tmp-icons`、依赖、构建产物与真实 `.env`，并对暂存内容执行私钥/GitHub Token/Cloudflare Token模式扫描，结果为0
+  - 本地初始化main并使用仓库级身份 `lwhx <lwhx@users.noreply.github.com>` 创建首提交 `9fcee5f`，共256个正式文件/25259行；没有修改全局Git身份
+  - HTTPS Git因当前终端到github.com网络超时/重置无法推送；通过浏览器sudo确认将现有ED25519公钥以 `NaviNest Hermes Windows` 添加到GitHub，仓库级remote改用SSH-over-443并成功推送，没有读取私钥、Token、密码或2FA
+  - Git远端回读确认local/remote main均为 `9fcee5f5fdcb05ea80c5083307b5169dac9dd9e2`；GitHub网页确认Private、README和main，空仓库状态消失
+  - GitHub Actions真实运行：Quality #1成功（1m27s）；手动Production smoke #1成功（1m40s），Artifact `navinest-production-smoke-29239545114` 为1.13KB、SHA-256 `9d0ae67b1354f8f5d57a6ca50fe6e42999663558b8c3f2e3ef35843bbcaddd3d`
+  - Actions运行暴露Node20 runtime弃用警告；根据官方Action发布将checkout/setup-node/upload-artifact统一升级到v5（Node24），结构测试、YAML解析、lint/check、47文件/128测试、build及Worker哈希再次通过
 
 ## 重要技术决策
 
