@@ -3,10 +3,7 @@
 	import { resolve } from '$app/paths';
 	import HomeModuleFlow from '$lib/components/HomeModuleFlow.svelte';
 	import { appConfig } from '$lib/config';
-	import './benchmark-home.css';
-	import './benchmark-home-phase2.css';
-	import './benchmark-home-phase3.css';
-	import './benchmark-home-phase4.css';
+	import './home-reference.css';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	let activeCategory = $state(''),
@@ -27,6 +24,15 @@
 		activeCategory = sections[0].id;
 		return () => observer.disconnect();
 	});
+	const categorySymbols: Record<string, string> = {
+		favorites: '★',
+		'dev-tools': '</>',
+		design: '◇',
+		productivity: '✓',
+		books: '▤',
+		posts: '✎',
+		bulletins: '!'
+	};
 </script>
 
 <svelte:head
@@ -80,69 +86,82 @@
 			{#each data.categories.filter((x) => !x.parentId) as category (category.slug)}<a
 					href={`#${category.slug}`}
 					onclick={() => (mobileMenuOpen = false)}
-					><span class="nav-symbol">{category.name.slice(0, 1)}</span>{category.name}</a
+					><span class="nav-symbol">{categorySymbols[category.slug] ?? '•'}</span>{category.name}</a
 				>{/each}
 		</nav>
 	</aside>{/if}
-<main class="home-shell">
-	<aside class="home-sidebar" aria-label="分类导航">
-		<div class="sidebar-brand">
-			<span>N</span>
-			<div><strong>{appConfig.displayName}</strong><small>{appConfig.tagline}</small></div>
-		</div>
-		<nav>
-			{#each data.categories.filter((x) => !x.parentId) as category (category.slug)}<a
-					href={`#${category.slug}`}
-					class:active={activeCategory === category.slug}
-					aria-current={activeCategory === category.slug ? 'location' : undefined}
-					><span class="nav-symbol">{category.name.slice(0, 1)}</span><span>{category.name}</span
-					></a
-				>{/each}
-		</nav>
-		<div class="sidebar-shortcuts">
-			<a href={resolve('/search')}>站内搜索</a><a href={resolve('/user')}>我的导航</a>
-		</div>
-	</aside>
-	<div class="home-canvas">
-		<div class="home-content-layout">
-			<HomeModuleFlow home={data} />
-			<aside class="home-right-rail" aria-label="站点数据">
-				<section class="rail-card site-summary">
-					<div class="rail-brand">N</div>
-					<h2>{appConfig.displayName}</h2>
-					<p>{appConfig.tagline}</p>
-					<div class="site-stats">
-						<div><strong>{data.dashboard.stats.items}</strong><span>收录内容</span></div>
-						<div><strong>{data.dashboard.stats.categories}</strong><span>分类</span></div>
-						<div><strong>{data.dashboard.stats.users}</strong><span>用户</span></div>
-					</div>
-				</section>
-				<section class="rail-card">
-					<div class="rail-title">
-						<h2>今日热榜</h2>
-						<a href={resolve('/hotnews')}>更多</a>
-					</div>
-					{#if data.dashboard.hotnews.length}<ol class="rail-list">
-							{#each data.dashboard.hotnews.slice(0, 5) as item (`${item.source}-${item.rank}`)}<li>
-									<span>{item.rank}</span><a
-										href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
-										>{item.title}</a
+<main class="home-page">
+	<HomeModuleFlow home={data} mode="hero" />
+	<div class="home-shell">
+		<aside class="home-sidebar" aria-label="分类导航">
+			<div class="sidebar-brand">
+				<span>N</span>
+				<div><strong>{appConfig.displayName}</strong><small>{appConfig.tagline}</small></div>
+			</div>
+			<nav>
+				{#each data.categories.filter((x) => !x.parentId) as category (category.slug)}<a
+						href={`#${category.slug}`}
+						class:active={activeCategory === category.slug}
+						aria-current={activeCategory === category.slug ? 'location' : undefined}
+						><span class="nav-symbol">{categorySymbols[category.slug] ?? '•'}</span><span
+							>{category.name}</span
+						></a
+					>{/each}
+			</nav>
+			<div class="sidebar-shortcuts">
+				<a href={resolve('/search')}>站内搜索</a><a href={resolve('/user')}>我的导航</a>
+			</div>
+		</aside>
+		<div class="home-canvas">
+			<div class="home-content-layout">
+				<HomeModuleFlow home={data} mode="content" />
+				<aside class="home-right-rail" aria-label="站点数据">
+					<section class="rail-card site-summary">
+						<div class="rail-brand">N</div>
+						<h2>{appConfig.displayName}</h2>
+						<p>{appConfig.tagline}</p>
+						<div class="site-stats">
+							<div><strong>{data.dashboard.stats.items}</strong><span>收录内容</span></div>
+							<div><strong>{data.dashboard.stats.categories}</strong><span>分类</span></div>
+							<div><strong>{data.dashboard.stats.users}</strong><span>用户</span></div>
+						</div>
+					</section>
+					<section class="rail-card">
+						<div class="rail-title">
+							<h2>今日热榜</h2>
+							<a href={resolve('/hotnews')}>更多</a>
+						</div>
+						{#if data.dashboard.hotnews.length}<ol class="rail-list">
+								{#each data.dashboard.hotnews.slice(0, 5) as item (`${item.source}-${item.rank}`)}<li
 									>
+										<span>{item.rank}</span><a
+											href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+											>{item.title}</a
+										>
+									</li>{/each}
+							</ol>{:else}<p class="rail-empty">等待热榜刷新</p>{/if}
+					</section>
+					<section class="rail-card">
+						<div class="rail-title">
+							<h2>排行榜</h2>
+							<a href={resolve('/rankings')}>更多</a>
+						</div>
+						<ol class="rail-list">
+							{#each data.dashboard.popular.slice(0, 5) as item (`${item.type}-${item.slug}`)}<li>
+									<span>{item.score}</span><a href={resolve('/rankings')}>{item.title}</a>
 								</li>{/each}
-						</ol>{:else}<p class="rail-empty">等待热榜刷新</p>{/if}
-				</section>
-				<section class="rail-card">
-					<div class="rail-title">
-						<h2>排行榜</h2>
-						<a href={resolve('/rankings')}>更多</a>
-					</div>
-					<ol class="rail-list">
-						{#each data.dashboard.popular.slice(0, 5) as item (`${item.type}-${item.slug}`)}<li>
-								<span>{item.score}</span><a href={resolve('/rankings')}>{item.title}</a>
-							</li>{/each}
-					</ol>
-				</section>
-			</aside>
+						</ol>
+					</section>
+				</aside>
+			</div>
 		</div>
 	</div>
+	<footer class="home-footer">
+		<span>© {new Date().getFullYear()} {appConfig.displayName}</span>
+		<nav aria-label="页脚导航">
+			<a href={resolve('/search')}>搜索</a><a href={resolve('/rankings')}>排行</a><a
+				href={resolve('/hotnews')}>热点</a
+			>
+		</nav>
+	</footer>
 </main>
