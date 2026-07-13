@@ -1,7 +1,27 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Item } from '$lib/types/content';
-	let { item, database = true }: { item: Item; database?: boolean } = $props();
+	let {
+		item,
+		database = true,
+		sortable = false,
+		first = false,
+		last = false,
+		onDragStart,
+		onDragOver,
+		onDrop,
+		onMove
+	}: {
+		item: Item;
+		database?: boolean;
+		sortable?: boolean;
+		first?: boolean;
+		last?: boolean;
+		onDragStart?: (id: number) => void;
+		onDragOver?: (event: DragEvent) => void;
+		onDrop?: (id: number) => void;
+		onMove?: (id: number, direction: -1 | 1) => void;
+	} = $props();
 	const typeLabels = {
 		site: '网址',
 		post: '文章',
@@ -20,7 +40,35 @@
 	let previewPath = $derived(`/${prefixes[item.type]}/${encodeURIComponent(item.slug)}`);
 </script>
 
-<article class="content-row" class:unpublished={item.status !== 'published'}>
+<article
+	class="content-row"
+	class:sortable
+	class:unpublished={item.status !== 'published'}
+	draggable={sortable}
+	ondragstart={() => onDragStart?.(item.id)}
+	ondragover={(event) => onDragOver?.(event)}
+	ondrop={() => onDrop?.(item.id)}
+>
+	{#if sortable}<div class="content-drag-controls">
+			<button
+				class="content-drag-handle"
+				type="button"
+				aria-label={`拖动${item.title}排序`}
+				title="拖动排序">⋮⋮</button
+			>
+			<button
+				type="button"
+				aria-label={`上移${item.title}`}
+				disabled={first}
+				onclick={() => onMove?.(item.id, -1)}>↑</button
+			>
+			<button
+				type="button"
+				aria-label={`下移${item.title}`}
+				disabled={last}
+				onclick={() => onMove?.(item.id, 1)}>↓</button
+			>
+		</div>{/if}
 	<div class="content-row-media">
 		{#if item.iconFileId}<img
 				src={resolve('/api/admin/files/[id]', { id: String(item.iconFileId) })}

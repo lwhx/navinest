@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import AdminItemForm from '$lib/components/admin/AdminItemForm.svelte';
 	import AdminContentRow from '$lib/components/admin/AdminContentRow.svelte';
+	import { moveOrderedItem } from '$lib/content-ordering';
 	import type { Category, ContentType, Item, Tag } from '$lib/types/content';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
@@ -18,17 +19,22 @@
 		contentCategoryFilter = $state('all'),
 		contentStatusFilter = $state('all'),
 		contentVisibilityFilter = $state('all'),
-		filtersInitialized = $state(false);
+		filtersInitialized = $state(false),
+		orderedItems = $state<Item[]>([]),
+		draggedItemId = $state<number | null>(null),
+		sortSaving = $state(false),
+		sortMessage = $state('');
 	$effect(() => {
 		if (filtersInitialized) return;
 		activeType = (
 			types.some((type) => type.value === data.initialType) ? data.initialType : 'all'
 		) as 'all' | ContentType;
 		contentCategoryFilter = data.initialCategoryId || 'all';
+		orderedItems = [...(data.items as Item[])];
 		filtersInitialized = true;
 	});
 	let filteredItems = $derived(
-		(data.items as Item[]).filter((item) => {
+		orderedItems.filter((item) => {
 			const query = contentSearch.trim().toLowerCase();
 			return (
 				(activeType === 'all' || item.type === activeType) &&
@@ -56,6 +62,67 @@
 	let createHref = $derived(
 		`/admin/items?create=1${activeType !== 'all' ? `&type=${activeType}` : ''}${contentCategoryFilter !== 'all' ? `&category=${contentCategoryFilter}` : ''}`
 	);
+	let sortableScope = $derived(
+		data.source === 'database' &&
+			activeType !== 'all' &&
+			contentCategoryFilter !== 'all' &&
+			!contentSearch.trim() &&
+			contentStatusFilter === 'all' &&
+			contentVisibilityFilter === 'all' &&
+			filteredItems.length > 1
+	);
+
+	async function saveOrder(itemIds: number[], previous: Item[]) {
+		sortSaving = true;
+		sortMessage = '正在保存顺序…';
+		try {
+			const response = await fetch('/api/admin/items/order', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					type: activeType,
+					categoryId: Number(contentCategoryFilter),
+					itemIds
+				})
+			});
+			const body = response.ok ? null : await response.json();
+			if (!response.ok) throw new Error(body?.error ?? '排序保存失败。');
+			sortMessage = '顺序已保存。';
+		} catch (error) {
+			orderedItems = previous;
+			sortMessage = error instanceof Error ? error.message : '排序保存失败，已恢复原顺序。';
+		} finally {
+			sortSaving = false;
+		}
+	}
+
+	function applyOrder(itemIds: number[]) {
+		const previous = [...orderedItems],
+			byId = new Map(orderedItems.map((item) => [item.id, item])),
+			scope = new Set(itemIds);
+		let index = 0;
+		orderedItems = orderedItems.map((item) =>
+			scope.has(item.id) ? (byId.get(itemIds[index++]) ?? item) : item
+		);
+		void saveOrder(itemIds, previous);
+	}
+
+	function dropOn(targetId: number) {
+		if (!sortableScope || sortSaving || draggedItemId === null) return;
+		const ids = filteredItems.map((item) => item.id),
+			next = moveOrderedItem(ids, draggedItemId, targetId);
+		draggedItemId = null;
+		if (next.some((id, index) => id !== ids[index])) applyOrder(next);
+	}
+
+	function moveItem(id: number, direction: -1 | 1) {
+		if (!sortableScope || sortSaving) return;
+		const ids = filteredItems.map((item) => item.id),
+			index = ids.indexOf(id),
+			target = ids[index + direction];
+		if (target === undefined) return;
+		applyOrder(moveOrderedItem(ids, id, target));
+	}
 </script>
 
 <header class="admin-page-header">
@@ -154,10 +221,22 @@
 				></label
 			>
 		</div>
+		<div class="content-sort-bar" class:enabled={sortableScope} role="status">
+			{#if sortMessage}<span>{sortMessage}</span>{:else if sortableScope}<span
+					>拖动左侧手柄调整当前分类顺序；也可使用上移、下移按钮。</span
+				>{:else}<span>选择具体内容类型和分类，并清空其他筛选后可手动排序。</span>{/if}
+		</div>
 		<div class="content-list" aria-live="polite">
-			{#each filteredItems as item (item.id)}<AdminContentRow
+			{#each filteredItems as item, index (item.id)}<AdminContentRow
 					{item}
 					database={data.source === 'database'}
+					sortable={sortableScope && !sortSaving}
+					first={index === 0}
+					last={index === filteredItems.length - 1}
+					onDragStart={(id) => (draggedItemId = id)}
+					onDragOver={(event) => event.preventDefault()}
+					onDrop={dropOn}
+					onMove={moveItem}
 				/>{:else}<div class="content-empty">
 					<strong>没有匹配内容</strong>
 					<p>调整类型、搜索词或筛选条件。</p>
