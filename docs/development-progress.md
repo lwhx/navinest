@@ -444,6 +444,9 @@ NaviNest 已完成正式部署、认证与用户中心、投稿审核、排行�
   - Git远端回读确认local/remote main均为 `9fcee5f5fdcb05ea80c5083307b5169dac9dd9e2`；GitHub网页确认Private、README和main，空仓库状态消失
   - GitHub Actions真实运行：Quality #1成功（1m27s）；手动Production smoke #1成功（1m40s），Artifact `navinest-production-smoke-29239545114` 为1.13KB、SHA-256 `9d0ae67b1354f8f5d57a6ca50fe6e42999663558b8c3f2e3ef35843bbcaddd3d`
   - Actions运行暴露Node20 runtime弃用警告；根据官方Action发布将checkout/setup-node/upload-artifact统一升级到v5（Node24），结构测试、YAML解析、lint/check、47文件/128测试、build及Worker哈希再次通过
+  - 第二提交 `a791cb5` 已推送，Quality #2对Action v5版本真实运行成功（1m22s），本地main与origin/main保持一致
+  - GitHub Classic main保护规则已创建：必须PR、0审批、严格最新分支、对话解决、禁止force push和删除；`verify`建议项未被GitHub组件保存为必需检查
+  - GitHub明确标记该规则 `Not enforced`：私有个人仓库需升级GitHub Team/Enterprise才能执行保护规则；当前以Quality工作流真实通过作为门禁证据，不误报分支保护已生效
 
 ## 重要技术决策
 
