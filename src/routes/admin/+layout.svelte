@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { appConfig } from '$lib/config';
 	import '../admin-productization.css';
+	import '../admin-content-workbench.css';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();

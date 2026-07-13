@@ -26,9 +26,13 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 		data = fallbackAdminItems();
 	}
 	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
+	const initialType = url.searchParams.get('type') ?? 'all',
+		initialCategoryId = parsePositiveId(url.searchParams.get('category') ?? '');
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
+		initialType,
+		initialCategoryId: initialCategoryId ? String(initialCategoryId) : '',
 		editing: editId ? (data.items.find((item) => item.id === editId) ?? null) : null
 	};
 };

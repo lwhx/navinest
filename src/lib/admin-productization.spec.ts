@@ -39,4 +39,26 @@ describe('administrator productization', () => {
 		expect(css).toContain('.category-workbench');
 		expect(css).toContain('@media (max-width: 900px)');
 	});
+	it('provides a filtered high-density content workbench', () => {
+		const page = read('src/routes/admin/items/+page.svelte'),
+			row = read('src/lib/components/admin/AdminContentRow.svelte'),
+			form = read('src/lib/components/admin/AdminItemForm.svelte'),
+			css = read('src/routes/admin-content-workbench.css');
+		for (const marker of [
+			'content-type-tabs',
+			'content-search',
+			'content-category-filter',
+			'content-status-filter',
+			'content-visibility-filter',
+			'filteredItems',
+			'content-workbench'
+		])
+			expect(page).toContain(marker);
+		expect(page).toContain('<AdminContentRow');
+		expect(row).toContain('前台预览');
+		expect(row).toContain('删除后会清理关联标签、元数据、收藏、足迹和统计记录');
+		expect(form).toContain('initialType');
+		expect(form).toContain('initialCategoryId');
+		expect(css).toContain('.content-workbench');
+	});
 });

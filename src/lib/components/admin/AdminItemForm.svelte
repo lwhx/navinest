@@ -15,12 +15,16 @@
 		categories,
 		tags,
 		form = null,
+		initialType = 'site',
+		initialCategoryId = '',
 		action
 	}: {
 		item?: Item | null;
 		categories: Category[];
 		tags: Tag[];
 		form?: FormState;
+		initialType?: string;
+		initialCategoryId?: string;
 		action: string;
 	} = $props();
 
@@ -42,9 +46,9 @@
 		selectedCover = $state(''),
 		formInitialized = $state(false);
 	$effect(() => {
-		if (!selectedType) selectedType = value('type', item?.type ?? 'site');
+		if (!selectedType) selectedType = value('type', item?.type ?? initialType);
 		if (!formInitialized) {
-			selectedCategory = value('categoryId', String(item?.categoryId ?? ''));
+			selectedCategory = value('categoryId', String(item?.categoryId ?? initialCategoryId));
 			selectedIcon = value('iconFileId', String(item?.iconFileId ?? ''));
 			selectedCover = value('coverFileId', String(item?.coverFileId ?? ''));
 			formInitialized = true;
