@@ -60,5 +60,11 @@ describe('administrator productization', () => {
 		expect(form).toContain('initialType');
 		expect(form).toContain('initialCategoryId');
 		expect(css).toContain('.content-workbench');
+		expect(page).toContain('sortableScope');
+		expect(page).toContain("fetch('/api/admin/items/order'");
+		expect(page).toContain('orderedItems = previous');
+		expect(row).toContain('content-drag-handle');
+		expect(row).toContain('上移');
+		expect(row).toContain('下移');
 	});
 });

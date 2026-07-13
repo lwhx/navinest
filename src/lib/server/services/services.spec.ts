@@ -54,6 +54,12 @@ describe('content query services', () => {
 		expect(calls[0].query).toContain('is_visible = 1');
 	});
 
+	it('keeps manual sort order ahead of featured status', async () => {
+		const { database, calls } = createDatabase([]);
+		await listItems(database, { limit: 10 });
+		expect(calls[0].query).toContain('ORDER BY i.sort_order ASC, i.is_featured DESC');
+	});
+
 	it('maps item relations, tags and metadata', async () => {
 		const { database, calls } = createDatabase([
 			{

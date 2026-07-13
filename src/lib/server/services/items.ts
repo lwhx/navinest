@@ -128,7 +128,7 @@ export async function listItems(database: Database, query: ItemQuery = {}): Prom
 			 FROM items i
 			 LEFT JOIN categories c ON c.id = i.category_id
 			 ${where}
-			 ORDER BY i.is_featured DESC, i.sort_order ASC, i.title ASC
+			 ORDER BY i.sort_order ASC, i.is_featured DESC, i.title ASC
 			 LIMIT ? OFFSET ?`
 		)
 		.bind(...values);
