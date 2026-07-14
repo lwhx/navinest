@@ -480,6 +480,8 @@
   - 网页抓取逐跳执行URL/DoH公网解析/端口/重定向/MIME/字节/超时限制，自定义AI地址出站前也检查；每用户5秒间隔、10分钟10次并记录最小化审计。纯Worker无法DNS pinning的残余风险记录于 `docs/ai-assisted-submissions.md`
   - 生产迁移前后均完成verified备份；首次Wrangler登记发现旧`seed.sql`位于迁移目录，历史编号迁移重放后在Seed重复主键处停止。完整对比19内容/18分类/7标签/2用户及足迹、元数据、统计等均与迁移前备份一致，无需恢复
   - Seed已迁至`seeds/initial.sql`，迁移发现仅接受`NNNN_name.sql`并有回归测试；远程确认No migrations to apply。生产真实抓取Example Domain成功、AI未配置时正确降级，0投稿/0 Provider且仅写入1条最小化使用审计
+  - 第十二批B修复OpenAI兼容Provider响应差异：支持MiniMax式“思考文本+最终JSON”、Markdown JSON代码块和多段content数组，扫描平衡对象后仍执行严格字段白名单和长度限制；上游429改为明确提示限流/配额/余额
+  - 生产真实复验MiniMax-M2.7连接测试200（约5.3秒），并端到端生成Example Domain简洁标题、简介、补充说明和6个标签；MiniMax由用户启用为当前Provider，测试过程未自动切换服务或提交内容
 
 ## 重要技术决策
 
