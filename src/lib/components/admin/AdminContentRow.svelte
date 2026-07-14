@@ -22,7 +22,7 @@
 		onDragOver?: (event: DragEvent) => void;
 		onDrop?: (id: number) => void;
 		onMove?: (id: number, direction: -1 | 1) => void;
-		onEdit?: (item: Item) => void;
+		onEdit?: (item: Item, trigger: HTMLButtonElement) => void;
 	} = $props();
 	const typeLabels = {
 		site: '网址',
@@ -43,6 +43,7 @@
 </script>
 
 <article
+	data-content-id={item.id}
 	class="content-row"
 	class:sortable
 	class:unpublished={item.status !== 'published'}
@@ -97,7 +98,11 @@
 		>
 	</div>
 	{#if database}<div class="content-row-actions">
-			<button type="button" onclick={() => onEdit?.(item)}>编辑</button>
+			<button
+				class="content-edit-button"
+				type="button"
+				onclick={(event) => onEdit?.(item, event.currentTarget)}>编辑</button
+			>
 			<a href={resolve(previewPath as '/')}>前台预览</a>
 			<form
 				method="POST"

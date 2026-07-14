@@ -8,4 +8,9 @@ describe('global keyboard navigation', () => {
 		expect(layout).toContain('id="main-content"');
 		expect(layout).toContain('class="skip-link"');
 	});
+	it('keeps every card title linked to its detail page when mobile actions are hidden', () => {
+		const card = readFileSync('src/lib/components/NavigationCard.svelte', 'utf8');
+		expect(card).toContain('class="card-title-link"');
+		expect(card).toContain('href={detail}');
+	});
 });
