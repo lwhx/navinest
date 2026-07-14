@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { tick } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import AdminItemForm from '$lib/components/admin/AdminItemForm.svelte';
 	import AdminContentRow from '$lib/components/admin/AdminContentRow.svelte';
 	import { moveOrderedItem } from '$lib/content-ordering';
@@ -15,6 +16,7 @@
 		{ value: 'book', label: '书籍 / 影视' },
 		{ value: 'bulletin', label: '公告' }
 	];
+	const selectedItemIds = new SvelteSet<number>();
 	let activeType = $state<'all' | ContentType>('all'),
 		contentSearch = $state(''),
 		contentCategoryFilter = $state('all'),
@@ -31,7 +33,8 @@
 		editorScrollY = $state(0),
 		editorTrigger = $state<HTMLElement | null>(null),
 		editorTriggerItemId = $state<number | null>(null),
-		editorModal = $state<HTMLElement | null>(null);
+		editorModal = $state<HTMLElement | null>(null),
+		contentDensity = $state<'comfortable' | 'compact'>('comfortable');
 	$effect(() => {
 		if (filtersInitialized) return;
 		activeType = (
@@ -74,6 +77,43 @@
 			])
 		)
 	);
+	let allVisibleSelected = $derived(
+		filteredItems.length > 0 && filteredItems.every((item) => selectedItemIds.has(item.id))
+	);
+
+	function selectItem(id: number, selected: boolean) {
+		if (selected) selectedItemIds.add(id);
+		else selectedItemIds.delete(id);
+	}
+
+	function selectAllVisible(selected: boolean) {
+		for (const item of filteredItems) {
+			if (selected) selectedItemIds.add(item.id);
+			else selectedItemIds.delete(item.id);
+		}
+	}
+
+	function clearFilters() {
+		contentSearch = '';
+		contentCategoryFilter = 'all';
+		contentStatusFilter = 'all';
+		contentVisibilityFilter = 'all';
+		selectedItemIds.clear();
+	}
+
+	function selectContentType(type: 'all' | ContentType) {
+		activeType = type;
+		selectedItemIds.clear();
+		if (
+			contentCategoryFilter !== 'all' &&
+			!data.categories.some(
+				(category) =>
+					String(category.id) === contentCategoryFilter &&
+					(type === 'all' || category.type === type)
+			)
+		)
+			contentCategoryFilter = 'all';
+	}
 
 	let sortableScope = $derived(
 		sortingMode &&
@@ -247,10 +287,28 @@
 />
 
 <header class="admin-page-header">
-	<div>
-		<p class="eyebrow">Content</p>
+	<div class="content-page-heading">
+		<p class="eyebrow">Content Operations</p>
 		<h1>内容管理</h1>
-		<span>集中管理网址、文章、资源、书籍和公告。</span>
+		<span>集中管理、筛选、排序并发布站内内容。</span>
+		<div class="content-overview" aria-label="内容概览">
+			<span><strong>{data.items.length}</strong>全部</span>
+			<span
+				><i class="published"></i><strong
+					>{data.items.filter((item) => item.status === 'published').length}</strong
+				>已发布</span
+			>
+			<span
+				><i class="draft"></i><strong
+					>{data.items.filter((item) => item.status !== 'published').length}</strong
+				>草稿</span
+			>
+			<span
+				><i class="private"></i><strong
+					>{data.items.filter((item) => item.visibility !== 'public').length}</strong
+				>私有</span
+			>
+		</div>
 	</div>
 	{#if data.source === 'database'}<div class="content-header-actions">
 			<button
@@ -267,44 +325,6 @@
 {#if data.source === 'fallback'}<p class="admin-notice">本地示例为只读数据。</p>{/if}
 {#if form?.message && !data.mode}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
 
-<nav class="content-type-tabs" aria-label="内容类型">
-	{#each types as type (type.value)}<button
-			type="button"
-			class:active={activeType === type.value}
-			onclick={() => {
-				activeType = type.value;
-				if (
-					contentCategoryFilter !== 'all' &&
-					!data.categories.some(
-						(category) =>
-							String(category.id) === contentCategoryFilter &&
-							(type.value === 'all' || category.type === type.value)
-					)
-				)
-					contentCategoryFilter = 'all';
-			}}><span>{type.label}</span><strong>{typeCounts[type.value]}</strong></button
-		>{/each}
-</nav>
-
-<section class="content-summary" aria-label="内容概览">
-	<div><strong>{data.items.length}</strong><span>全部内容</span></div>
-	<div>
-		<strong>{data.items.filter((item) => item.status === 'published').length}</strong><span
-			>已发布</span
-		>
-	</div>
-	<div>
-		<strong>{data.items.filter((item) => item.status !== 'published').length}</strong><span
-			>草稿</span
-		>
-	</div>
-	<div>
-		<strong>{data.items.filter((item) => item.visibility !== 'public').length}</strong><span
-			>私有内容</span
-		>
-	</div>
-</section>
-
 <div class="content-workbench">
 	<section class="content-browser" aria-labelledby="content-browser-title">
 		<div class="content-browser-header">
@@ -314,7 +334,15 @@
 			</div>
 			<span>{filteredItems.length} / {data.items.length}</span>
 		</div>
-		<div class="content-toolbar">
+		<nav class="content-type-tabs" aria-label="内容类型">
+			{#each types as type (type.value)}<button
+					type="button"
+					class:active={activeType === type.value}
+					onclick={() => selectContentType(type.value)}
+					><span>{type.label}</span><strong>{typeCounts[type.value]}</strong></button
+				>{/each}
+		</nav>
+		<div class="content-toolbar content-command-bar">
 			<label class="content-search"
 				><span class="sr-only">搜索内容</span><input
 					bind:value={contentSearch}
@@ -349,6 +377,18 @@
 					></select
 				></label
 			>
+			<div class="content-density-toggle" aria-label="列表密度">
+				<button
+					type="button"
+					class:active={contentDensity === 'comfortable'}
+					onclick={() => (contentDensity = 'comfortable')}>舒适</button
+				><button
+					type="button"
+					class:active={contentDensity === 'compact'}
+					onclick={() => (contentDensity = 'compact')}>紧凑</button
+				>
+			</div>
+			<button class="content-clear-filters" type="button" onclick={clearFilters}>清除筛选</button>
 		</div>
 		<div class="content-sort-bar" class:enabled={sortingMode} role="status">
 			{#if sortingMode}<div class="content-sort-settings">
@@ -379,13 +419,43 @@
 					>
 				</div>{:else}<span>点击页面右上角“进入排序”，选择分类后即可直接拖拽。</span>{/if}
 		</div>
-		<div class="content-list" aria-live="polite">
+		{#if selectedItemIds.size}<div class="content-selection-bar" role="status">
+				<div>
+					<strong>已选择 {selectedItemIds.size} 项</strong><span
+						>批量操作只作用于当前明确选择的内容。</span
+					>
+				</div>
+				<div>
+					<button type="button" onclick={() => selectedItemIds.clear()}>取消选择</button><button
+						type="button"
+						onclick={enterSortingMode}>进入排序</button
+					>
+				</div>
+			</div>{/if}
+		<div class="content-table-head">
+			<label>
+				<input
+					type="checkbox"
+					checked={allVisibleSelected}
+					onchange={(event) => selectAllVisible(event.currentTarget.checked)}
+				/>
+				<span class="sr-only">全选当前结果</span>
+			</label>
+			<span aria-hidden="true"></span>
+			<span>内容</span>
+			<span>状态</span>
+			<span>排序与更新</span>
+			<span>操作</span>
+		</div>
+		<div class="content-list" class:compact={contentDensity === 'compact'} aria-live="polite">
 			{#each filteredItems as item, index (item.id)}<AdminContentRow
 					{item}
 					database={data.source === 'database'}
 					sortable={sortableScope && !sortSaving}
 					first={index === 0}
 					last={index === filteredItems.length - 1}
+					selected={selectedItemIds.has(item.id)}
+					onSelect={selectItem}
 					onDragStart={(id) => (draggedItemId = id)}
 					onDragOver={(event) => event.preventDefault()}
 					onDrop={dropOn}
