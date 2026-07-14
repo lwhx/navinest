@@ -67,18 +67,24 @@ for (const route of machineRoutes) {
 }
 const browser = await chromium.launch({ headless: true });
 try {
-	const gatewayPage = await browser.newPage();
 	for (const check of safeTargets) {
 		const url = new URL('/go', baseUrl);
 		url.searchParams.set('url', check.target);
-		await gatewayPage.goto(url.toString(), { waitUntil: 'networkidle', timeout: 60000 });
-		const continueLink = gatewayPage.getByRole('link', { name: '继续访问' });
-		assert(
-			(await continueLink.count()) === (check.valid ? 1 : 0),
-			`/go validation failed: ${check.target}`
-		);
+		const response = await fetch(url, { redirect: 'manual' });
+		if (check.valid) {
+			assert(response.status === 302, `/go expected direct redirect: ${check.target}`);
+			assert(
+				response.headers.get('location') === check.target,
+				`/go redirect target mismatch: ${check.target}`
+			);
+		} else {
+			assert(response.status === 200, `/go invalid target should render error: ${check.target}`);
+			assert(
+				(await response.text()).includes('无法打开此地址'),
+				`/go invalid target error missing: ${check.target}`
+			);
+		}
 	}
-	await gatewayPage.close();
 	for (const viewport of viewports) {
 		for (const route of publicRoutes) {
 			const page = await browser.newPage({
