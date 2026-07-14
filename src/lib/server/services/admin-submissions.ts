@@ -30,6 +30,9 @@ export async function listAdminSubmissions(database: Database) {
 			summary: string | null;
 			content: string | null;
 			url: string | null;
+			userCategoryId?: number | null;
+			iconFileId?: number | null;
+			iconSource?: 'auto' | 'manual' | null;
 			tagNames?: string[];
 			webSnapshot?: WebSnapshot | null;
 			aiSuggestion?: SubmissionInput['aiSuggestion'];

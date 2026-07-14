@@ -151,4 +151,51 @@ describe('user submissions', () => {
 			})
 		).rejects.toBeInstanceOf(SubmissionError);
 	});
+
+	it('stores valid user category and owned icon while rejecting cross-type or foreign relations', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER); CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); INSERT INTO categories VALUES(10,'site',1),(11,'app',1); INSERT INTO files VALUES(20,7,'FILES','image/png'),(21,8,'FILES','image/png')"
+		);
+		const id = await createSubmission(database, 7, {
+			type: 'site',
+			title: 'Valid',
+			summary: null,
+			content: null,
+			url: 'https://example.com',
+			userCategoryId: 10,
+			iconFileId: 20,
+			iconSource: 'manual'
+		});
+		const payload = JSON.parse(
+			String(
+				(
+					sqlite.prepare('SELECT payload_json FROM submissions WHERE id=?').get(id) as {
+						payload_json: string;
+					}
+				).payload_json
+			)
+		);
+		expect(payload).toMatchObject({ userCategoryId: 10, iconFileId: 20, iconSource: 'manual' });
+		await expect(
+			createSubmission(database, 7, {
+				type: 'site',
+				title: 'Bad category',
+				summary: null,
+				content: null,
+				url: 'https://example.com',
+				userCategoryId: 11
+			})
+		).rejects.toThrow('分类');
+		await expect(
+			createSubmission(database, 7, {
+				type: 'site',
+				title: 'Foreign icon',
+				summary: null,
+				content: null,
+				url: 'https://example.com',
+				iconFileId: 21
+			})
+		).rejects.toThrow('图标');
+	});
 });

@@ -58,12 +58,44 @@
 		return submission.payload.webSnapshot?.excerpt || submission.payload.content || '';
 	}
 	function tagIds(submission: Submission) {
-		const names = new Set(
-			submission.payload.tagNames ?? submission.payload.aiSuggestion?.tags ?? []
+		const names = (submission.payload.tagNames ?? submission.payload.aiSuggestion?.tags ?? []).map(
+			(name) => name.toLocaleLowerCase()
 		);
-		return data.tags
-			.filter((tag) => tag.type === submission.type && names.has(tag.name))
-			.map((tag) => tag.id);
+		return names
+			.map(
+				(name) =>
+					data.tags.find(
+						(tag) => tag.type === submission.type && tag.name.toLocaleLowerCase() === name
+					)?.id
+			)
+			.filter((id): id is number => Boolean(id))
+			.slice(0, 3);
+	}
+	function suggestedTagNames(submission: Submission) {
+		return [
+			...new Set(submission.payload.tagNames ?? submission.payload.aiSuggestion?.tags ?? [])
+		].slice(0, 8);
+	}
+	function missingTagNames(submission: Submission) {
+		return suggestedTagNames(submission).filter(
+			(name) =>
+				!data.tags.some(
+					(tag) =>
+						tag.type === submission.type &&
+						tag.name.toLocaleLowerCase() === name.toLocaleLowerCase()
+				)
+		);
+	}
+	function defaultCategoryId(submission: Submission) {
+		const candidates = [
+			submission.payload.userCategoryId,
+			submission.payload.aiSuggestion?.categoryId
+		];
+		return (
+			candidates.find((id) =>
+				data.categories.some((category) => category.id === id && category.type === submission.type)
+			) ?? ''
+		);
 	}
 	function meta(submission: Submission) {
 		const url = submission.payload.url;
@@ -86,6 +118,19 @@
 			return;
 		}
 		if (decision === 'reject' && !confirm(`确定拒绝“${submission.title}”吗？`)) return;
+		if (decision === 'approve') {
+			const category =
+					(form.elements.namedItem('categoryId') as HTMLSelectElement | null)?.selectedOptions[0]
+						?.textContent ?? '未分类',
+				existingTags = values.getAll('tagIds').length,
+				newTags = values.getAll('newTagNames').length;
+			if (
+				!confirm(
+					`确认发布“${submission.title}”？\n分类：${category}\n关联已有标签：${existingTags} 个\n创建新标签：${newTags} 个`
+				)
+			)
+				return;
+		}
 		processing = true;
 		message = '';
 		try {
@@ -102,13 +147,16 @@
 								summary: String(values.get('summary') ?? ''),
 								content: String(values.get('content') ?? ''),
 								categoryId: values.get('categoryId') ? Number(values.get('categoryId')) : null,
+								iconFileId: submission.payload.iconFileId ?? null,
+								coverFileId: null,
 								status: 'published',
 								visibility: 'public',
 								sortOrder: Number(values.get('sortOrder') ?? 0),
 								isFeatured: values.has('isFeatured'),
 								tagIds: values.getAll('tagIds').map(Number),
 								meta: meta(submission)
-							}
+							},
+							newTagNames: values.getAll('newTagNames').map(String)
 						};
 			const response = await fetch(`/api/admin/submissions/${submission.id}/review`, {
 					method: 'PATCH',
@@ -188,6 +236,19 @@
 						<dd>{selected.payload.summary || '未填写'}</dd>
 						<dt>补充说明</dt>
 						<dd>{selected.payload.content || '未填写'}</dd>
+						<dt>分类</dt>
+						<dd>
+							{data.categories.find((category) => category.id === selected.payload.userCategoryId)
+								?.name || '未选择'}
+						</dd>
+						<dt>图标</dt>
+						<dd>
+							{#if selected.payload.iconFileId}<img
+									class="review-icon"
+									src={`/api/admin/files/${selected.payload.iconFileId}`}
+									alt="投稿图标"
+								/>{:else}未选择{/if}
+						</dd>
 					</dl>
 				</section>
 				<section>
@@ -212,6 +273,12 @@
 							<dd>{selected.payload.aiSuggestion.title}</dd>
 							<dt>简介</dt>
 							<dd>{selected.payload.aiSuggestion.summary}</dd>
+							<dt>推荐分类</dt>
+							<dd>
+								{selected.payload.aiSuggestion.categoryName ||
+									'未判断'}{#if selected.payload.aiSuggestion.categoryReason}<br />{selected.payload
+										.aiSuggestion.categoryReason}{/if}
+							</dd>
 							<dt>标签</dt>
 							<dd class="suggested-tags">
 								{#each selected.payload.aiSuggestion.tags as tag (tag)}<span>{tag}</span>{/each}
@@ -245,11 +312,17 @@
 							/></label
 						>
 						<label
-							><span>分类</span><select name="categoryId"
+							><span>分类</span><select name="categoryId" value={defaultCategoryId(selected)}
 								><option value="">未分类</option
 								>{#each data.categories.filter((category) => category.type === selected?.type) as category (category.id)}<option
 										value={category.id}>{category.name}</option
 									>{/each}</select
+							><small
+								>{selected.payload.userCategoryId
+									? '投稿用户已选择此分类，可手动调整。'
+									: selected.payload.aiSuggestion?.categoryId
+										? `AI推荐：${selected.payload.aiSuggestion.categoryName} · ${selected.payload.aiSuggestion.categoryReason}`
+										: '未提供分类建议，请手动选择。'}</small
 							></label
 						>
 						<label class="admin-field-wide"
@@ -269,6 +342,7 @@
 					</div>
 					<fieldset class="admin-form-section">
 						<legend>正式标签</legend>
+						<p class="admin-form-hint">与建议同名的已有标签最多自动勾选3个；其余可手动追加。</p>
 						<div class="admin-check-grid">
 							{#each data.tags.filter((tag) => tag.type === selected?.type) as tag (tag.id)}<label
 									><input
@@ -279,20 +353,17 @@
 									/><span>{tag.name}</span></label
 								>{/each}
 						</div>
-						{#if (selected.payload.tagNames ?? selected.payload.aiSuggestion?.tags ?? []).some((name) => !data.tags.some((tag) => tag.type === selected?.type && tag.name === name))}<p
-								class="admin-form-hint"
-							>
-								以下建议标签尚未建立：{(
-									selected.payload.tagNames ??
-									selected.payload.aiSuggestion?.tags ??
-									[]
-								)
-									.filter(
-										(name) =>
-											!data.tags.some((tag) => tag.type === selected?.type && tag.name === name)
-									)
-									.join('、')}。请先到标签管理创建，或本次忽略。
-							</p>{/if}
+						{#if missingTagNames(selected).length}<div class="new-tag-options">
+								<strong>建议中的新标签</strong>
+								<p>勾选后将在“审核通过并发布”时创建；不勾选不会进入标签库。</p>
+								<div class="admin-check-grid">
+									{#each missingTagNames(selected) as name (name)}<label class="new-tag-option"
+											><input type="checkbox" name="newTagNames" value={name} /><span
+												>{name}<em>发布时创建</em></span
+											></label
+										>{/each}
+								</div>
+							</div>{/if}
 					</fieldset>
 					<label
 						><span>审核意见</span><textarea
@@ -478,6 +549,29 @@
 		border-radius: 999px;
 		padding: 3px 6px;
 		background: #eee7f2;
+	}
+	.review-icon {
+		width: 44px;
+		height: 44px;
+		border-radius: 9px;
+		background: #fff;
+		object-fit: contain;
+	}
+	.new-tag-options {
+		margin-top: 14px;
+		border-top: 1px dashed #dfe2e6;
+		padding-top: 12px;
+	}
+	.new-tag-options > p {
+		margin: 4px 0 10px;
+		color: #7b8088;
+		font-size: 10px;
+	}
+	.new-tag-option em {
+		display: block;
+		color: #a16a39;
+		font-size: 8px;
+		font-style: normal;
 	}
 	.review-form {
 		border: 0;

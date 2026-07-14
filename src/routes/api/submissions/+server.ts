@@ -19,6 +19,10 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 				summary: body.summary === null ? null : String(body.summary ?? ''),
 				content: body.content === null ? null : String(body.content ?? ''),
 				url: body.url === null ? null : String(body.url ?? ''),
+				userCategoryId: body.userCategoryId === null ? null : Number(body.userCategoryId),
+				iconFileId: body.iconFileId === null ? null : Number(body.iconFileId),
+				iconSource:
+					body.iconSource === 'auto' || body.iconSource === 'manual' ? body.iconSource : null,
 				tagNames: Array.isArray(body.tagNames) ? body.tagNames.map(String) : [],
 				webSnapshot: web
 					? {
@@ -27,6 +31,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 							description: String(web.description ?? ''),
 							excerpt: String(web.excerpt ?? ''),
 							siteName: String(web.siteName ?? ''),
+							iconUrl: String(web.iconUrl ?? ''),
 							fetchedAt: String(web.fetchedAt ?? '')
 						}
 					: null,
@@ -38,7 +43,10 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 							tags: Array.isArray(ai.tags) ? ai.tags.map(String) : [],
 							provider: String(ai.provider ?? ''),
 							model: String(ai.model ?? ''),
-							generatedAt: String(ai.generatedAt ?? '')
+							generatedAt: String(ai.generatedAt ?? ''),
+							categoryId: ai.categoryId === null ? null : Number(ai.categoryId),
+							categoryName: String(ai.categoryName ?? ''),
+							categoryReason: String(ai.categoryReason ?? '')
 						}
 					: null
 			});

@@ -8,7 +8,7 @@ describe('safe web enrichment', () => {
 		const fetcher = vi.fn(
 			async () =>
 				new Response(
-					`<!doctype html><html><head><title>A Very Long Example Product Title</title><meta property="og:description" content="A useful product for focused teams"><meta property="og:site_name" content="Example"></head><body><nav>Skip navigation</nav><main><h1>Example Product</h1><p>This is the primary readable content for visitors.</p><script>ignore()</script></main></body></html>`,
+					`<!doctype html><html><head><title>A Very Long Example Product Title</title><meta property="og:description" content="A useful product for focused teams"><meta property="og:site_name" content="Example"><link rel="icon" href="/assets/favicon.png"></head><body><nav>Skip navigation</nav><main><h1>Example Product</h1><p>This is the primary readable content for visitors.</p><script>ignore()</script></main></body></html>`,
 					{ headers: { 'content-type': 'text/html; charset=utf-8' } }
 				)
 		);
@@ -20,7 +20,8 @@ describe('safe web enrichment', () => {
 			fetchedUrl: 'https://example.com/start',
 			title: 'A Very Long Example Product Title',
 			description: 'A useful product for focused teams',
-			siteName: 'Example'
+			siteName: 'Example',
+			iconUrl: 'https://example.com/assets/favicon.png'
 		});
 		expect(result.excerpt).toContain('This is the primary readable content');
 		expect(result.excerpt).not.toContain('ignore()');
@@ -78,5 +79,17 @@ describe('safe web enrichment', () => {
 			maxTextChars: 500
 		});
 		expect(result.excerpt.length).toBeLessThanOrEqual(500);
+	});
+
+	it('ignores non-http icon declarations and falls back to the same-origin favicon', async () => {
+		const result = await fetchWebSnapshot('https://example.com/page', {
+			resolveHost: publicDns,
+			fetcher: async () =>
+				new Response(
+					'<html><head><title>Example</title><link rel="icon" href="data:,"></head><body>Content</body></html>',
+					{ headers: { 'content-type': 'text/html' } }
+				)
+		});
+		expect(result.iconUrl).toBe('https://example.com/favicon.ico');
 	});
 });

@@ -76,6 +76,12 @@ describe('administrator file validation', () => {
 	it('accepts supported images and creates opaque dated object keys', () => {
 		const file = new File(['image'], 'My Cover.PNG', { type: 'image/png' });
 		expect(validateAdminUpload(file)).toEqual({ valid: true, extension: 'png' });
+		expect(
+			validateAdminUpload(new File(['icon'], 'favicon.ico', { type: 'image/x-icon' }))
+		).toEqual({
+			valid: true,
+			extension: 'ico'
+		});
 		expect(createFileObjectKey('png', new Date('2026-07-12T10:00:00Z'), 'abc-123')).toBe(
 			'uploads/2026/07/abc-123.png'
 		);

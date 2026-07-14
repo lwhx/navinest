@@ -8,10 +8,14 @@ describe('AI-assisted submission workflow', () => {
 		expect(page).toContain("fetch('/api/submissions/enrich'");
 		expect(page).toContain('智能获取网页信息');
 		expect(page).toContain('采用建议');
-		expect(page).toContain('全部采用');
 		expect(page).toContain('AI生成内容可能不准确');
 		expect(page).toContain('webSnapshot: snapshot');
 		expect(page).toContain('aiSuggestion');
+		expect(page).toContain('采用全部可用建议');
+		expect(page).toContain('bind:value={categoryId}');
+		expect(page).toContain("fetch('/api/submissions/icon'");
+		expect(page).toContain('uploadIcon');
+		expect(page).toContain('duplicate-warning');
 	});
 
 	it('provides masked tested-before-enabled provider management', () => {
@@ -34,6 +38,10 @@ describe('AI-assisted submission workflow', () => {
 		expect(page).toContain('AI建议');
 		expect(page).toContain('最终发布内容');
 		expect(page).toContain('正式标签');
+		expect(page).toContain('name="newTagNames"');
+		expect(page).toContain('slice(0, 3)');
+		expect(page).toContain('defaultCategoryId');
+		expect(page).toContain('发布时创建');
 		expect(page).toContain('resolve(`/go?url=');
 	});
 });
