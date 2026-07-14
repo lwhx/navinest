@@ -45,7 +45,25 @@ describe('user submissions', () => {
 			title: ' GitHub Mirror ',
 			summary: ' Useful mirror ',
 			content: '',
-			url: 'https://example.com/path'
+			url: 'https://example.com/path',
+			tagNames: ['开发', '效率', '开发'],
+			webSnapshot: {
+				fetchedUrl: 'https://example.com/path',
+				title: 'Original title',
+				description: 'Original description',
+				excerpt: 'Original excerpt',
+				siteName: 'Example',
+				fetchedAt: '2026-07-14T00:00:00.000Z'
+			},
+			aiSuggestion: {
+				title: 'GitHub Mirror',
+				summary: 'Useful mirror',
+				content: 'For teams',
+				tags: ['开发', '效率'],
+				provider: 'Primary',
+				model: 'gpt-test',
+				generatedAt: '2026-07-14T00:00:01.000Z'
+			}
 		});
 		await createSubmission(database, 8, {
 			type: 'post',
@@ -71,7 +89,14 @@ describe('user submissions', () => {
 				type: 'site',
 				title: 'GitHub Mirror',
 				status: 'pending',
-				payload: { summary: 'Useful mirror', content: null, url: 'https://example.com/path' }
+				payload: expect.objectContaining({
+					summary: 'Useful mirror',
+					content: null,
+					url: 'https://example.com/path',
+					tagNames: ['开发', '效率'],
+					webSnapshot: expect.objectContaining({ title: 'Original title' }),
+					aiSuggestion: expect.objectContaining({ provider: 'Primary', model: 'gpt-test' })
+				})
 			}
 		]);
 	});

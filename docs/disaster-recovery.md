@@ -20,6 +20,8 @@
 7. 验证首页、认证、后台Access、私有文件、热榜、Cron和备份导入导出。
 8. 用`manifest.json`重新计算SHA-256，确保备份未损坏。
 
+> `seeds/initial.sql`仅用于初始化全新空数据库。恢复已有生产备份时不要执行Seed；`migrations/`目录只包含Wrangler编号迁移。
+
 ## 执行生产备份
 
 在项目根目录运行：

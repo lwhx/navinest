@@ -5,7 +5,7 @@ describe('homepage reference order migration', () => {
 	it('places the ranking module immediately after search and remains idempotent', () => {
 		const db = new DatabaseSync(':memory:');
 		db.exec(readFileSync('migrations/0001_initial.sql', 'utf8'));
-		db.exec(readFileSync('migrations/seed.sql', 'utf8'));
+		db.exec(readFileSync('seeds/initial.sql', 'utf8'));
 		const sql = readFileSync('migrations/0010_home_reference_order.sql', 'utf8');
 		db.exec(sql);
 		db.exec(sql);

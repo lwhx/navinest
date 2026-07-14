@@ -5,7 +5,7 @@ describe('content taxonomy migration', () => {
 	it('is idempotent and assigns official content to child categories', () => {
 		const db = new DatabaseSync(':memory:');
 		db.exec(readFileSync('migrations/0001_initial.sql', 'utf8'));
-		db.exec(readFileSync('migrations/seed.sql', 'utf8'));
+		db.exec(readFileSync('seeds/initial.sql', 'utf8'));
 		const migration = readFileSync('migrations/0009_content_taxonomy.sql', 'utf8');
 		db.exec(migration);
 		db.exec(migration);

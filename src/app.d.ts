@@ -1,6 +1,10 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
+	interface Env {
+		AI_CONFIG_ENCRYPTION_KEY?: string;
+	}
+
 	namespace App {
 		interface Locals {
 			admin: import('$lib/server/admin-auth').AdminIdentity | null;

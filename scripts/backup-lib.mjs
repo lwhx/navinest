@@ -26,7 +26,9 @@ export function retrySync(operation, { attempts = 3, delayMs = 500 } = {}) {
 
 /** @param {string[]} names */
 export function sortedMigrationNames(names) {
-	return names.filter((name) => name.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
+	return names
+		.filter((name) => /^\d{4}_[a-z0-9_-]+\.sql$/i.test(name))
+		.sort((a, b) => a.localeCompare(b));
 }
 
 /**

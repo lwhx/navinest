@@ -1,5 +1,6 @@
 import type { Database } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
+import type { WebSnapshot } from '$lib/server/services/web-enrichment';
 
 const TYPES = new Set(['site', 'post', 'app', 'book']);
 export type SubmissionInput = {
@@ -8,6 +9,17 @@ export type SubmissionInput = {
 	summary: string | null;
 	content: string | null;
 	url: string | null;
+	tagNames?: string[];
+	webSnapshot?: WebSnapshot | null;
+	aiSuggestion?: {
+		title: string;
+		summary: string;
+		content: string;
+		tags: string[];
+		provider: string;
+		model: string;
+		generatedAt: string;
+	} | null;
 };
 export class SubmissionError extends Error {
 	constructor(
@@ -33,6 +45,62 @@ function optional(value: string | null, max: number, field: string) {
 	if (normalized && normalized.length > max) throw new SubmissionError(`${field}内容过长。`, field);
 	return normalized;
 }
+function tags(values: string[] | undefined) {
+	const result: string[] = [];
+	for (const value of values ?? []) {
+		const tag = String(value).trim().slice(0, 24);
+		if (tag && !result.includes(tag)) result.push(tag);
+		if (result.length >= 8) break;
+	}
+	return result;
+}
+function snapshot(value: WebSnapshot | null | undefined): WebSnapshot | null {
+	if (!value) return null;
+	const target = validateExternalTarget(String(value.fetchedUrl ?? ''));
+	if (!target.valid) throw new SubmissionError('网页快照地址无效。', 'url');
+	return {
+		fetchedUrl: target.target,
+		title: String(value.title ?? '')
+			.trim()
+			.slice(0, 500),
+		description: String(value.description ?? '')
+			.trim()
+			.slice(0, 1000),
+		excerpt: String(value.excerpt ?? '')
+			.trim()
+			.slice(0, 30_000),
+		siteName: String(value.siteName ?? '')
+			.trim()
+			.slice(0, 200),
+		fetchedAt: String(value.fetchedAt ?? '')
+			.trim()
+			.slice(0, 40)
+	};
+}
+function ai(value: SubmissionInput['aiSuggestion']) {
+	if (!value) return null;
+	return {
+		title: String(value.title ?? '')
+			.trim()
+			.slice(0, 60),
+		summary: String(value.summary ?? '')
+			.trim()
+			.slice(0, 300),
+		content: String(value.content ?? '')
+			.trim()
+			.slice(0, 2000),
+		tags: tags(value.tags),
+		provider: String(value.provider ?? '')
+			.trim()
+			.slice(0, 80),
+		model: String(value.model ?? '')
+			.trim()
+			.slice(0, 120),
+		generatedAt: String(value.generatedAt ?? '')
+			.trim()
+			.slice(0, 40)
+	};
+}
 function normalize(input: SubmissionInput) {
 	if (!TYPES.has(input.type)) throw new SubmissionError('投稿类型无效。', 'type');
 	const title = input.title.trim();
@@ -48,7 +116,18 @@ function normalize(input: SubmissionInput) {
 		if (!result.valid) throw new SubmissionError(result.reason, 'url');
 		url = result.target;
 	}
-	return { type: input.type, title, payload: { summary, content, url } };
+	return {
+		type: input.type,
+		title,
+		payload: {
+			summary,
+			content,
+			url,
+			tagNames: tags(input.tagNames),
+			webSnapshot: snapshot(input.webSnapshot),
+			aiSuggestion: ai(input.aiSuggestion)
+		}
+	};
 }
 export async function createSubmission(database: Database, userId: number, input: SubmissionInput) {
 	const data = normalize(input);
@@ -80,6 +159,9 @@ export async function listUserSubmissions(database: Database, userId: number) {
 			summary: string | null;
 			content: string | null;
 			url: string | null;
+			tagNames?: string[];
+			webSnapshot?: WebSnapshot | null;
+			aiSuggestion?: SubmissionInput['aiSuggestion'];
 		},
 		status: row.status,
 		reviewMessage: row.review_message,

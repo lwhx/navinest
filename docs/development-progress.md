@@ -32,7 +32,7 @@
   - `ASSETS`：静态资源
 - 新增环境变量示例：`.env.example`
 - 新增 D1 初始数据库结构：`migrations/0001_initial.sql`
-- 新增 D1 seed 数据：`migrations/seed.sql`
+- 新增 D1 seed 数据：`seeds/initial.sql`
 - 新增 Cloudflare Env 类型声明：`src/cloudflare-env.d.ts`
 - 新增 NaviNest 配置文件：`src/lib/config.ts`
 - 新增首页 mock 数据：`src/lib/data/navigation.ts`
@@ -474,6 +474,12 @@
   - 第十一批H将内容管理升级为现代内容运营台：采用Notion暖白低噪声表面与Linear高密度列表，统计摘要压缩进页头，类型Tab、搜索筛选、密度控制统一进入命令栏
   - 内容列表改为六列数据表结构，支持当前结果全选、单项选择、选择状态栏、舒适/紧凑密度和行级更多菜单；危险删除从常驻按钮收纳到菜单，未加入缺少安全批量后端的虚假批量发布/删除
   - 编辑模态新增“基础信息/内容与描述/媒体资源/发布设置”分区导航，并将摘要与正文连续编排；生产桌面表头与内容行列宽精确一致，选择1项状态栏、52px紧凑行、更多菜单和390px移动无溢出均真实通过
+  - 第十二批A启动AI辅助投稿管线：用户输入网址后先安全抓取网页标题/描述/正文，再由已测试启用的OpenAI兼容服务生成简洁标题、简介、补充说明和最多8个标签；每项可单独或全部采用，AI不覆盖非空字段、不自动提交
+  - 新增后台AI服务管理：API Key使用Cloudflare Secret主密钥和AES-GCM应用层加密后存D1，后台仅显示末4位；配置必须真实连接测试成功后才能显式启用，修改Base URL/模型/Key会自动停用并要求重测
+  - 投稿payload同时保留用户最终值、网页快照和AI候选值；后台投稿审核改为左侧队列+右侧证据对比工作台，管理员选择正式分类与已有标签后发布，未建立的AI标签只提示不自动污染标签库
+  - 网页抓取逐跳执行URL/DoH公网解析/端口/重定向/MIME/字节/超时限制，自定义AI地址出站前也检查；每用户5秒间隔、10分钟10次并记录最小化审计。纯Worker无法DNS pinning的残余风险记录于 `docs/ai-assisted-submissions.md`
+  - 生产迁移前后均完成verified备份；首次Wrangler登记发现旧`seed.sql`位于迁移目录，历史编号迁移重放后在Seed重复主键处停止。完整对比19内容/18分类/7标签/2用户及足迹、元数据、统计等均与迁移前备份一致，无需恢复
+  - Seed已迁至`seeds/initial.sql`，迁移发现仅接受`NNNN_name.sql`并有回归测试；远程确认No migrations to apply。生产真实抓取Example Domain成功、AI未配置时正确降级，0投稿/0 Provider且仅写入1条最小化使用审计
 
 ## 重要技术决策
 
@@ -555,7 +561,7 @@ http://127.0.0.1:5173
 - 开发进度：`docs/development-progress.md`
 - Cloudflare 配置：`wrangler.jsonc`
 - 初始 schema：`migrations/0001_initial.sql`
-- seed 数据：`migrations/seed.sql`
+- seed 数据：`seeds/initial.sql`
 - 首页：`src/routes/+page.svelte`
 - 全局样式：`src/routes/layout.css`
 - 首页 mock 数据：`src/lib/data/navigation.ts`
