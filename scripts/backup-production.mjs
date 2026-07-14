@@ -56,6 +56,7 @@ for (const file of ['wrangler.jsonc', 'wrangler.build.jsonc'])
 	cpSync(join(root, file), join(out, file));
 cpSync(join(root, 'cloudflare/worker.ts'), join(out, 'cloudflare-worker.ts'));
 cpSync(join(root, 'migrations'), join(out, 'migrations'), { recursive: true });
+cpSync(join(root, 'seeds'), join(out, 'seeds'), { recursive: true });
 cpSync(join(root, 'docs/disaster-recovery.md'), join(out, 'RESTORE.md'));
 const paths = [
 	'database.sql',
@@ -72,9 +73,13 @@ for (const name of sortedMigrationNames(readdirSync(join(root, 'migrations')))) 
 	const path = `migrations/${name}`;
 	migrationFiles.push({ path, content: readFileSync(join(out, path)) });
 }
+const seedFiles = readdirSync(join(root, 'seeds'))
+	.filter((name) => name.endsWith('.sql'))
+	.sort((a, b) => a.localeCompare(b))
+	.map((name) => ({ path: `seeds/${name}`, content: readFileSync(join(out, 'seeds', name)) }));
 const manifest = buildBackupManifest({
 	createdAt: new Date().toISOString(),
-	files: [...files, ...migrationFiles],
+	files: [...files, ...migrationFiles, ...seedFiles],
 	secretNames: secrets,
 	r2Objects: r2
 });

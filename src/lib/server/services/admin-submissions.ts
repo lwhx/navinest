@@ -1,4 +1,6 @@
 import type { Database } from '$lib/server/db';
+import type { SubmissionInput } from '$lib/server/services/submissions';
+import type { WebSnapshot } from '$lib/server/services/web-enrichment';
 type Row = {
 	id: number;
 	user_id: number;
@@ -28,6 +30,9 @@ export async function listAdminSubmissions(database: Database) {
 			summary: string | null;
 			content: string | null;
 			url: string | null;
+			tagNames?: string[];
+			webSnapshot?: WebSnapshot | null;
+			aiSuggestion?: SubmissionInput['aiSuggestion'];
 		},
 		status: row.status,
 		reviewMessage: row.review_message,

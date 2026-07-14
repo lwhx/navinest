@@ -9,6 +9,6 @@ describe('backup migration discovery', () => {
 				'notes.txt',
 				'0001_initial.sql'
 			])
-		).toEqual(['0001_initial.sql', '0009_content_taxonomy.sql', 'seed.sql']);
+		).toEqual(['0001_initial.sql', '0009_content_taxonomy.sql']);
 	});
 });
