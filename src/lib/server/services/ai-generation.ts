@@ -35,21 +35,63 @@ function contentOf(body: unknown): string {
 			? (choices[0] as { message?: unknown }).message
 			: null;
 	if (!message || typeof message !== 'object') return '';
-	return typeof (message as { content?: unknown }).content === 'string'
-		? (message as { content: string }).content
-		: '';
+	const content = (message as { content?: unknown }).content;
+	if (typeof content === 'string') return content;
+	if (Array.isArray(content))
+		return content
+			.map((part) =>
+				part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
+					? (part as { text: string }).text
+					: ''
+			)
+			.filter(Boolean)
+			.join('\n');
+	return '';
 }
 
-function parseJson(value: string): unknown {
-	const normalized = value
-		.trim()
-		.replace(/^```(?:json)?\s*/i, '')
-		.replace(/\s*```$/, '');
-	try {
-		return JSON.parse(normalized);
-	} catch {
-		throw new AiGenerationError('AI 返回内容不是有效的结构化 JSON。');
+function balancedObjects(value: string): string[] {
+	const source = value.slice(0, 100_000),
+		objects: string[] = [];
+	for (let start = 0; start < source.length; start++) {
+		if (source[start] !== '{') continue;
+		let depth = 0,
+			quoted = false,
+			escaped = false;
+		for (let index = start; index < source.length; index++) {
+			const character = source[index];
+			if (quoted) {
+				if (escaped) escaped = false;
+				else if (character === '\\') escaped = true;
+				else if (character === '"') quoted = false;
+				continue;
+			}
+			if (character === '"') quoted = true;
+			else if (character === '{') depth++;
+			else if (character === '}' && --depth === 0) {
+				objects.push(source.slice(start, index + 1));
+				start = index;
+				break;
+			}
+		}
 	}
+	return objects;
+}
+
+function jsonCandidates(value: string): unknown[] {
+	const trimmed = value.trim(),
+		candidates = [trimmed];
+	for (const match of value.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi))
+		candidates.push(match[1].trim());
+	candidates.push(...balancedObjects(value));
+	const parsed: unknown[] = [];
+	for (const candidate of [...new Set(candidates)]) {
+		try {
+			parsed.push(JSON.parse(candidate));
+		} catch {
+			// Continue to the next balanced or fenced candidate.
+		}
+	}
+	return parsed;
 }
 
 function limited(value: unknown, max: number): string {
@@ -73,6 +115,19 @@ function normalize(value: unknown): SubmissionSuggestion {
 		}
 	}
 	return { title, summary, content, tags };
+}
+
+function parseSuggestion(value: string): SubmissionSuggestion {
+	let structuralError: AiGenerationError | null = null;
+	for (const candidate of jsonCandidates(value)) {
+		try {
+			return normalize(candidate);
+		} catch (error) {
+			if (error instanceof AiGenerationError) structuralError = error;
+		}
+	}
+	if (structuralError) throw structuralError;
+	throw new AiGenerationError('AI 返回内容不是有效的结构化 JSON。');
 }
 
 function prompt(snapshot: WebSnapshot): string {
@@ -128,6 +183,8 @@ export async function generateSubmissionSuggestion(
 	} finally {
 		clearTimeout(timer);
 	}
+	if (response.status === 429)
+		throw new AiGenerationError('AI 上游服务触发限流或配额不足，请稍后重试或检查账户余额。');
 	if (!response.ok) throw new AiGenerationError(`AI 服务返回了 ${response.status} 状态。`);
 	let body: unknown;
 	try {
@@ -137,5 +194,5 @@ export async function generateSubmissionSuggestion(
 	}
 	const content = contentOf(body);
 	if (!content) throw new AiGenerationError('AI 服务没有返回可用内容。');
-	return normalize(parseJson(content));
+	return parseSuggestion(content);
 }

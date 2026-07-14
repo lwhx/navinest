@@ -121,4 +121,52 @@ describe('OpenAI-compatible submission generation', () => {
 		});
 		expect(fetcher).toHaveBeenCalledTimes(2);
 	});
+
+	it('extracts the final structured object from MiniMax-style thinking text', async () => {
+		const fetcher = async () =>
+			Response.json({
+				choices: [
+					{
+						message: {
+							content: `We need to answer carefully. The source contains {curly braces} in prose.\n\n\`\`\`json\n{"title":"MiniMax","summary":"简洁介绍","content":"补充说明","tags":["AI","工具"]}\n\`\`\``
+						}
+					}
+				]
+			});
+		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toEqual({
+			title: 'MiniMax',
+			summary: '简洁介绍',
+			content: '补充说明',
+			tags: ['AI', '工具']
+		});
+	});
+
+	it('joins OpenAI-compatible multipart text content before parsing JSON', async () => {
+		const fetcher = async () =>
+			Response.json({
+				choices: [
+					{
+						message: {
+							content: [
+								{ type: 'text', text: 'Reasoning before output. ' },
+								{ type: 'text', text: '{"title":"A","summary":"B","content":"C","tags":[]}' }
+							]
+						}
+					}
+				]
+			});
+		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toMatchObject({
+			title: 'A'
+		});
+	});
+
+	it('explains upstream rate limits without exposing provider response bodies', async () => {
+		const limited = async () => new Response('secret quota details', { status: 429 });
+		await expect(generateSubmissionSuggestion(config, snapshot, limited)).rejects.toThrow(
+			'限流或配额'
+		);
+		await expect(generateSubmissionSuggestion(config, snapshot, limited)).rejects.not.toThrow(
+			'secret quota details'
+		);
+	});
 });
