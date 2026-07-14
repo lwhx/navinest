@@ -57,11 +57,17 @@ export async function deleteOwnedFile(
 	const file = await getOwnedFile(database, userId, id);
 	const reference = (
 		await database
-			.prepare('SELECT id FROM users WHERE id=? AND (avatar_file_id=? OR cover_file_id=?) LIMIT 1')
-			.bind(userId, id, id)
+			.prepare(
+				`SELECT 1 AS id WHERE
+					EXISTS(SELECT 1 FROM users WHERE id=? AND (avatar_file_id=? OR cover_file_id=?))
+					OR EXISTS(SELECT 1 FROM items WHERE icon_file_id=? OR cover_file_id=?)
+					OR EXISTS(SELECT 1 FROM submissions WHERE status='pending' AND CAST(json_extract(payload_json,'$.iconFileId') AS INTEGER)=?)
+				 LIMIT 1`
+			)
+			.bind(userId, id, id, id, id, id)
 			.all<{ id: number }>()
 	).results[0];
-	if (reference) throw new UserFileError('文件正在被用户资料引用。', 409);
+	if (reference) throw new UserFileError('文件正在被用户资料、内容或待审核投稿引用。', 409);
 	await bucket.delete(file.objectKey);
 	await database.prepare('DELETE FROM files WHERE id=? AND user_id=?').bind(id, userId).all();
 }

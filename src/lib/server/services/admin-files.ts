@@ -6,7 +6,9 @@ const MIME_EXTENSIONS = new Map([
 	['image/png', 'png'],
 	['image/webp', 'webp'],
 	['image/gif', 'gif'],
-	['image/svg+xml', 'svg']
+	['image/svg+xml', 'svg'],
+	['image/x-icon', 'ico'],
+	['image/vnd.microsoft.icon', 'ico']
 ]);
 
 export interface FileBucket {
@@ -58,7 +60,7 @@ export class AdminFileError extends Error {
 export function validateAdminUpload(file: File) {
 	const extension = MIME_EXTENSIONS.get(file.type.toLowerCase());
 	if (!extension)
-		return { valid: false as const, message: '仅支持 JPEG、PNG、WebP、GIF 和 SVG 图片。' };
+		return { valid: false as const, message: '仅支持 JPEG、PNG、WebP、GIF、SVG 和 ICO 图片。' };
 	if (file.size === 0) return { valid: false as const, message: '上传文件不能为空。' };
 	if (file.size > MAX_UPLOAD_SIZE)
 		return { valid: false as const, message: '文件不能超过 5 MiB。' };

@@ -19,6 +19,10 @@ const snapshot = {
 	siteName: 'Example',
 	fetchedAt: '2026-07-14T00:00:00.000Z'
 };
+const categories = [
+	{ id: 16, name: '代码托管', description: '代码仓库与协作' },
+	{ id: 17, name: '前端开发', description: '前端框架与构建工具' }
+];
 
 describe('OpenAI-compatible submission generation', () => {
 	it('sends an authenticated chat completion and normalizes structured output', async () => {
@@ -168,5 +172,55 @@ describe('OpenAI-compatible submission generation', () => {
 		await expect(generateSubmissionSuggestion(config, snapshot, limited)).rejects.not.toThrow(
 			'secret quota details'
 		);
+	});
+
+	it('accepts only category IDs from the supplied real category list', async () => {
+		const valid = async () =>
+			Response.json({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({
+								title: 'Vite',
+								summary: '前端构建工具',
+								content: '适合现代前端项目',
+								tags: ['前端'],
+								categoryId: 17,
+								categoryReason: '内容与前端构建工具高度匹配'
+							})
+						}
+					}
+				]
+			});
+		await expect(
+			generateSubmissionSuggestion(config, snapshot, valid, categories)
+		).resolves.toMatchObject({
+			categoryId: 17,
+			categoryName: '前端开发',
+			categoryReason: '内容与前端构建工具高度匹配'
+		});
+		const invented = async () =>
+			Response.json({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({
+								title: 'Vite',
+								summary: '前端构建工具',
+								content: '说明',
+								tags: [],
+								categoryId: 999,
+								categoryReason: 'invented'
+							})
+						}
+					}
+				]
+			});
+		await expect(
+			generateSubmissionSuggestion(config, snapshot, invented, categories)
+		).resolves.toMatchObject({
+			categoryId: null,
+			categoryName: null
+		});
 	});
 });

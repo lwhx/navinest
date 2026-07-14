@@ -9,6 +9,9 @@ export type SubmissionInput = {
 	summary: string | null;
 	content: string | null;
 	url: string | null;
+	userCategoryId?: number | null;
+	iconFileId?: number | null;
+	iconSource?: 'auto' | 'manual' | null;
 	tagNames?: string[];
 	webSnapshot?: WebSnapshot | null;
 	aiSuggestion?: {
@@ -19,6 +22,9 @@ export type SubmissionInput = {
 		provider: string;
 		model: string;
 		generatedAt: string;
+		categoryId?: number | null;
+		categoryName?: string | null;
+		categoryReason?: string;
 	} | null;
 };
 export class SubmissionError extends Error {
@@ -72,6 +78,10 @@ function snapshot(value: WebSnapshot | null | undefined): WebSnapshot | null {
 		siteName: String(value.siteName ?? '')
 			.trim()
 			.slice(0, 200),
+		iconUrl:
+			String(value.iconUrl ?? '')
+				.trim()
+				.slice(0, 2048) || undefined,
 		fetchedAt: String(value.fetchedAt ?? '')
 			.trim()
 			.slice(0, 40)
@@ -98,7 +108,18 @@ function ai(value: SubmissionInput['aiSuggestion']) {
 			.slice(0, 120),
 		generatedAt: String(value.generatedAt ?? '')
 			.trim()
-			.slice(0, 40)
+			.slice(0, 40),
+		categoryId:
+			Number.isInteger(Number(value.categoryId)) && Number(value.categoryId) > 0
+				? Number(value.categoryId)
+				: null,
+		categoryName:
+			String(value.categoryName ?? '')
+				.trim()
+				.slice(0, 80) || null,
+		categoryReason: String(value.categoryReason ?? '')
+			.trim()
+			.slice(0, 200)
 	};
 }
 function normalize(input: SubmissionInput) {
@@ -123,6 +144,16 @@ function normalize(input: SubmissionInput) {
 			summary,
 			content,
 			url,
+			userCategoryId:
+				Number.isInteger(Number(input.userCategoryId)) && Number(input.userCategoryId) > 0
+					? Number(input.userCategoryId)
+					: null,
+			iconFileId:
+				Number.isInteger(Number(input.iconFileId)) && Number(input.iconFileId) > 0
+					? Number(input.iconFileId)
+					: null,
+			iconSource:
+				input.iconSource === 'auto' || input.iconSource === 'manual' ? input.iconSource : null,
 			tagNames: tags(input.tagNames),
 			webSnapshot: snapshot(input.webSnapshot),
 			aiSuggestion: ai(input.aiSuggestion)
@@ -131,6 +162,27 @@ function normalize(input: SubmissionInput) {
 }
 export async function createSubmission(database: Database, userId: number, input: SubmissionInput) {
 	const data = normalize(input);
+	if (data.payload.userCategoryId) {
+		const category = (
+			await database
+				.prepare('SELECT id FROM categories WHERE id=? AND type=? AND is_visible=1 LIMIT 1')
+				.bind(data.payload.userCategoryId, data.type)
+				.all<{ id: number }>()
+		).results[0];
+		if (!category)
+			throw new SubmissionError('分类不存在、不可见或内容类型不一致。', 'userCategoryId');
+	}
+	if (data.payload.iconFileId) {
+		const icon = (
+			await database
+				.prepare(
+					"SELECT id FROM files WHERE id=? AND user_id=? AND bucket='FILES' AND mime_type LIKE 'image/%' LIMIT 1"
+				)
+				.bind(data.payload.iconFileId, userId)
+				.all<{ id: number }>()
+		).results[0];
+		if (!icon) throw new SubmissionError('图标不存在、不是图片或不属于当前用户。', 'iconFileId');
+	}
 	const row = (
 		await database
 			.prepare(
@@ -159,6 +211,9 @@ export async function listUserSubmissions(database: Database, userId: number) {
 			summary: string | null;
 			content: string | null;
 			url: string | null;
+			userCategoryId?: number | null;
+			iconFileId?: number | null;
+			iconSource?: 'auto' | 'manual' | null;
 			tagNames?: string[];
 			webSnapshot?: WebSnapshot | null;
 			aiSuggestion?: SubmissionInput['aiSuggestion'];

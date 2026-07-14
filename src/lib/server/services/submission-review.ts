@@ -14,7 +14,7 @@ export class SubmissionReviewError extends Error {
 }
 type ReviewInput =
 	| { decision: 'reject'; message: string }
-	| { decision: 'approve'; message: string; item: ItemInput };
+	| { decision: 'approve'; message: string; item: ItemInput; newTagNames?: string[] };
 async function pending(database: Database, id: number) {
 	const row = (
 		await database
@@ -38,6 +38,110 @@ async function pending(database: Database, id: number) {
 	}
 	return row;
 }
+
+function normalizeTagNames(values: string[] | undefined) {
+	const names: string[] = [];
+	for (const value of values ?? []) {
+		const name = String(value).trim();
+		if (!name || names.some((entry) => entry.toLocaleLowerCase() === name.toLocaleLowerCase()))
+			continue;
+		if (name.length > 24) throw new SubmissionReviewError('新标签名称不能超过 24 个字符。');
+		names.push(name);
+	}
+	if (names.length > 8) throw new SubmissionReviewError('每次审核最多创建 8 个新标签。');
+	return names;
+}
+
+function tagSlug(name: string) {
+	const ascii = name
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-|-$/g, '')
+		.slice(0, 60);
+	if (ascii) return ascii;
+	let hash = 2166136261;
+	for (const byte of new TextEncoder().encode(name)) {
+		hash ^= byte;
+		hash = Math.imul(hash, 16777619);
+	}
+	return `tag-${(hash >>> 0).toString(36)}`;
+}
+
+async function validateSubmissionIcon(
+	database: Database,
+	userId: number,
+	iconFileId: number | null
+) {
+	if (!iconFileId) return;
+	const row = (
+		await database
+			.prepare(
+				"SELECT id FROM files WHERE id=? AND user_id=? AND bucket='FILES' AND mime_type LIKE 'image/%' LIMIT 1"
+			)
+			.bind(iconFileId, userId)
+			.all<{ id: number }>()
+	).results[0];
+	if (!row) throw new SubmissionReviewError('投稿图标不存在、不是图片或不属于投稿用户。');
+}
+
+async function resolveTagIds(
+	database: Database,
+	type: ItemInput['type'],
+	existingIds: number[],
+	names: string[]
+) {
+	const ids = new Set(existingIds),
+		created: number[] = [];
+	try {
+		for (const name of names) {
+			const existing = (
+				await database
+					.prepare('SELECT id FROM tags WHERE type=? AND lower(name)=lower(?) LIMIT 1')
+					.bind(type, name)
+					.all<{ id: number }>()
+			).results[0];
+			if (existing) {
+				ids.add(existing.id);
+				continue;
+			}
+			const base = tagSlug(name);
+			let slug = base,
+				suffix = 2;
+			while (
+				(
+					await database
+						.prepare('SELECT id FROM tags WHERE type=? AND slug=? LIMIT 1')
+						.bind(type, slug)
+						.all<{ id: number }>()
+				).results[0]
+			)
+				slug = `${base.slice(0, 56)}-${suffix++}`;
+			const row = (
+				await database
+					.prepare('INSERT INTO tags(type,name,slug,description) VALUES(?,?,?,NULL) RETURNING id')
+					.bind(type, name, slug)
+					.all<{ id: number }>()
+			).results[0];
+			if (!row) throw new SubmissionReviewError('新标签创建失败。');
+			ids.add(row.id);
+			created.push(row.id);
+		}
+	} catch (error) {
+		await cleanupCreatedTags(database, created);
+		throw error;
+	}
+	return { ids: [...ids], created };
+}
+
+async function cleanupCreatedTags(database: Database, ids: number[]) {
+	for (const id of ids)
+		await database
+			.prepare('DELETE FROM tags WHERE id=? AND NOT EXISTS(SELECT 1 FROM item_tags WHERE tag_id=?)')
+			.bind(id, id)
+			.all();
+}
+
 export async function reviewSubmission(
 	database: Database,
 	submissionId: number,
@@ -78,8 +182,22 @@ export async function reviewSubmission(
 		}
 		return { status: 'rejected' as const, itemId: null };
 	}
-	const publishInput: ItemInput = { ...input.item, status: 'published', visibility: 'public' };
-	const itemId = await createItem(database, publishInput, reviewerId);
+	await validateSubmissionIcon(database, submission.user_id, input.item.iconFileId);
+	const names = normalizeTagNames(input.newTagNames),
+		resolved = await resolveTagIds(database, input.item.type, input.item.tagIds, names),
+		publishInput: ItemInput = {
+			...input.item,
+			tagIds: resolved.ids,
+			status: 'published',
+			visibility: 'public'
+		};
+	let itemId: number;
+	try {
+		itemId = await createItem(database, publishInput, reviewerId);
+	} catch (error) {
+		await cleanupCreatedTags(database, resolved.created);
+		throw error;
+	}
 	try {
 		const row = (
 			await database
@@ -107,6 +225,7 @@ export async function reviewSubmission(
 			.bind(submissionId)
 			.all();
 		await deleteItem(database, itemId);
+		await cleanupCreatedTags(database, resolved.created);
 		throw error;
 	}
 	return { status: 'published' as const, itemId };

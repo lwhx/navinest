@@ -6,6 +6,7 @@ export type WebSnapshot = {
 	description: string;
 	excerpt: string;
 	siteName: string;
+	iconUrl?: string;
 	fetchedAt: string;
 };
 
@@ -69,6 +70,26 @@ function readableHtml(html: string): string {
 		cleaned.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ??
 		cleaned
 	);
+}
+
+function iconUrl(html: string, pageUrl: string): string {
+	const candidates: Array<{ priority: number; href: string }> = [];
+	for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+		const rel = attribute(tag, 'rel').toLowerCase().split(/\s+/),
+			href = attribute(tag, 'href');
+		if (!href || !rel.includes('icon')) continue;
+		const priority = rel.includes('apple-touch-icon') ? 0 : rel.includes('shortcut') ? 2 : 1;
+		candidates.push({ priority, href });
+	}
+	for (const candidate of candidates.sort((a, b) => a.priority - b.priority)) {
+		try {
+			const parsed = new URL(candidate.href, pageUrl);
+			if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+		} catch {
+			// Ignore malformed icon declarations and try the next candidate.
+		}
+	}
+	return new URL('/favicon.ico', pageUrl).href;
 }
 
 async function readLimited(response: Response, limit: number): Promise<string> {
@@ -183,6 +204,7 @@ export async function fetchWebSnapshot(
 				text(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? ''),
 			description = metadata(html, ['og:description', 'twitter:description', 'description']),
 			siteName = metadata(html, ['og:site_name']),
+			pageIcon = iconUrl(html, current),
 			excerpt = text(readableHtml(html)).slice(0, maxTextChars);
 		if (!title && !description && !excerpt) throw new WebFetchError('网页没有可提取的文本内容。');
 		return {
@@ -191,6 +213,7 @@ export async function fetchWebSnapshot(
 			description,
 			excerpt,
 			siteName,
+			iconUrl: pageIcon,
 			fetchedAt: new Date().toISOString()
 		};
 	}

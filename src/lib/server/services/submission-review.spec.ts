@@ -10,6 +10,8 @@ function fixture() {
 	sqlite.exec(`
 CREATE TABLE submissions(id INTEGER PRIMARY KEY,user_id INTEGER,target_item_id INTEGER,type TEXT,title TEXT,payload_json TEXT,status TEXT DEFAULT 'pending',reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE items(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT,category_id INTEGER,author_id INTEGER,title TEXT,slug TEXT UNIQUE,summary TEXT,content TEXT,icon_file_id INTEGER,cover_file_id INTEGER,status TEXT,visibility TEXT,sort_order INTEGER,is_featured INTEGER,published_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE tags(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT,name TEXT,slug TEXT,description TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
+CREATE TABLE files(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,bucket TEXT,object_key TEXT,mime_type TEXT,size INTEGER);
 CREATE TABLE item_tags(item_id INTEGER,tag_id INTEGER); CREATE TABLE item_meta(item_id INTEGER,meta_key TEXT,meta_value TEXT);
 CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,sender_id INTEGER,type TEXT,title TEXT,content TEXT,data_json TEXT,is_read INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 INSERT INTO submissions(id,user_id,type,title,payload_json,status) VALUES(1,7,'site','Accepted','{}','pending'),(2,7,'post','Rejected','{}','pending');`);
@@ -111,5 +113,79 @@ describe('submission review', () => {
 		await expect(
 			reviewSubmission(database, 1, 9, { decision: 'reject', message: ' ' })
 		).rejects.toBeInstanceOf(SubmissionReviewError);
+	});
+
+	it('creates selected missing tags, reuses existing names, and links them on publish', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec("INSERT INTO tags(type,name,slug) VALUES('site','AI','ai')");
+		const result = await reviewSubmission(database, 1, 9, {
+			decision: 'approve',
+			message: '',
+			item: { ...item, tagIds: [1] },
+			newTagNames: ['效率工具', 'AI', '效率工具']
+		});
+		expect(result).toMatchObject({ status: 'published', itemId: 1 });
+		expect(sqlite.prepare('SELECT name FROM tags ORDER BY id').all()).toEqual([
+			{ name: 'AI' },
+			{ name: '效率工具' }
+		]);
+		expect(sqlite.prepare('SELECT tag_id FROM item_tags ORDER BY tag_id').all()).toEqual([
+			{ tag_id: 1 },
+			{ tag_id: 2 }
+		]);
+	});
+
+	it('rejects more than eight selected new tags', async () => {
+		const { database } = fixture();
+		await expect(
+			reviewSubmission(database, 1, 9, {
+				decision: 'approve',
+				message: '',
+				item,
+				newTagNames: Array.from({ length: 9 }, (_, index) => `标签${index}`)
+			})
+		).rejects.toThrow('8');
+	});
+
+	it('requires the submission icon to be an image owned by the submitter', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"INSERT INTO files(id,user_id,bucket,object_key,mime_type,size) VALUES(1,8,'FILES','x.png','image/png',10),(2,7,'FILES','x.txt','text/plain',10),(3,7,'FILES','x.webp','image/webp',10)"
+		);
+		await expect(
+			reviewSubmission(database, 1, 9, {
+				decision: 'approve',
+				message: '',
+				item: { ...item, iconFileId: 1 }
+			})
+		).rejects.toThrow('图标');
+		await expect(
+			reviewSubmission(database, 1, 9, {
+				decision: 'approve',
+				message: '',
+				item: { ...item, iconFileId: 2 }
+			})
+		).rejects.toThrow('图标');
+		await expect(
+			reviewSubmission(database, 1, 9, {
+				decision: 'approve',
+				message: '',
+				item: { ...item, iconFileId: 3 }
+			})
+		).resolves.toMatchObject({ status: 'published' });
+	});
+
+	it('adds a deterministic suffix when a new tag slug is already occupied', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec("INSERT INTO tags(type,name,slug) VALUES('site','Different','a-b')");
+		await reviewSubmission(database, 1, 9, {
+			decision: 'approve',
+			message: '',
+			item,
+			newTagNames: ['A B']
+		});
+		expect(sqlite.prepare("SELECT slug FROM tags WHERE name='A B'").get()).toEqual({
+			slug: 'a-b-2'
+		});
 	});
 });

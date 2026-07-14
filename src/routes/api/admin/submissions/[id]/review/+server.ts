@@ -26,7 +26,8 @@ export const PATCH: RequestHandler = async ({ locals, platform, params, request 
 		const result = await reviewSubmission(requireDatabase(platform), id, locals.admin.id, {
 			decision: 'approve',
 			message: String(body.message ?? ''),
-			item: validation.data
+			item: validation.data,
+			newTagNames: Array.isArray(body.newTagNames) ? body.newTagNames.map(String) : []
 		});
 		return json(result);
 	} catch (error) {

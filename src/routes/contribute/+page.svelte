@@ -9,15 +9,33 @@
 		description: string;
 		excerpt: string;
 		siteName: string;
+		iconUrl?: string;
 		fetchedAt: string;
 	};
-	type Suggestion = { title: string; summary: string; content: string; tags: string[] };
+	type Suggestion = {
+		title: string;
+		summary: string;
+		content: string;
+		tags: string[];
+		categoryId?: number | null;
+		categoryName?: string | null;
+		categoryReason?: string;
+	};
 	let type = $state('site'),
 		title = $state(''),
 		summary = $state(''),
 		content = $state(''),
 		url = $state(''),
 		tagInput = $state(''),
+		categoryId = $state<number | null>(null),
+		iconFileId = $state<number | null>(null),
+		iconSource = $state<'auto' | 'manual' | null>(null),
+		iconPreviewUrl = $state(''),
+		iconSaving = $state(false),
+		duplicate = $state<{ published: string[]; pendingCount: number }>({
+			published: [],
+			pendingCount: 0
+		}),
 		message = $state(''),
 		submitting = $state(false),
 		enriching = $state(false),
@@ -27,6 +45,7 @@
 			available: false
 		}),
 		enrichStage = $state('');
+	let availableCategories = $derived(data.categories.filter((category) => category.type === type));
 	const tags = $derived(
 		[
 			...new Set(
@@ -55,6 +74,55 @@
 		apply('summary');
 		apply('content');
 		if (suggestion?.tags.length) tagInput = suggestion.tags.join('，');
+		if (
+			!categoryId &&
+			suggestion?.categoryId &&
+			availableCategories.some((category) => category.id === suggestion?.categoryId)
+		)
+			categoryId = suggestion.categoryId;
+	}
+	async function saveRemoteIcon() {
+		if (!snapshot?.iconUrl || iconSaving) return;
+		iconSaving = true;
+		message = '';
+		try {
+			const response = await fetch('/api/submissions/icon', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ url: snapshot.iconUrl })
+				}),
+				body = await response.json();
+			if (!response.ok) throw new Error(body.error ?? '图标保存失败。');
+			iconFileId = body.data.id;
+			iconSource = 'auto';
+			iconPreviewUrl = body.data.previewUrl;
+		} catch (error) {
+			message = error instanceof Error ? error.message : '图标保存失败。';
+		} finally {
+			iconSaving = false;
+		}
+	}
+	async function uploadIcon(event: Event) {
+		const input = event.currentTarget as HTMLInputElement,
+			file = input.files?.[0];
+		if (!file) return;
+		iconSaving = true;
+		message = '';
+		try {
+			const form = new FormData();
+			form.set('file', file);
+			const response = await fetch('/api/user/files', { method: 'POST', body: form }),
+				body = await response.json();
+			if (!response.ok) throw new Error(body.error ?? '图标上传失败。');
+			iconFileId = body.data.id;
+			iconSource = 'manual';
+			iconPreviewUrl = `/api/user/files/${body.data.id}`;
+		} catch (error) {
+			message = error instanceof Error ? error.message : '图标上传失败。';
+		} finally {
+			iconSaving = false;
+			input.value = '';
+		}
 	}
 	async function enrich() {
 		if (!url.trim()) {
@@ -68,12 +136,13 @@
 			const response = await fetch('/api/submissions/enrich', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ url })
+				body: JSON.stringify({ url, type })
 			});
 			const body = await response.json();
 			if (!response.ok) throw new Error(body.error ?? '智能获取失败。');
 			snapshot = body.snapshot;
 			suggestion = body.suggestion;
+			duplicate = body.duplicate ?? { published: [], pendingCount: 0 };
 			aiMeta = body.ai;
 			enrichStage = body.ai.available
 				? `AI已生成建议 · ${body.ai.provider} / ${body.ai.model}`
@@ -83,6 +152,7 @@
 			if (!content.trim()) apply('content');
 			if (!tagInput.trim() && body.suggestion?.tags?.length)
 				tagInput = body.suggestion.tags.join('，');
+			if (!categoryId && body.suggestion?.categoryId) categoryId = body.suggestion.categoryId;
 		} catch (error) {
 			message = error instanceof Error ? error.message : '智能获取失败，请手动填写。';
 			enrichStage = '';
@@ -112,6 +182,9 @@
 					summary,
 					content,
 					url,
+					userCategoryId: categoryId,
+					iconFileId,
+					iconSource,
 					tagNames: tags,
 					webSnapshot: snapshot,
 					aiSuggestion
@@ -155,6 +228,17 @@
 				>
 			</div>
 			{#if enrichStage}<p class="ai-status" role="status"><span>✦</span>{enrichStage}</p>{/if}
+			{#if duplicate.published.length || duplicate.pendingCount}<div
+					class="duplicate-warning"
+					role="status"
+				>
+					<strong>发现可能的重复链接</strong>
+					{#if duplicate.published.length}<p>已收录：{duplicate.published.join('、')}</p>{/if}
+					{#if duplicate.pendingCount}<p>
+							另有 {duplicate.pendingCount} 条待审核投稿使用相同链接。
+						</p>{/if}
+					<small>你仍可继续投稿，管理员会在审核时判断。</small>
+				</div>{/if}
 			{#if message}<p class="account-note" role="alert">{message}</p>{/if}
 		</section>
 
@@ -175,10 +259,22 @@
 					}}
 				>
 					<label
-						><span>内容类型</span><select bind:value={type}
+						><span>内容类型</span><select bind:value={type} onchange={() => (categoryId = null)}
 							><option value="site">网址</option><option value="app">应用</option><option
 								value="post">文章</option
 							><option value="book">书籍影视</option></select
+						></label
+					>
+					<label
+						><span>投稿分类</span><select bind:value={categoryId}
+							><option value={null}>请选择分类</option
+							>{#each availableCategories as category (category.id)}<option value={category.id}
+									>{category.name}</option
+								>{/each}</select
+						><small
+							>{suggestion?.categoryId
+								? `AI推荐：${suggestion.categoryName} · ${suggestion.categoryReason || '根据网页内容判断'}`
+								: '可手动选择；AI识别后会给出推荐。'}</small
 						></label
 					>
 					<label class="account-wide"
@@ -230,6 +326,44 @@
 					{#if tags.length}<div class="tag-preview account-wide">
 							{#each tags as tag (tag)}<span>{tag}</span>{/each}
 						</div>{/if}
+					<div class="account-wide icon-editor">
+						<div class="icon-preview">
+							{#if iconPreviewUrl}<img src={iconPreviewUrl} alt="当前投稿图标" />{:else}<span
+									>无图标</span
+								>{/if}
+						</div>
+						<div>
+							<strong>网站图标</strong>
+							<p>
+								{iconFileId
+									? `已选择${iconSource === 'auto' ? '自动抓取' : '手动上传'}图标`
+									: '可采用网页图标，或手动上传替换。'}
+							</p>
+							<div class="icon-actions">
+								{#if snapshot?.iconUrl && !iconFileId}<button
+										type="button"
+										disabled={iconSaving}
+										onclick={saveRemoteIcon}>{iconSaving ? '保存中…' : '使用网页图标'}</button
+									>{/if}
+								<label class="icon-upload"
+									><input
+										type="file"
+										accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/x-icon"
+										onchange={uploadIcon}
+										disabled={iconSaving}
+									/><span>{iconFileId ? '替换图标' : '手动上传'}</span></label
+								>
+								{#if iconFileId}<button
+										type="button"
+										onclick={() => {
+											iconFileId = null;
+											iconSource = null;
+											iconPreviewUrl = '';
+										}}>清除</button
+									>{/if}
+							</div>
+						</div>
+					</div>
 					<div class="account-wide account-actions">
 						<button class="account-button" type="submit" disabled={submitting}
 							>{submitting ? '提交中…' : '提交审核'}</button
@@ -245,7 +379,8 @@
 						<h2>智能建议</h2>
 						<p>{aiMeta.available ? '根据网页内容精炼生成' : '抓取网页原始信息'}</p>
 					</div>
-					{#if snapshot}<button type="button" class="apply-all" onclick={applyAll}>全部采用</button
+					{#if snapshot}<button type="button" class="apply-all" onclick={applyAll}
+							><span>✦</span>采用全部可用建议</button
 						>{/if}
 				</div>
 				{#if snapshot}<dl class="suggestion-list">
@@ -269,6 +404,16 @@
 								<dt>建议标签</dt>
 								<dd class="tag-preview">
 									{#each suggestion.tags as tag (tag)}<span>{tag}</span>{/each}
+								</dd>
+							</div>{/if}
+						{#if suggestion?.categoryId}<div>
+								<dt>推荐分类</dt>
+								<dd><strong>{suggestion.categoryName}</strong><br />{suggestion.categoryReason}</dd>
+							</div>{/if}
+						{#if snapshot.iconUrl}<div>
+								<dt>网页图标候选</dt>
+								<dd class="icon-candidate">
+									<img src={snapshot.iconUrl} alt="网页图标候选" /><span>{snapshot.iconUrl}</span>
 								</dd>
 							</div>{/if}
 					</dl>{:else}<div class="suggestion-empty">
@@ -327,6 +472,21 @@
 	.ai-status span {
 		color: #9a5bb2;
 	}
+	.duplicate-warning {
+		margin-top: 12px;
+		border: 1px solid #f0d4a8;
+		border-radius: 10px;
+		padding: 10px 12px;
+		background: #fff9ef;
+		color: #76552d;
+		font-size: 11px;
+	}
+	.duplicate-warning p {
+		margin: 4px 0;
+	}
+	.duplicate-warning small {
+		color: #8c775d;
+	}
 	.contribute-columns {
 		display: grid;
 		grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
@@ -341,8 +501,7 @@
 		width: 100%;
 		padding-right: 90px;
 	}
-	.field-with-action button,
-	.apply-all {
+	.field-with-action button {
 		border: 0;
 		border-radius: 7px;
 		padding: 6px 9px;
@@ -351,6 +510,26 @@
 		font: inherit;
 		font-size: 10px;
 		cursor: pointer;
+	}
+	.apply-all {
+		display: inline-flex;
+		min-height: 42px;
+		align-items: center;
+		gap: 7px;
+		border: 0;
+		border-radius: 10px;
+		padding: 0 15px;
+		color: #fff;
+		background: linear-gradient(135deg, #df3e47, #bd2834);
+		box-shadow: 0 7px 18px #d7384340;
+		font: inherit;
+		font-size: 12px;
+		font-weight: 750;
+		cursor: pointer;
+	}
+	.apply-all:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 9px 22px #d7384352;
 	}
 	.field-with-action button {
 		position: absolute;
@@ -368,6 +547,76 @@
 		color: #53606f;
 		background: #edf1f5;
 		font-size: 10px;
+	}
+	.icon-editor {
+		display: grid;
+		grid-template-columns: 64px minmax(0, 1fr);
+		gap: 13px;
+		align-items: center;
+		border: 1px solid #e5e7ea;
+		border-radius: 11px;
+		padding: 12px;
+	}
+	.icon-editor p {
+		margin: 3px 0 8px;
+		color: #7a7f87;
+		font-size: 10px;
+	}
+	.icon-preview {
+		display: grid;
+		width: 56px;
+		height: 56px;
+		place-items: center;
+		overflow: hidden;
+		border-radius: 12px;
+		background: #f1f3f5;
+		color: #999;
+		font-size: 9px;
+	}
+	.icon-preview img,
+	.icon-candidate img {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+	.icon-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 7px;
+	}
+	.icon-actions button,
+	.icon-upload span {
+		border: 1px solid #dfe2e6;
+		border-radius: 7px;
+		padding: 6px 9px;
+		background: #fff;
+		color: #59606a;
+		font: inherit;
+		font-size: 10px;
+		cursor: pointer;
+	}
+	.icon-upload input {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		opacity: 0;
+	}
+	.icon-candidate {
+		display: grid;
+		grid-template-columns: 38px minmax(0, 1fr);
+		gap: 8px;
+		align-items: center;
+	}
+	.icon-candidate img {
+		width: 38px;
+		height: 38px;
+		border-radius: 8px;
+		background: #fff;
+	}
+	.icon-candidate span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.suggestion-panel {
 		position: sticky;
@@ -427,6 +676,11 @@
 		}
 		.url-command {
 			grid-template-columns: 1fr;
+		}
+		.apply-all {
+			width: 100%;
+			justify-content: center;
+			margin-top: 10px;
 		}
 	}
 </style>

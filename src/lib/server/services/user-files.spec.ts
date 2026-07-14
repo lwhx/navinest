@@ -9,6 +9,8 @@ function fixture() {
 	connections.push(sqlite);
 	sqlite.exec(`
 		CREATE TABLE users(id INTEGER PRIMARY KEY,avatar_file_id INTEGER,cover_file_id INTEGER);
+		CREATE TABLE items(id INTEGER PRIMARY KEY,icon_file_id INTEGER,cover_file_id INTEGER);
+		CREATE TABLE submissions(id INTEGER PRIMARY KEY,status TEXT,payload_json TEXT);
 		CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,object_key TEXT,mime_type TEXT,size INTEGER,public_url TEXT,width INTEGER,height INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 		INSERT INTO users VALUES(7,NULL,NULL),(8,NULL,NULL);
 		INSERT INTO files(id,user_id,bucket,object_key,mime_type,size) VALUES(1,7,'FILES','uploads/avatar.png','image/png',3),(2,8,'FILES','uploads/other.png','image/png',3);
@@ -69,5 +71,14 @@ describe('owned user files', () => {
 	it('does not allow one user to delete another user file', async () => {
 		const { database, bucket } = fixture();
 		await expect(deleteOwnedFile(database, bucket, 7, 2)).rejects.toBeInstanceOf(UserFileError);
+	});
+	it('blocks files referenced by content or pending submissions', async () => {
+		const { database, sqlite, bucket } = fixture();
+		sqlite.exec('INSERT INTO items VALUES(1,1,NULL)');
+		await expect(deleteOwnedFile(database, bucket, 7, 1)).rejects.toMatchObject({ status: 409 });
+		sqlite.exec(
+			"DELETE FROM items; INSERT INTO submissions VALUES(1,'pending','{\"iconFileId\":1}')"
+		);
+		await expect(deleteOwnedFile(database, bucket, 7, 1)).rejects.toMatchObject({ status: 409 });
 	});
 });
