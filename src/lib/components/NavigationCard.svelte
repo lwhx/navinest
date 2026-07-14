@@ -53,7 +53,7 @@
 	</div>
 	<div class="site-content">
 		<div class="site-title-row">
-			<h3>{item.title}</h3>
+			<h3><a class="card-title-link" href={detail}>{item.title}</a></h3>
 			<span class="type-chip">{typeLabel}</span>
 		</div>
 		<p>{item.summary}</p>

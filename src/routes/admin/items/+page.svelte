@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
+	import { tick } from 'svelte';
 	import AdminItemForm from '$lib/components/admin/AdminItemForm.svelte';
 	import AdminContentRow from '$lib/components/admin/AdminContentRow.svelte';
 	import { moveOrderedItem } from '$lib/content-ordering';
@@ -27,7 +28,10 @@
 		sortingMode = $state(false),
 		editingItem = $state<Item | null>(null),
 		creatingModal = $state(false),
-		editorScrollY = $state(0);
+		editorScrollY = $state(0),
+		editorTrigger = $state<HTMLElement | null>(null),
+		editorTriggerItemId = $state<number | null>(null),
+		editorModal = $state<HTMLElement | null>(null);
 	$effect(() => {
 		if (filtersInitialized) return;
 		activeType = (
@@ -35,6 +39,13 @@
 		) as 'all' | ContentType;
 		contentCategoryFilter = data.initialCategoryId || 'all';
 		orderedItems = [...(data.items as Item[])];
+		if (data.editing) {
+			editingItem = data.editing as Item;
+			void focusFirstEditorControl();
+		} else if (data.mode === 'create') {
+			creatingModal = true;
+			void focusFirstEditorControl();
+		}
 		filtersInitialized = true;
 	});
 	let filteredItems = $derived(
@@ -160,16 +171,66 @@
 		sortMessage = '';
 	}
 
-	function openEditor(item: Item | null) {
+	async function focusFirstEditorControl() {
+		await tick();
+		const target =
+			editorModal?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea') ??
+			editorModal?.querySelector<HTMLElement>('button, [href]');
+		target?.focus();
+	}
+
+	function openEditor(item: Item | null, trigger?: HTMLElement) {
 		editorScrollY = window.scrollY;
+		editorTrigger = trigger ?? (document.activeElement as HTMLElement | null);
+		editorTriggerItemId = item?.id ?? null;
 		editingItem = item;
 		creatingModal = item === null;
+		void focusFirstEditorControl();
 	}
 
 	function closeEditor() {
 		editingItem = null;
 		creatingModal = false;
-		requestAnimationFrame(() => window.scrollTo({ top: editorScrollY }));
+		if (location.search.includes('edit=') || location.search.includes('create')) {
+			const url = new URL(location.href);
+			url.searchParams.delete('edit');
+			url.searchParams.delete('create');
+			history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+		}
+		void restoreEditorContext();
+	}
+
+	async function restoreEditorContext() {
+		await tick();
+		setTimeout(() => {
+			window.scrollTo({ top: editorScrollY });
+			const fallback = editorTriggerItemId
+				? document.querySelector<HTMLElement>(
+						`[data-content-id="${editorTriggerItemId}"] .content-edit-button`
+					)
+				: null;
+			const target = fallback ?? (editorTrigger?.isConnected ? editorTrigger : null);
+			target?.focus({ preventScroll: true });
+		}, 50);
+	}
+
+	function trapEditorFocus(event: KeyboardEvent) {
+		if (event.key !== 'Tab' || !editorModal) return;
+		const controls = [
+			...editorModal.querySelectorAll<HTMLElement>(
+				'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		].filter((element) => element.offsetParent !== null);
+		if (!controls.length) return;
+		const first = controls[0],
+			last = controls.at(-1)!;
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	}
 
 	async function savedEditor() {
@@ -181,6 +242,7 @@
 <svelte:window
 	onkeydown={(event) => {
 		if ((editingItem || creatingModal) && event.key === 'Escape') closeEditor();
+		else if (editingItem || creatingModal) trapEditorFocus(event);
 	}}
 />
 
@@ -243,7 +305,7 @@
 	</div>
 </section>
 
-<div class="content-workbench" class:editor-open={Boolean(data.mode)}>
+<div class="content-workbench">
 	<section class="content-browser" aria-labelledby="content-browser-title">
 		<div class="content-browser-header">
 			<div>
@@ -345,6 +407,7 @@
 		}}
 	>
 		<div
+			bind:this={editorModal}
 			class="content-editor-modal"
 			role="dialog"
 			aria-modal="true"
@@ -363,6 +426,7 @@
 					item={editingItem}
 					categories={data.categories as Category[]}
 					tags={data.tags as Tag[]}
+					{form}
 					initialType={activeType === 'all' ? 'site' : activeType}
 					initialCategoryId={contentCategoryFilter === 'all' ? '' : contentCategoryFilter}
 					action={editingItem ? `?/update` : `?/create`}

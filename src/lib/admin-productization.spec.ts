@@ -68,6 +68,11 @@ describe('administrator productization', () => {
 		expect(page).toContain('content-editor-modal');
 		expect(page).toContain('role="dialog"');
 		expect(page).toContain('editingItem');
+		expect(page).toContain('data.editing');
+		expect(page).toContain('{form}');
+		expect(page).toContain('editorTrigger');
+		expect(page).toContain('focusFirstEditorControl');
+		expect(page).toContain('trapEditorFocus');
 		expect(row).toContain('onEdit');
 		expect(row).not.toContain('href={resolve(`/admin/items?edit=');
 		expect(row).toContain('content-drag-handle');
