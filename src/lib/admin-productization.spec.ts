@@ -73,6 +73,18 @@ describe('administrator productization', () => {
 		expect(page).toContain('editorTrigger');
 		expect(page).toContain('focusFirstEditorControl');
 		expect(page).toContain('trapEditorFocus');
+		expect(page).toContain('content-command-bar');
+		expect(page).toContain('content-table-head');
+		expect(page).toContain('selectedItemIds');
+		expect(page).toContain('content-density-toggle');
+		expect(page).toContain('content-selection-bar');
+		expect(row).toContain('content-row-select');
+		expect(row).toContain('content-row-menu');
+		expect(form).toContain('editor-section-nav');
+		expect(form).toContain('基础信息');
+		expect(form).toContain('内容与描述');
+		expect(form).toContain('媒体资源');
+		expect(form).toContain('发布设置');
 		expect(row).toContain('onEdit');
 		expect(row).not.toContain('href={resolve(`/admin/items?edit=');
 		expect(row).toContain('content-drag-handle');

@@ -7,6 +7,8 @@
 		sortable = false,
 		first = false,
 		last = false,
+		selected = false,
+		onSelect,
 		onDragStart,
 		onDragOver,
 		onDrop,
@@ -18,6 +20,8 @@
 		sortable?: boolean;
 		first?: boolean;
 		last?: boolean;
+		selected?: boolean;
+		onSelect?: (id: number, selected: boolean) => void;
 		onDragStart?: (id: number) => void;
 		onDragOver?: (event: DragEvent) => void;
 		onDrop?: (id: number) => void;
@@ -52,6 +56,14 @@
 	ondragover={(event) => onDragOver?.(event)}
 	ondrop={() => onDrop?.(item.id)}
 >
+	<label class="content-row-select">
+		<span class="sr-only">选择 {item.title}</span>
+		<input
+			type="checkbox"
+			checked={selected}
+			onchange={(event) => onSelect?.(item.id, event.currentTarget.checked)}
+		/>
+	</label>
 	{#if sortable}<div class="content-drag-controls">
 			<button
 				class="content-drag-handle"
@@ -103,23 +115,29 @@
 				type="button"
 				onclick={(event) => onEdit?.(item, event.currentTarget)}>编辑</button
 			>
-			<a href={resolve(previewPath as '/')}>前台预览</a>
-			<form
-				method="POST"
-				action="?/delete"
-				onsubmit={(event) => {
-					if (
-						!confirm(
-							`确定删除内容“${item.title}”吗？\n删除后会清理关联标签、元数据、收藏、足迹和统计记录，且无法撤销。`
-						)
-					)
-						event.preventDefault();
-				}}
-			>
-				<input type="hidden" name="id" value={item.id} /><button
-					type="submit"
-					title="删除后会清理关联标签、元数据、收藏、足迹和统计记录">删除</button
-				>
-			</form>
+			<details class="content-row-menu">
+				<summary aria-label={`${item.title}更多操作`}>•••</summary>
+				<div>
+					<a href={resolve(previewPath as '/')}>前台预览</a>
+					<form
+						method="POST"
+						action="?/delete"
+						onsubmit={(event) => {
+							if (
+								!confirm(
+									`确定删除内容“${item.title}”吗？\n删除后会清理关联标签、元数据、收藏、足迹和统计记录，且无法撤销。`
+								)
+							)
+								event.preventDefault();
+						}}
+					>
+						<input type="hidden" name="id" value={item.id} /><button
+							class="danger"
+							type="submit"
+							title="删除后会清理关联标签、元数据、收藏、足迹和统计记录">删除内容</button
+						>
+					</form>
+				</div>
+			</details>
 		</div>{/if}
 </article>

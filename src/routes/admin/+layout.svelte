@@ -6,6 +6,7 @@
 	import '../admin-content-workbench.css';
 	import '../admin-content-ordering.css';
 	import '../admin-content-modal.css';
+	import '../admin-modern-content.css';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();

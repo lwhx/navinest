@@ -102,8 +102,14 @@
 <form class="admin-form" method="POST" {action} use:enhance={enhanceForm}>
 	{#if item}<input type="hidden" name="id" value={item.id} />{/if}
 	{#if form?.message}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
+	<nav class="editor-section-nav" aria-label="编辑器分区">
+		<a href="#editor-basic">基础信息</a><a href="#editor-content">内容与描述</a><a
+			href="#editor-media">媒体资源</a
+		><a href="#editor-publish">发布设置</a>
+	</nav>
 
 	<div class="admin-form-grid">
+		<h3 id="editor-basic" class="editor-section-title admin-field-wide">基础信息</h3>
 		<label>
 			<span>内容类型</span>
 			<select name="type" bind:value={selectedType}>
@@ -143,6 +149,7 @@
 			{#if form?.errors?.slug}<small class="field-error">{form.errors.slug}</small>{/if}
 		</label>
 
+		<h3 id="editor-publish" class="editor-section-title admin-field-wide">发布设置</h3>
 		<label>
 			<span>排序</span>
 			<input
@@ -169,6 +176,7 @@
 			</select>
 		</label>
 
+		<h3 id="editor-content" class="editor-section-title admin-field-wide">内容与描述</h3>
 		<label class="admin-field-wide">
 			<span>摘要</span>
 			<textarea name="summary" rows="3" maxlength="500"
@@ -176,7 +184,15 @@
 			>
 			{#if form?.errors?.summary}<small class="field-error">{form.errors.summary}</small>{/if}
 		</label>
+		<label class="admin-field-wide">
+			<span>正文</span>
+			<textarea name="content" rows="8" maxlength="100000"
+				>{value('content', item?.content ?? '')}</textarea
+			>
+			{#if form?.errors?.content}<small class="field-error">{form.errors.content}</small>{/if}
+		</label>
 
+		<h3 id="editor-media" class="editor-section-title admin-field-wide">媒体资源</h3>
 		<label>
 			<span>内容图标</span>
 			{#if mediaLoadFailed}<small class="field-error">媒体列表加载失败，其他字段仍可保存。</small
@@ -205,14 +221,6 @@
 					src={resolve('/api/admin/files/[id]', { id: selectedCover })}
 					alt="当前内容封面预览"
 				/>{/if}
-		</label>
-
-		<label class="admin-field-wide">
-			<span>正文</span>
-			<textarea name="content" rows="8" maxlength="100000"
-				>{value('content', item?.content ?? '')}</textarea
-			>
-			{#if form?.errors?.content}<small class="field-error">{form.errors.content}</small>{/if}
 		</label>
 	</div>
 
