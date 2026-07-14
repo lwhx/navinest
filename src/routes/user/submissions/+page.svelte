@@ -43,7 +43,8 @@
 						{#if submission.payload.url}<a
 								class="account-button secondary"
 								href={resolve(`/go?url=${encodeURIComponent(submission.payload.url)}` as '/')}
-								>查看目标</a
+								target="_blank"
+								rel="external noopener noreferrer">查看目标</a
 							>{/if}
 					</li>{/each}
 			</ul>{:else}<p class="account-empty">

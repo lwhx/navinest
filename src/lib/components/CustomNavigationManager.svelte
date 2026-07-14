@@ -162,7 +162,9 @@
 			<div class="account-actions">
 				<a
 					class="account-button secondary"
-					href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/')}>访问</a
+					href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/')}
+					target="_blank"
+					rel="external noopener noreferrer">访问</a
 				><button class="account-button" type="submit">保存</button><button
 					class="account-button secondary"
 					type="button"

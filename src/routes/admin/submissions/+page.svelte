@@ -224,7 +224,8 @@
 			{#if selected.payload.url}<a
 					class="review-url"
 					href={resolve(`/go?url=${encodeURIComponent(selected.payload.url)}`)}
-					>{selected.payload.url} ↗</a
+					target="_blank"
+					rel="external noopener noreferrer">{selected.payload.url} ↗</a
 				>{/if}
 			<div class="review-evidence">
 				<section>

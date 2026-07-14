@@ -153,7 +153,9 @@
 				<ol class="home-hot-list">
 					{#each home.dashboard.hotnews.slice(0, 10) as item (`${item.source}-${item.rank}`)}<li>
 							<span>{item.rank}</span><a
-								href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}>{item.title}</a
+								href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+								target="_blank"
+								rel="external noopener noreferrer">{item.title}</a
 							>
 						</li>{/each}
 				</ol>
@@ -168,8 +170,10 @@
 				<div class="home-links-grid">
 					{#each module.links ?? [] as link (link.url)}{#if link.url.startsWith('/')}<a
 								href={resolve(link.url as '/')}>{link.label}</a
-							>{:else}<a href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/go')}
-								>{link.label}</a
+							>{:else}<a
+								href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/go')}
+								target="_blank"
+								rel="external noopener noreferrer">{link.label}</a
 							>{/if}{/each}
 				</div>
 			</section>{/if}
