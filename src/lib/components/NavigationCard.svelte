@@ -70,6 +70,8 @@
 		>{#if item.url}<a
 				class="direct-link"
 				href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+				target="_blank"
+				rel="external noopener noreferrer"
 				aria-label={`安全访问 ${item.title}`}>↗</a
 			>{/if}
 	</div>

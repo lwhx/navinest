@@ -136,7 +136,8 @@
 									>
 										<span>{item.rank}</span><a
 											href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
-											>{item.title}</a
+											target="_blank"
+											rel="external noopener noreferrer">{item.title}</a
 										>
 									</li>{/each}
 							</ol>{:else}<p class="rail-empty">等待热榜刷新</p>{/if}

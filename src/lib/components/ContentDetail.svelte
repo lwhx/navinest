@@ -117,7 +117,8 @@
 						disabled={savingFavorite}>{favorite ? '取消收藏' : '收藏'}</button
 					>{/if}{#if data.externalUrl}<a
 						href={resolve(`/go?url=${encodeURIComponent(data.externalUrl)}` as '/go')}
-						>访问外部页面</a
+						target="_blank"
+						rel="external noopener noreferrer">访问外部页面</a
 					>{/if}
 			</div>
 		</header>

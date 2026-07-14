@@ -41,8 +41,10 @@
 							{#each source.items as item (item.rank)}<li>
 									<span class="hot-rank">{item.rank}</span>
 									<div>
-										<a href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
-											>{item.title}</a
+										<a
+											href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+											target="_blank"
+											rel="external noopener noreferrer">{item.title}</a
 										>{#if item.extra?.description}<p>{String(item.extra.description)}</p>{/if}
 									</div>
 									{#if item.hotValue}<strong>{item.hotValue}</strong>{/if}
