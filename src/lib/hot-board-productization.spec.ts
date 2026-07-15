@@ -25,6 +25,21 @@ describe('custom RSS hot boards', () => {
 		expect(publicPage).toMatch(/\.hot-value\s*\{[^}]*font-size:\s*11px/s);
 		expect(publicPage).toMatch(/\.hot-board-meta\s*\{[^}]*font-size:\s*11px/s);
 	});
+	it('makes stale snapshots, full titles and internal scrolling discoverable', () => {
+		expect(publicPage).toContain('boardStatus(source)');
+		expect(publicPage).toContain('更新异常');
+		expect(publicPage).toContain('显示上次成功数据');
+		expect(publicPage).toContain('滚动查看全部');
+		expect(publicPage).toContain('title={item.title}');
+		expect(publicPage).toMatch(/\.hot-rank-copy a:focus-visible/);
+		expect(publicPage).toContain('source.hasError');
+		expect(publicPage).not.toContain('source.lastError');
+		expect(publicPage).toContain('--board-accent-text');
+		expect(publicPage).toContain('--board-on-accent');
+		expect(publicPage).toMatch(
+			/@media \(max-width: 760px\)[\s\S]*\.hot-board-rank\s*\{[^}]*max-height:\s*none[^}]*overflow-y:\s*visible/s
+		);
+	});
 	it('exposes RSSHub board branding, layout, limits and order in admin', () => {
 		for (const field of [
 			'name="slug"',
@@ -40,5 +55,10 @@ describe('custom RSS hot boards', () => {
 			expect(adminPage).toContain(field);
 		expect(adminPage).toContain('RSSHub / RSS / Atom');
 		expect(adminPage).toContain('hot-board-admin-grid');
+		expect(adminPage).toContain('refreshingId');
+		expect(adminPage).toContain('刷新失败，请稍后重试');
+		expect(adminPage).toContain('action="?/move"');
+		expect(adminPage).toContain('上移榜单');
+		expect(adminPage).toContain('下移榜单');
 	});
 });

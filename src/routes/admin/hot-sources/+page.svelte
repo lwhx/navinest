@@ -3,17 +3,35 @@
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
 	let notice = $state('');
+	let refreshingId = $state<number | null>(null);
 	const errors = $derived((form?.errors ?? {}) as Record<string, string>);
 	function val(name: string, fallback: string | number = '') {
 		const value = form?.values?.[name];
 		return typeof value === 'string' ? value : String(fallback ?? '');
 	}
 	async function refresh(id: number) {
+		if (refreshingId !== null) return;
+		refreshingId = id;
 		notice = '正在测试并刷新订阅…';
-		const response = await fetch(`/api/admin/hot-sources/${id}/refresh`, { method: 'POST' }),
-			body = await response.json();
-		notice = response.ok ? `刷新成功，共获取 ${body.count} 条。` : body.error;
-		if (response.ok) setTimeout(() => location.reload(), 500);
+		try {
+			const response = await fetch(`/api/admin/hot-sources/${id}/refresh`, { method: 'POST' });
+			let body: { count?: number; error?: string } = {};
+			try {
+				body = await response.json();
+			} catch {
+				// A proxy or gateway may return an HTML error page.
+			}
+			if (!response.ok) {
+				notice = body.error || '刷新失败，请稍后重试。';
+				return;
+			}
+			notice = `刷新成功，共获取 ${body.count ?? 0} 条。`;
+			setTimeout(() => location.reload(), 500);
+		} catch {
+			notice = '刷新失败，请稍后重试。';
+		} finally {
+			refreshingId = null;
+		}
 	}
 </script>
 
@@ -99,7 +117,7 @@
 							></label
 						>
 						<label
-							><span>缓存秒数</span><input
+							><span>自动刷新最小间隔（秒）</span><input
 								name="cacheTtl"
 								type="number"
 								min="60"
@@ -226,7 +244,7 @@
 	</section>{/if}
 
 <section class="hot-board-admin-grid" aria-label="热点榜单列表">
-	{#each data.sources as source (source.id)}<article
+	{#each data.sources as source, index (source.id)}<article
 			class:disabled={!source.isEnabled}
 			class="hot-board-admin-card"
 			style={`--accent:${source.accentColor};--surface:${source.surfaceColor}`}
@@ -243,7 +261,7 @@
 			<p>{source.description || '未填写榜单说明'}</p>
 			<div class="board-config-chips">
 				<span>{source.layout}</span><span>{source.displayLimit}条</span><span
-					>{source.cacheTtl}秒缓存</span
+					>{source.cacheTtl}秒刷新间隔</span
 				><span>{source.showDescription ? '显示摘要' : '隐藏摘要'}</span>
 			</div>
 			<div class="board-url">{source.url}</div>
@@ -254,9 +272,27 @@
 					>{#if source.lastError}<small class="board-error">{source.lastError}</small>{/if}
 				</div>
 				<div class="admin-row-actions">
-					<button type="button" onclick={() => refresh(source.id)}>测试刷新</button><a
-						href={resolve(`/admin/hot-sources?edit=${source.id}`)}>编辑</a
-					>
+					<form method="POST" action="?/move" class="board-order-actions">
+						<input type="hidden" name="id" value={source.id} />
+						<button
+							type="submit"
+							name="direction"
+							value="up"
+							disabled={index === 0}
+							title="上移榜单"
+							aria-label={`上移${source.name}`}>↑</button
+						><button
+							type="submit"
+							name="direction"
+							value="down"
+							disabled={index === data.sources.length - 1}
+							title="下移榜单"
+							aria-label={`下移${source.name}`}>↓</button
+						>
+					</form>
+					<button type="button" disabled={refreshingId !== null} onclick={() => refresh(source.id)}
+						>{refreshingId === source.id ? '刷新中…' : '测试刷新'}</button
+					><a href={resolve(`/admin/hot-sources?edit=${source.id}`)}>编辑</a>
 					<form
 						method="POST"
 						action="?/delete"
@@ -407,6 +443,18 @@
 	}
 	.board-error {
 		color: #c93943 !important;
+	}
+	.board-order-actions {
+		display: flex;
+		gap: 4px;
+	}
+	.board-order-actions button {
+		width: 30px;
+		padding-inline: 0;
+	}
+	.board-order-actions button:disabled {
+		cursor: not-allowed;
+		opacity: 0.38;
 	}
 	@media (max-width: 900px) {
 		.hot-board-admin-grid {

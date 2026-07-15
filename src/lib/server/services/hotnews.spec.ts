@@ -1,7 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
-import { parseHotJson, parseHotRss, refreshHotSource } from '$lib/server/services/hotnews';
+import {
+	parseHotJson,
+	parseHotRss,
+	refreshEnabledHotSources,
+	refreshHotSource
+} from '$lib/server/services/hotnews';
 
 const connections: DatabaseSync[] = [];
 const publicDns = async () => ['93.184.216.34'];
@@ -9,7 +14,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
+		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
 	);
 	const database: Database & { batch(s: DatabaseStatement[]): Promise<void> } = {
 		prepare(query) {
@@ -170,6 +175,28 @@ describe('hot source refresh', () => {
 			)
 		).rejects.toThrow(/过大/);
 	});
+	it('rejects overlapping refreshes and preserves the active lease', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET refresh_token='active',refresh_started_at=CURRENT_TIMESTAMP WHERE id=1"
+		);
+		let fetched = false;
+		await expect(
+			refreshHotSource(
+				database,
+				1,
+				async () => {
+					fetched = true;
+					return new Response('{}');
+				},
+				publicDns
+			)
+		).rejects.toMatchObject({ status: 409 });
+		expect(fetched).toBe(false);
+		expect(sqlite.prepare('SELECT refresh_token FROM hot_sources WHERE id=1').get()).toEqual({
+			refresh_token: 'active'
+		});
+	});
 	it('follows validated public redirects', async () => {
 		const { database } = fixture();
 		let calls = 0;
@@ -193,5 +220,27 @@ describe('hot source refresh', () => {
 		);
 		expect(result).toEqual({ sourceId: 1, count: 1 });
 		expect(calls).toBe(2);
+	});
+	it('refreshes only enabled sources whose cache interval has elapsed', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET last_success_at=CURRENT_TIMESTAMP,cache_ttl=3600 WHERE id=1; UPDATE hot_sources SET last_success_at='2020-01-01 00:00:00',cache_ttl=3600 WHERE id=2"
+		);
+		let calls = 0;
+		const results = await refreshEnabledHotSources(
+			database,
+			async () => {
+				calls += 1;
+				return new Response(
+					'<rss><channel><item><title>Due</title><link>https://example.com/due</link></item></channel></rss>'
+				);
+			},
+			publicDns
+		);
+		expect(calls).toBe(1);
+		expect(results).toMatchObject([
+			{ ok: true, sourceId: 1, skipped: true },
+			{ ok: true, sourceId: 2, count: 1 }
+		]);
 	});
 });

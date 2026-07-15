@@ -54,7 +54,7 @@ export async function listHotNews(database: Database) {
 				layout: source.layout,
 				sortOrder: source.sort_order,
 				showDescription: source.show_description === 1,
-				lastError: source.last_error,
+				hasError: Boolean(source.last_error),
 				lastSuccessAt: source.last_success_at,
 				items: items.slice(0, source.display_limit).map((item) => ({
 					rank: item.rank,
