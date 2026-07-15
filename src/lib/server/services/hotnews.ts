@@ -1,5 +1,6 @@
 import type { Database, DatabaseStatement } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
+import { assertPublicFetchTarget } from '$lib/server/services/web-enrichment';
 
 export type HotItem = {
 	rank: number;
@@ -31,6 +32,32 @@ export class HotNewsError extends Error {
 		super(message);
 		this.name = 'HotNewsError';
 	}
+}
+const maxResponseBytes = 2 * 1024 * 1024;
+async function responseText(response: Response) {
+	const declared = Number(response.headers.get('content-length') ?? 0);
+	if (declared > maxResponseBytes) throw new HotNewsError('热点订阅响应过大。', 502);
+	if (!response.body) return '';
+	const reader = response.body.getReader(),
+		chunks: Uint8Array[] = [];
+	let size = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		size += value.byteLength;
+		if (size > maxResponseBytes) {
+			await reader.cancel();
+			throw new HotNewsError('热点订阅响应过大。', 502);
+		}
+		chunks.push(value);
+	}
+	const merged = new Uint8Array(size);
+	let offset = 0;
+	for (const chunk of chunks) {
+		merged.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder().decode(merged);
 }
 function at(value: unknown, path: string) {
 	return path
@@ -91,7 +118,20 @@ function decode(value: string) {
 }
 function tag(block: string, name: string) {
 	const match = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'));
-	return match ? decode(match[1].replace(/<[^>]+>/g, '')) : '';
+	return match
+		? decode(match[1])
+				.replace(/<[^>]+>/g, '')
+				.trim()
+		: '';
+}
+function tags(block: string, name: string) {
+	return [...block.matchAll(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'gi'))]
+		.map((match) =>
+			decode(match[1])
+				.replace(/<[^>]+>/g, '')
+				.trim()
+		)
+		.filter(Boolean);
 }
 export function parseHotRss(xml: string) {
 	const atom = /<feed(?:\s|>)/i.test(xml);
@@ -107,10 +147,26 @@ export function parseHotRss(xml: string) {
 			const link = atom
 				? (block.match(/<link[^>]*href=["']([^"']+)["'][^>]*>/i)?.[1] ?? tag(block, 'link'))
 				: tag(block, 'link');
-			const description = tag(block, atom ? 'summary' : 'description');
+			const description =
+				tag(block, atom ? 'summary' : 'description') ||
+				tag(block, atom ? 'content' : 'content:encoded');
+			const publishedAt =
+				tag(block, atom ? 'published' : 'pubDate') || tag(block, atom ? 'updated' : 'dc:date');
+			const author = atom
+				? tag(tag(block, 'author') || block, 'name') || tag(block, 'author')
+				: tag(block, 'dc:creator') || tag(block, 'author');
+			const categories = tags(block, 'category');
 			const item = safeItem(tag(block, 'title'), decode(link), null, index + 1);
 			return item
-				? { ...item, extra: description ? { description: description.slice(0, 500) } : {} }
+				? {
+						...item,
+						extra: {
+							...(description ? { description: description.slice(0, 500) } : {}),
+							...(publishedAt ? { publishedAt: publishedAt.slice(0, 100) } : {}),
+							...(author ? { author: author.slice(0, 100) } : {}),
+							...(categories.length ? { categories: categories.slice(0, 10) } : {})
+						}
+					}
 				: null;
 		})
 		.filter((item): item is HotItem => Boolean(item));
@@ -129,9 +185,15 @@ async function source(database: Database, id: number) {
 	if (!row) throw new HotNewsError('热榜源不存在。', 404);
 	return row;
 }
-async function safeFetch(url: string, headers: Record<string, string>, fetcher: typeof fetch) {
+async function safeFetch(
+	url: string,
+	headers: Record<string, string>,
+	fetcher: typeof fetch,
+	resolveHost?: (hostname: string) => Promise<string[]>
+) {
 	let current = url;
 	for (let redirects = 0; redirects <= 3; redirects += 1) {
+		current = await assertPublicFetchTarget(current, resolveHost);
 		const response = await fetcher(current, { headers, redirect: 'manual' });
 		if (response.status < 300 || response.status >= 400) return response;
 		const location = response.headers.get('location');
@@ -145,38 +207,49 @@ async function safeFetch(url: string, headers: Record<string, string>, fetcher: 
 export async function refreshHotSource(
 	database: Database,
 	id: number,
-	fetcher: typeof fetch = fetch
+	fetcher: typeof fetch = fetch,
+	resolveHost?: (hostname: string) => Promise<string[]>
 ) {
 	const row = await source(database, id);
-	const headers = JSON.parse(row.headers_json) as Record<string, string>;
-	const response = await safeFetch(row.url, headers, fetcher);
-	if (!response.ok) throw new HotNewsError(`热榜请求失败：HTTP ${response.status}`, 502);
-	const items =
-		row.type === 'json'
-			? parseHotJson(await response.json(), JSON.parse(row.parser_json))
-			: parseHotRss(await response.text());
-	if (!items.length) throw new HotNewsError('热榜没有有效条目。');
-	const statements: DatabaseStatement[] = [
-		database.prepare('DELETE FROM hot_items WHERE source_id=?').bind(id),
-		...items.map((item) =>
+	try {
+		const headers = JSON.parse(row.headers_json) as Record<string, string>;
+		const response = await safeFetch(row.url, headers, fetcher, resolveHost);
+		if (!response.ok) throw new HotNewsError(`热榜请求失败：HTTP ${response.status}`, 502);
+		const body = await responseText(response);
+		const items =
+			row.type === 'json'
+				? parseHotJson(JSON.parse(body), JSON.parse(row.parser_json))
+				: parseHotRss(body);
+		if (!items.length) throw new HotNewsError('热榜没有有效条目。');
+		const statements: DatabaseStatement[] = [
+			database.prepare('DELETE FROM hot_items WHERE source_id=?').bind(id),
+			...items.map((item) =>
+				database
+					.prepare(
+						'INSERT INTO hot_items(source_id,rank,title,url,hot_value,extra_json) VALUES(?,?,?,?,?,?)'
+					)
+					.bind(id, item.rank, item.title, item.url, item.hotValue, JSON.stringify(item.extra))
+			),
 			database
 				.prepare(
-					'INSERT INTO hot_items(source_id,rank,title,url,hot_value,extra_json) VALUES(?,?,?,?,?,?)'
+					'UPDATE hot_sources SET last_fetch_at=CURRENT_TIMESTAMP,last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?'
 				)
-				.bind(id, item.rank, item.title, item.url, item.hotValue, JSON.stringify(item.extra))
-		),
-		database
-			.prepare(
-				'UPDATE hot_sources SET last_fetch_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?'
-			)
-			.bind(id)
-	];
-	const batched = database as Database & {
-		batch?: (statements: DatabaseStatement[]) => Promise<unknown>;
-	};
-	if (batched.batch) await batched.batch(statements);
-	else for (const statement of statements) await statement.all();
-	return { sourceId: id, count: items.length };
+				.bind(id)
+		];
+		const batched = database as Database & {
+			batch?: (statements: DatabaseStatement[]) => Promise<unknown>;
+		};
+		if (batched.batch) await batched.batch(statements);
+		else for (const statement of statements) await statement.all();
+		return { sourceId: id, count: items.length };
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		await database
+			.prepare('UPDATE hot_sources SET last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+			.bind(message.slice(0, 500), id)
+			.all();
+		throw error;
+	}
 }
 export async function refreshEnabledHotSources(database: Database, fetcher: typeof fetch = fetch) {
 	const rows = (

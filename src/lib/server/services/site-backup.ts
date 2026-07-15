@@ -55,6 +55,15 @@ export type SiteBackup = {
 		parser: Record<string, string>;
 		cacheTtl: number;
 		isEnabled: boolean;
+		slug?: string;
+		description?: string;
+		icon?: string;
+		accentColor?: string;
+		surfaceColor?: string;
+		displayLimit?: number;
+		layout?: 'list' | 'compact' | 'columns';
+		sortOrder?: number;
+		showDescription?: boolean;
 	}>;
 	settings: Record<string, unknown>;
 };
@@ -164,7 +173,16 @@ export async function exportSiteBackup(db: Database, now = new Date()): Promise<
 			headers: JSON.parse(String(r.headers_json)),
 			parser: JSON.parse(String(r.parser_json)),
 			cacheTtl: Number(r.cache_ttl),
-			isEnabled: Number(r.is_enabled) === 1
+			isEnabled: Number(r.is_enabled) === 1,
+			slug: r.slug == null ? undefined : String(r.slug),
+			description: r.description == null ? '' : String(r.description),
+			icon: r.icon == null ? '热' : String(r.icon),
+			accentColor: r.accent_color == null ? '#e5484d' : String(r.accent_color),
+			surfaceColor: r.surface_color == null ? '#fff7f7' : String(r.surface_color),
+			displayLimit: r.display_limit == null ? 20 : Number(r.display_limit),
+			layout: (r.layout == null ? 'list' : String(r.layout)) as 'list' | 'compact' | 'columns',
+			sortOrder: r.sort_order == null ? 0 : Number(r.sort_order),
+			showDescription: Number(r.show_description ?? 0) === 1
 		})),
 		settings: Object.fromEntries(
 			settingsRows.map((r) => [String(r.key), JSON.parse(String(r.value_json))])
@@ -227,6 +245,14 @@ export function validateSiteBackup(
 			errors.push(`热榜源必须使用安全公网 URL：${source?.name ?? '未知来源'}`);
 		if (source?.type !== 'json' && source?.type !== 'rss')
 			errors.push(`热榜源类型无效：${source?.type}`);
+		if (source?.slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(source.slug))
+			errors.push(`热榜源标识无效：${source.slug}`);
+		if (source?.accentColor && !/^#[0-9a-f]{6}$/i.test(source.accentColor))
+			errors.push(`热榜源主题色无效：${source.name}`);
+		if (source?.surfaceColor && !/^#[0-9a-f]{6}$/i.test(source.surfaceColor))
+			errors.push(`热榜源背景色无效：${source.name}`);
+		if (source?.layout && !['list', 'compact', 'columns'].includes(source.layout))
+			errors.push(`热榜源布局无效：${source.name}`);
 	}
 	for (const c of data.categories)
 		if (c.parent && !cs.has(key(c.parent))) errors.push(`父分类不存在：${key(c.parent)}`);
@@ -347,11 +373,11 @@ export async function restoreSiteBackup(db: Database, input: unknown) {
 					e.isEnabled ? 1 : 0
 				)
 		);
-	for (const h of b.hotSources)
+	for (const [hotIndex, h] of b.hotSources.entries())
 		s.push(
 			db
 				.prepare(
-					'INSERT INTO hot_sources(name,type,url,headers_json,parser_json,cache_ttl,is_enabled) VALUES(?,?,?,?,?,?,?)'
+					'INSERT INTO hot_sources(name,type,url,headers_json,parser_json,cache_ttl,is_enabled,slug,description,icon,accent_color,surface_color,display_limit,layout,sort_order,show_description) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
 				)
 				.bind(
 					h.name,
@@ -360,7 +386,16 @@ export async function restoreSiteBackup(db: Database, input: unknown) {
 					JSON.stringify(h.headers),
 					JSON.stringify(h.parser),
 					h.cacheTtl,
-					h.isEnabled ? 1 : 0
+					h.isEnabled ? 1 : 0,
+					h.slug ?? `board-${hotIndex + 1}`,
+					h.description ?? '',
+					h.icon ?? '热',
+					h.accentColor ?? '#e5484d',
+					h.surfaceColor ?? '#fff7f7',
+					h.displayLimit ?? 20,
+					h.layout ?? 'list',
+					h.sortOrder ?? 0,
+					h.showDescription ? 1 : 0
 				)
 		);
 	for (const [k, v] of Object.entries(b.settings))

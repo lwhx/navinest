@@ -9,6 +9,15 @@ export type HotSourceInput = {
 	parser: Record<string, string>;
 	cacheTtl: number;
 	isEnabled: boolean;
+	slug: string;
+	description: string;
+	icon: string;
+	accentColor: string;
+	surfaceColor: string;
+	displayLimit: number;
+	layout: 'list' | 'compact' | 'columns';
+	sortOrder: number;
+	showDescription: boolean;
 };
 type Raw = Record<string, unknown>;
 const forbidden = new Set(['authorization', 'cookie', 'proxy-authorization', 'x-api-key']);
@@ -29,6 +38,25 @@ export function validateHotSourceInput(
 	const name = typeof input.name === 'string' ? input.name.trim() : '';
 	if (!name) errors.name = '名称不能为空。';
 	else if (name.length > 100) errors.name = '名称不能超过 100 个字符。';
+	const fallbackSlug = name
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-|-$/g, ''),
+		slug = (typeof input.slug === 'string' ? input.slug.trim().toLowerCase() : '') || fallbackSlug;
+	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80)
+		errors.slug = '标识只能使用小写字母、数字和连字符。';
+	const description = typeof input.description === 'string' ? input.description.trim() : '';
+	if (description.length > 300) errors.description = '说明不能超过 300 个字符。';
+	const icon = typeof input.icon === 'string' ? input.icon.trim() : '热';
+	if (!icon || Array.from(icon).length > 4) errors.icon = '图标请输入 1 到 4 个字符。';
+	function color(value: unknown, fallback: string, field: string) {
+		const normalized =
+			typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : fallback;
+		if (!/^#[0-9a-f]{6}$/.test(normalized)) errors[field] = '请输入 #RRGGBB 格式颜色。';
+		return normalized;
+	}
+	const accentColor = color(input.accentColor, '#e5484d', 'accentColor'),
+		surfaceColor = color(input.surfaceColor, '#fff7f7', 'surfaceColor');
 	const type = input.type === 'rss' ? 'rss' : input.type === 'json' ? 'json' : null;
 	if (!type) errors.type = '类型必须是 JSON 或 RSS。';
 	const url = typeof input.url === 'string' ? input.url.trim() : '';
@@ -64,6 +92,16 @@ export function validateHotSourceInput(
 	const cacheTtl = Number(input.cacheTtl ?? 900);
 	if (!Number.isInteger(cacheTtl) || cacheTtl < 60 || cacheTtl > 86400)
 		errors.cacheTtl = '缓存时间必须为 60 到 86400 秒。';
+	const displayLimit = Number(input.displayLimit ?? 20);
+	if (!Number.isInteger(displayLimit) || displayLimit < 5 || displayLimit > 50)
+		errors.displayLimit = '显示条数必须为 5 到 50。';
+	const layout =
+		input.layout === 'compact' || input.layout === 'columns' || input.layout === 'list'
+			? input.layout
+			: 'list';
+	const sortOrder = Number(input.sortOrder ?? 0);
+	if (!Number.isInteger(sortOrder) || sortOrder < -10000 || sortOrder > 10000)
+		errors.sortOrder = '排序必须是 -10000 到 10000 的整数。';
 	const data: HotSourceInput = {
 		name,
 		type: type ?? 'json',
@@ -71,7 +109,19 @@ export function validateHotSourceInput(
 		headers,
 		parser,
 		cacheTtl,
-		isEnabled: input.isEnabled === true || input.isEnabled === 'on' || input.isEnabled === 1
+		isEnabled: input.isEnabled === true || input.isEnabled === 'on' || input.isEnabled === 1,
+		slug,
+		description,
+		icon,
+		accentColor,
+		surfaceColor,
+		displayLimit,
+		layout,
+		sortOrder,
+		showDescription:
+			input.showDescription === true ||
+			input.showDescription === 'on' ||
+			input.showDescription === 1
 	};
 	return Object.keys(errors).length ? { valid: false, errors } : { valid: true, data };
 }
@@ -88,7 +138,7 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 	const rows = (
 		await database
 			.prepare(
-				`SELECT id,name,type,url,headers_json,parser_json,cache_ttl,is_enabled,last_fetch_at FROM hot_sources ${enabledOnly ? 'WHERE is_enabled=1' : ''} ORDER BY name,id`
+				`SELECT id,name,type,url,headers_json,parser_json,cache_ttl,is_enabled,last_fetch_at,slug,description,icon,accent_color,surface_color,display_limit,layout,sort_order,show_description,last_error,last_success_at FROM hot_sources ${enabledOnly ? 'WHERE is_enabled=1' : ''} ORDER BY sort_order,id`
 			)
 			.all<{
 				id: number;
@@ -100,6 +150,17 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 				cache_ttl: number;
 				is_enabled: number;
 				last_fetch_at: string | null;
+				slug: string;
+				description: string;
+				icon: string;
+				accent_color: string;
+				surface_color: string;
+				display_limit: number;
+				layout: string;
+				sort_order: number;
+				show_description: number;
+				last_error: string | null;
+				last_success_at: string | null;
 			}>()
 	).results;
 	return rows.map((row) => ({
@@ -111,14 +172,25 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 		parser: JSON.parse(row.parser_json),
 		cacheTtl: row.cache_ttl,
 		isEnabled: row.is_enabled === 1,
-		lastFetchAt: row.last_fetch_at
+		lastFetchAt: row.last_fetch_at,
+		slug: row.slug,
+		description: row.description,
+		icon: row.icon,
+		accentColor: row.accent_color,
+		surfaceColor: row.surface_color,
+		displayLimit: row.display_limit,
+		layout: row.layout,
+		sortOrder: row.sort_order,
+		showDescription: row.show_description === 1,
+		lastError: row.last_error,
+		lastSuccessAt: row.last_success_at
 	}));
 }
 export async function createHotSource(database: Database, input: HotSourceInput) {
 	const row = (
 		await database
 			.prepare(
-				'INSERT INTO hot_sources(name,type,url,headers_json,parser_json,cache_ttl,is_enabled) VALUES(?,?,?,?,?,?,?) RETURNING id'
+				'INSERT INTO hot_sources(name,type,url,headers_json,parser_json,cache_ttl,is_enabled,slug,description,icon,accent_color,surface_color,display_limit,layout,sort_order,show_description) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id'
 			)
 			.bind(
 				input.name,
@@ -127,7 +199,16 @@ export async function createHotSource(database: Database, input: HotSourceInput)
 				JSON.stringify(input.headers),
 				JSON.stringify(input.parser),
 				input.cacheTtl,
-				input.isEnabled ? 1 : 0
+				input.isEnabled ? 1 : 0,
+				input.slug,
+				input.description,
+				input.icon,
+				input.accentColor,
+				input.surfaceColor,
+				input.displayLimit,
+				input.layout,
+				input.sortOrder,
+				input.showDescription ? 1 : 0
 			)
 			.all<{ id: number }>()
 	).results[0];
@@ -138,7 +219,7 @@ export async function updateHotSource(database: Database, id: number, input: Hot
 	const row = (
 		await database
 			.prepare(
-				'UPDATE hot_sources SET name=?,type=?,url=?,headers_json=?,parser_json=?,cache_ttl=?,is_enabled=?,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id'
+				'UPDATE hot_sources SET name=?,type=?,url=?,headers_json=?,parser_json=?,cache_ttl=?,is_enabled=?,slug=?,description=?,icon=?,accent_color=?,surface_color=?,display_limit=?,layout=?,sort_order=?,show_description=?,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id'
 			)
 			.bind(
 				input.name,
@@ -148,6 +229,15 @@ export async function updateHotSource(database: Database, id: number, input: Hot
 				JSON.stringify(input.parser),
 				input.cacheTtl,
 				input.isEnabled ? 1 : 0,
+				input.slug,
+				input.description,
+				input.icon,
+				input.accentColor,
+				input.surfaceColor,
+				input.displayLimit,
+				input.layout,
+				input.sortOrder,
+				input.showDescription ? 1 : 0,
 				id
 			)
 			.all<{ id: number }>()
