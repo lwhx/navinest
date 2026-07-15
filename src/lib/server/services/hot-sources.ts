@@ -1,4 +1,4 @@
-import type { Database } from '$lib/server/db';
+import type { Database, DatabaseStatement } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
 
 export type HotSourceInput = {
@@ -244,6 +244,31 @@ export async function updateHotSource(database: Database, id: number, input: Hot
 	).results[0];
 	if (!row) throw new HotSourceWriteError('热榜源不存在。');
 }
+export async function moveHotSource(database: Database, id: number, direction: 'up' | 'down') {
+	const rows = (
+		await database
+			.prepare('SELECT id FROM hot_sources ORDER BY sort_order,id')
+			.all<{ id: number }>()
+	).results;
+	const index = rows.findIndex((row) => row.id === id);
+	if (index < 0) throw new HotSourceWriteError('热榜源不存在。');
+	const target = direction === 'up' ? index - 1 : index + 1;
+	if (target < 0 || target >= rows.length) return false;
+	[rows[index], rows[target]] = [rows[target], rows[index]];
+	const batched = database as Database & {
+		batch?: (statements: DatabaseStatement[]) => Promise<unknown>;
+	};
+	if (!batched.batch) throw new HotSourceWriteError('当前数据库不支持原子排序。', 500);
+	await batched.batch(
+		rows.map((row, position) =>
+			database
+				.prepare('UPDATE hot_sources SET sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+				.bind((position + 1) * 10, row.id)
+		)
+	);
+	return true;
+}
+
 export async function deleteHotSource(database: Database, id: number) {
 	const row = (
 		await database

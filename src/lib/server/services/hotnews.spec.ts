@@ -1,7 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
-import { parseHotJson, parseHotRss, refreshHotSource } from '$lib/server/services/hotnews';
+import {
+	parseHotJson,
+	parseHotRss,
+	refreshEnabledHotSources,
+	refreshHotSource
+} from '$lib/server/services/hotnews';
 
 const connections: DatabaseSync[] = [];
 const publicDns = async () => ['93.184.216.34'];
@@ -193,5 +198,27 @@ describe('hot source refresh', () => {
 		);
 		expect(result).toEqual({ sourceId: 1, count: 1 });
 		expect(calls).toBe(2);
+	});
+	it('refreshes only enabled sources whose cache interval has elapsed', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET last_success_at=CURRENT_TIMESTAMP,cache_ttl=3600 WHERE id=1; UPDATE hot_sources SET last_success_at='2020-01-01 00:00:00',cache_ttl=3600 WHERE id=2"
+		);
+		let calls = 0;
+		const results = await refreshEnabledHotSources(
+			database,
+			async () => {
+				calls += 1;
+				return new Response(
+					'<rss><channel><item><title>Due</title><link>https://example.com/due</link></item></channel></rss>'
+				);
+			},
+			publicDns
+		);
+		expect(calls).toBe(1);
+		expect(results).toMatchObject([
+			{ ok: true, sourceId: 1, skipped: true },
+			{ ok: true, sourceId: 2, count: 1 }
+		]);
 	});
 });

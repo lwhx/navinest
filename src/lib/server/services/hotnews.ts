@@ -251,16 +251,27 @@ export async function refreshHotSource(
 		throw error;
 	}
 }
-export async function refreshEnabledHotSources(database: Database, fetcher: typeof fetch = fetch) {
+export async function refreshEnabledHotSources(
+	database: Database,
+	fetcher: typeof fetch = fetch,
+	resolveHost?: (hostname: string) => Promise<string[]>
+) {
 	const rows = (
 		await database
-			.prepare('SELECT id FROM hot_sources WHERE is_enabled=1 ORDER BY id')
-			.all<{ id: number }>()
+			.prepare(
+				"SELECT id,CASE WHEN last_success_at IS NULL OR unixepoch(last_success_at)+cache_ttl<=unixepoch('now') THEN 1 ELSE 0 END is_due FROM hot_sources WHERE is_enabled=1 ORDER BY id"
+			)
+			.all<{ id: number; is_due: number }>()
 	).results;
 	return Promise.all(
-		rows.map(async ({ id }) => {
+		rows.map(async ({ id, is_due }) => {
+			if (is_due !== 1)
+				return { ok: true as const, sourceId: id, count: 0, skipped: true as const };
 			try {
-				return { ok: true as const, ...(await refreshHotSource(database, id, fetcher)) };
+				return {
+					ok: true as const,
+					...(await refreshHotSource(database, id, fetcher, resolveHost))
+				};
 			} catch (error) {
 				return {
 					ok: false as const,

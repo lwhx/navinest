@@ -15,6 +15,15 @@
 			minute: '2-digit'
 		}).format(new Date(value.replace(' ', 'T') + (value.includes('Z') ? '' : 'Z')));
 	}
+	function boardStatus(source: (typeof data.sources)[number]) {
+		if (source.lastError) return { kind: 'error', label: '更新异常', detail: '显示上次成功数据' };
+		const updatedAt = source.lastSuccessAt ?? source.lastFetchAt;
+		if (!updatedAt) return { kind: 'waiting', label: '等待更新', detail: '尚无成功数据' };
+		const timestamp = new Date(updatedAt.replace(' ', 'T') + (updatedAt.includes('Z') ? '' : 'Z'));
+		if (Date.now() - timestamp.getTime() > 36 * 60 * 60 * 1000)
+			return { kind: 'stale', label: '数据较旧', detail: '等待下一次更新' };
+		return { kind: 'healthy', label: '更新正常', detail: '数据已缓存' };
+	}
 </script>
 
 <svelte:head
@@ -45,6 +54,7 @@
 	{#if data.sources.length}<div class="hot-board-card-grid">
 			{#each data.sources as source (source.id)}<article
 					class={`hot-board-card layout-${source.layout}`}
+					class:has-error={boardStatus(source).kind === 'error'}
 					style={`--board-accent:${source.accentColor};--board-surface:${source.surfaceColor}`}
 				>
 					<header class="hot-board-head">
@@ -57,9 +67,9 @@
 							</div>
 						</div>
 						<div class="hot-board-meta">
-							<span>{source.items.length} 条</span><time
-								>{age(source.lastSuccessAt ?? source.lastFetchAt)}</time
-							>
+							<span class={`board-status ${boardStatus(source).kind}`}
+								>{boardStatus(source).label}</span
+							><time>{age(source.lastSuccessAt ?? source.lastFetchAt)}</time>
 						</div>
 					</header>
 					{#if source.items.length}<ol class="hot-board-rank">
@@ -68,6 +78,7 @@
 									<div class="hot-rank-copy">
 										<a
 											href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+											title={item.title}
 											target="_blank"
 											rel="external noopener noreferrer">{item.title}</a
 										>{#if source.showDescription && item.extra?.description}<p>
@@ -81,8 +92,10 @@
 							<p>刷新订阅后将在这里显示热点。</p>
 						</div>{/if}
 					<footer>
-						<span>更新于 {age(source.lastSuccessAt ?? source.lastFetchAt)}</span><span
-							>{source.displayLimit} 条上限</span
+						<span>{boardStatus(source).detail}</span><span
+							>{source.items.length > 10
+								? `滚动查看全部 ${source.items.length} 条`
+								: `共 ${source.items.length} 条`}</span
 						>
 					</footer>
 				</article>{/each}
@@ -134,6 +147,9 @@
 		border-radius: 14px;
 		background: #fff;
 		box-shadow: 0 8px 26px #20242b0a;
+	}
+	.hot-board-card.has-error {
+		border-color: #e9b9bd;
 	}
 	.hot-board-head {
 		display: flex;
@@ -204,6 +220,20 @@
 		color: var(--board-accent);
 		font-weight: 800;
 	}
+	.board-status {
+		border-radius: 999px;
+		padding: 2px 6px;
+		background: #ffffffc7;
+	}
+	.board-status.error {
+		color: #b42d39;
+		background: #fff0f1;
+	}
+	.board-status.stale,
+	.board-status.waiting {
+		color: #85651e;
+		background: #fff8df;
+	}
 	.hot-board-rank {
 		display: grid;
 		max-height: 440px;
@@ -253,6 +283,11 @@
 		font-weight: 680;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.hot-rank-copy a:focus-visible {
+		border-radius: 3px;
+		outline: 2px solid var(--board-accent);
+		outline-offset: 2px;
 	}
 	.hot-rank-copy p {
 		margin: 3px 0 0;
