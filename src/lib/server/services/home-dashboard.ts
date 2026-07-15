@@ -49,7 +49,7 @@ export async function loadHomeDashboard(database: Database) {
 			.all<PopularRow>(),
 		database
 			.prepare(
-				`SELECT s.name source,i.rank,i.title,i.url,i.hot_value FROM hot_items i JOIN hot_sources s ON s.id=i.source_id WHERE s.is_enabled=1 ORDER BY s.name,i.rank,i.id LIMIT 10`
+				`SELECT s.name source,i.rank,i.title,i.url,i.hot_value FROM hot_items i JOIN hot_sources s ON s.id=i.source_id WHERE s.is_enabled=1 ORDER BY s.sort_order,s.id,i.rank,i.id LIMIT 10`
 			)
 			.all<HotRow>()
 	]);

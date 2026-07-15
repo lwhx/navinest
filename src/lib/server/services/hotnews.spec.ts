@@ -4,11 +4,12 @@ import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db'
 import { parseHotJson, parseHotRss, refreshHotSource } from '$lib/server/services/hotnews';
 
 const connections: DatabaseSync[] = [];
+const publicDns = async () => ['93.184.216.34'];
 function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
+		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
 	);
 	const database: Database & { batch(s: DatabaseStatement[]): Promise<void> } = {
 		prepare(query) {
@@ -71,6 +72,20 @@ describe('hot news parsers', () => {
 			)[0]
 		).toMatchObject({ title: 'Atom One', url: 'https://example.com/atom' });
 	});
+	it('preserves RSSHub publication, author, category and content metadata', () => {
+		const item = parseHotRss(
+			`<?xml version="1.0"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title><![CDATA[热点一]]></title><link>https://example.com/hot-1</link><pubDate>Wed, 15 Jul 2026 01:00:00 GMT</pubDate><dc:creator><![CDATA[百度新闻]]></dc:creator><category>社会</category><content:encoded><![CDATA[<p>热点摘要</p>]]></content:encoded></item></channel></rss>`
+		)[0];
+		expect(item).toMatchObject({
+			title: '热点一',
+			extra: {
+				description: '热点摘要',
+				publishedAt: 'Wed, 15 Jul 2026 01:00:00 GMT',
+				author: '百度新闻',
+				categories: ['社会']
+			}
+		});
+	});
 });
 
 describe('hot source refresh', () => {
@@ -85,7 +100,8 @@ describe('hot source refresh', () => {
 						data: { list: [{ name: 'Fresh', link: 'https://example.com/fresh', score: '1k' }] }
 					}),
 					{ headers: { 'content-type': 'application/json' } }
-				)
+				),
+			publicDns
 		);
 		expect(result).toEqual({ sourceId: 1, count: 1 });
 		expect(
@@ -97,10 +113,13 @@ describe('hot source refresh', () => {
 	it('preserves the previous snapshot when fetching or parsing fails', async () => {
 		const { database, sqlite } = fixture();
 		await expect(
-			refreshHotSource(database, 1, async () => new Response('bad', { status: 502 }))
+			refreshHotSource(database, 1, async () => new Response('bad', { status: 502 }), publicDns)
 		).rejects.toThrow();
 		expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toMatchObject({
 			title: 'Old'
+		});
+		expect(sqlite.prepare('SELECT last_error FROM hot_sources WHERE id=1').get()).toMatchObject({
+			last_error: '热榜请求失败：HTTP 502'
 		});
 	});
 	it('rejects redirects to private network targets', async () => {
@@ -113,27 +132,65 @@ describe('hot source refresh', () => {
 					new Response(null, {
 						status: 302,
 						headers: { location: 'http://127.0.0.1/feed' }
-					})
+					}),
+				publicDns
 			)
 		).rejects.toThrow();
 		expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toMatchObject({
 			title: 'Old'
 		});
 	});
+	it('rejects a feed hostname that resolves to a private address before fetching', async () => {
+		const { database } = fixture();
+		let fetched = false;
+		await expect(
+			refreshHotSource(
+				database,
+				1,
+				async () => {
+					fetched = true;
+					return new Response('{}');
+				},
+				async () => ['127.0.0.1']
+			)
+		).rejects.toThrow(/私网|保留地址/);
+		expect(fetched).toBe(false);
+	});
+	it('rejects oversized RSS responses before buffering the body', async () => {
+		const { database } = fixture();
+		await expect(
+			refreshHotSource(
+				database,
+				2,
+				async () =>
+					new Response('small placeholder', {
+						headers: { 'content-type': 'application/rss+xml', 'content-length': '3000000' }
+					}),
+				publicDns
+			)
+		).rejects.toThrow(/过大/);
+	});
 	it('follows validated public redirects', async () => {
 		const { database } = fixture();
 		let calls = 0;
-		const result = await refreshHotSource(database, 1, async (input) => {
-			calls += 1;
-			if (String(input) === 'https://example.com/data')
-				return new Response(null, {
-					status: 302,
-					headers: { location: 'https://cdn.example.com/data' }
-				});
-			return new Response(
-				JSON.stringify({ data: { list: [{ name: 'Redirected', link: 'https://example.com/r' }] } })
-			);
-		});
+		const result = await refreshHotSource(
+			database,
+			1,
+			async (input) => {
+				calls += 1;
+				if (String(input) === 'https://example.com/data')
+					return new Response(null, {
+						status: 302,
+						headers: { location: 'https://cdn.example.com/data' }
+					});
+				return new Response(
+					JSON.stringify({
+						data: { list: [{ name: 'Redirected', link: 'https://example.com/r' }] }
+					})
+				);
+			},
+			publicDns
+		);
 		expect(result).toEqual({ sourceId: 1, count: 1 });
 		expect(calls).toBe(2);
 	});

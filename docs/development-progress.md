@@ -495,6 +495,11 @@
   - 首页链接标签参考排行榜页改为9px圆角、9×12px内边距和36px高度；生产计算样式验证桌面6列、移动2列、8px间距
   - 第十二批G按截图纠正目标区域：用户所指链接标签是实际渲染的`.site-grid`站点卡片而非`.home-links-grid`；桌面从4列改为6列，移除1300px三列覆盖，卡片由307×76压缩为204×56，图标42px缩至32px，间距10px
   - 生产真实DOM验证首行Cloudflare Dashboard、Svelte、GitHub、Docker、MDN Web Docs、Vite共6个，页面1905=1905无横向溢出；本批不新增手机端适配
+  - 第十三批将“今日热点”升级为RSSHub/RSS/Atom/JSON多榜单系统：一个订阅对应一个独立榜单，支持名称、Slug、图标、说明、主题色、背景色、显示条数、标准/紧凑/双栏布局、摘要开关、启停和排序
+  - 公开页新增榜单导航与百度热榜式聚焦面板，前三名强化、品牌主题、更新时间和可选摘要；后台改为卡片式榜单工作台，并保留JSON高级字段映射和手动测试刷新
+  - RSSHub兼容修复CDATA标题，提取pubDate/published/updated、author/dc:creator、category和content:encoded；抓取增加逐跳DNS公网校验、2MiB流式响应上限、失败保留旧快照与last_error、成功写last_success_at
+  - 新增0012迁移和完整灾备字段，生产现有SvelteKit Releases RSS榜单及10条缓存无损迁移；公开页桌面1905=1905、移动390=390，10条真实缓存正常展示
+  - RSSHub官方公共实例在当前网络对Bilibili、知乎、微博三条公开路由均连接超时，未伪造真实刷新成功；后台Cloudflare Access会话过期，真实后台点击待重新登录后验证
 
 ## 重要技术决策
 

@@ -28,7 +28,11 @@ export function tagFormInput(formData: FormData) {
 }
 
 export function configurationFormInput(formData: FormData) {
-	return { ...Object.fromEntries(formData), isEnabled: formData.has('isEnabled') };
+	return {
+		...Object.fromEntries(formData),
+		isEnabled: formData.has('isEnabled'),
+		showDescription: formData.has('showDescription')
+	};
 }
 
 export function itemFormInput(formData: FormData) {
