@@ -493,6 +493,8 @@
   - 生产真实Chrome验证原NaviNest标签保持不变，新标签直达Wikipedia且`window.opener===null`
   - 第十二批F提升首页二级分类与链接密度：修复最终CSS层覆盖导致二级分类仍只有25px的问题，实际按钮增至52×36px、12px字体和8×14px内边距；移动端在240px容器内横向滚动且页面无溢出
   - 首页链接标签参考排行榜页改为9px圆角、9×12px内边距和36px高度；生产计算样式验证桌面6列、移动2列、8px间距
+  - 第十二批G按截图纠正目标区域：用户所指链接标签是实际渲染的`.site-grid`站点卡片而非`.home-links-grid`；桌面从4列改为6列，移除1300px三列覆盖，卡片由307×76压缩为204×56，图标42px缩至32px，间距10px
+  - 生产真实DOM验证首行Cloudflare Dashboard、Svelte、GitHub、Docker、MDN Web Docs、Vite共6个，页面1905=1905无横向溢出；本批不新增手机端适配
 
 ## 重要技术决策
 
