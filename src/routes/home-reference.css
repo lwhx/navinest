@@ -185,20 +185,22 @@
 .subcategory-tabs {
 	display: flex;
 	align-items: center;
-	gap: 2px;
-	border-radius: 10px;
+	gap: 6px;
+	border-radius: 12px;
 	padding: 4px;
 	background: #e8eaed;
 }
 .subcategory-tabs button {
-	min-height: 25px;
+	min-height: 36px;
 	border: 0;
-	border-radius: 6px;
-	padding: 4px 8px;
+	border-radius: 9px;
+	padding: 8px 14px;
 	color: var(--nav-muted);
 	background: transparent;
 	font: inherit;
-	font-size: 11px;
+	font-size: 12px;
+	font-weight: 650;
+	white-space: nowrap;
 	cursor: pointer;
 }
 .subcategory-tabs button:hover,
@@ -307,6 +309,12 @@
 	}
 }
 @media (max-width: 620px) {
+	.subcategory-tabs {
+		width: auto;
+		max-width: min(240px, calc(100vw - 140px));
+		flex: 0 1 auto;
+		overflow-x: auto;
+	}
 	.home-header nav a {
 		padding: 8px 7px;
 		font-size: 13px;
