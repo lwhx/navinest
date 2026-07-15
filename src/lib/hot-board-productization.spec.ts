@@ -32,6 +32,13 @@ describe('custom RSS hot boards', () => {
 		expect(publicPage).toContain('滚动查看全部');
 		expect(publicPage).toContain('title={item.title}');
 		expect(publicPage).toMatch(/\.hot-rank-copy a:focus-visible/);
+		expect(publicPage).toContain('source.hasError');
+		expect(publicPage).not.toContain('source.lastError');
+		expect(publicPage).toContain('--board-accent-text');
+		expect(publicPage).toContain('--board-on-accent');
+		expect(publicPage).toMatch(
+			/@media \(max-width: 760px\)[\s\S]*\.hot-board-rank\s*\{[^}]*max-height:\s*none[^}]*overflow-y:\s*visible/s
+		);
 	});
 	it('exposes RSSHub board branding, layout, limits and order in admin', () => {
 		for (const field of [

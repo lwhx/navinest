@@ -189,12 +189,13 @@ async function safeFetch(
 	url: string,
 	headers: Record<string, string>,
 	fetcher: typeof fetch,
-	resolveHost?: (hostname: string) => Promise<string[]>
+	resolveHost?: (hostname: string) => Promise<string[]>,
+	signal?: AbortSignal
 ) {
 	let current = url;
 	for (let redirects = 0; redirects <= 3; redirects += 1) {
 		current = await assertPublicFetchTarget(current, resolveHost);
-		const response = await fetcher(current, { headers, redirect: 'manual' });
+		const response = await fetcher(current, { headers, redirect: 'manual', signal });
 		if (response.status < 300 || response.status >= 400) return response;
 		const location = response.headers.get('location');
 		if (!location) throw new HotNewsError('热榜重定向缺少目标地址。', 502);
@@ -210,10 +211,22 @@ export async function refreshHotSource(
 	fetcher: typeof fetch = fetch,
 	resolveHost?: (hostname: string) => Promise<string[]>
 ) {
-	const row = await source(database, id);
+	const row = await source(database, id),
+		token = crypto.randomUUID();
+	const lease = (
+		await database
+			.prepare(
+				"UPDATE hot_sources SET refresh_token=?,refresh_started_at=CURRENT_TIMESTAMP WHERE id=? AND (refresh_token IS NULL OR refresh_started_at<datetime('now','-5 minutes')) RETURNING id"
+			)
+			.bind(token, id)
+			.all<{ id: number }>()
+	).results[0];
+	if (!lease) throw new HotNewsError('该榜单正在刷新，请稍后重试。', 409);
+	const controller = new AbortController(),
+		timeout = setTimeout(() => controller.abort(), 20_000);
 	try {
 		const headers = JSON.parse(row.headers_json) as Record<string, string>;
-		const response = await safeFetch(row.url, headers, fetcher, resolveHost);
+		const response = await safeFetch(row.url, headers, fetcher, resolveHost, controller.signal);
 		if (!response.ok) throw new HotNewsError(`热榜请求失败：HTTP ${response.status}`, 502);
 		const body = await responseText(response);
 		const items =
@@ -221,6 +234,13 @@ export async function refreshHotSource(
 				? parseHotJson(JSON.parse(body), JSON.parse(row.parser_json))
 				: parseHotRss(body);
 		if (!items.length) throw new HotNewsError('热榜没有有效条目。');
+		const currentLease = (
+			await database
+				.prepare('SELECT id FROM hot_sources WHERE id=? AND refresh_token=? LIMIT 1')
+				.bind(id, token)
+				.all<{ id: number }>()
+		).results[0];
+		if (!currentLease) throw new HotNewsError('刷新租约已失效，请重试。', 409);
 		const statements: DatabaseStatement[] = [
 			database.prepare('DELETE FROM hot_items WHERE source_id=?').bind(id),
 			...items.map((item) =>
@@ -232,9 +252,9 @@ export async function refreshHotSource(
 			),
 			database
 				.prepare(
-					'UPDATE hot_sources SET last_fetch_at=CURRENT_TIMESTAMP,last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?'
+					'UPDATE hot_sources SET last_fetch_at=CURRENT_TIMESTAMP,last_success_at=CURRENT_TIMESTAMP,last_error=NULL,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND refresh_token=?'
 				)
-				.bind(id)
+				.bind(id, token)
 		];
 		const batched = database as Database & {
 			batch?: (statements: DatabaseStatement[]) => Promise<unknown>;
@@ -245,10 +265,14 @@ export async function refreshHotSource(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await database
-			.prepare('UPDATE hot_sources SET last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
-			.bind(message.slice(0, 500), id)
+			.prepare(
+				'UPDATE hot_sources SET last_error=?,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND refresh_token=?'
+			)
+			.bind(message.slice(0, 500), id, token)
 			.all();
 		throw error;
+	} finally {
+		clearTimeout(timeout);
 	}
 }
 export async function refreshEnabledHotSources(

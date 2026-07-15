@@ -16,13 +16,26 @@
 		}).format(new Date(value.replace(' ', 'T') + (value.includes('Z') ? '' : 'Z')));
 	}
 	function boardStatus(source: (typeof data.sources)[number]) {
-		if (source.lastError) return { kind: 'error', label: '更新异常', detail: '显示上次成功数据' };
+		if (source.hasError) return { kind: 'error', label: '更新异常', detail: '显示上次成功数据' };
 		const updatedAt = source.lastSuccessAt ?? source.lastFetchAt;
 		if (!updatedAt) return { kind: 'waiting', label: '等待更新', detail: '尚无成功数据' };
 		const timestamp = new Date(updatedAt.replace(' ', 'T') + (updatedAt.includes('Z') ? '' : 'Z'));
 		if (Date.now() - timestamp.getTime() > 36 * 60 * 60 * 1000)
 			return { kind: 'stale', label: '数据较旧', detail: '等待下一次更新' };
 		return { kind: 'healthy', label: '更新正常', detail: '数据已缓存' };
+	}
+	function accentColors(hex: string) {
+		const channels = [1, 3, 5].map(
+				(index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255
+			),
+			linear = channels.map((channel) =>
+				channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+			),
+			luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+		return {
+			text: luminance > 0.32 ? '#34373c' : hex,
+			onAccent: luminance > 0.46 ? '#17191c' : '#ffffff'
+		};
 	}
 </script>
 
@@ -55,7 +68,7 @@
 			{#each data.sources as source (source.id)}<article
 					class={`hot-board-card layout-${source.layout}`}
 					class:has-error={boardStatus(source).kind === 'error'}
-					style={`--board-accent:${source.accentColor};--board-surface:${source.surfaceColor}`}
+					style={`--board-accent:${source.accentColor};--board-accent-text:${accentColors(source.accentColor).text};--board-on-accent:${accentColors(source.accentColor).onAccent};--board-surface:${source.surfaceColor}`}
 				>
 					<header class="hot-board-head">
 						<div class="hot-board-brand">
@@ -174,7 +187,7 @@
 		flex: 0 0 auto;
 		place-items: center;
 		border-radius: 11px;
-		color: #fff;
+		color: var(--board-on-accent);
 		background: var(--board-accent);
 		font-size: 18px;
 		font-weight: 900;
@@ -188,7 +201,7 @@
 		margin: 0;
 	}
 	.hot-board-brand p {
-		color: var(--board-accent);
+		color: var(--board-accent-text);
 		font-size: 10px;
 		font-weight: 850;
 		letter-spacing: 0.08em;
@@ -217,7 +230,7 @@
 		text-align: right;
 	}
 	.hot-board-meta span {
-		color: var(--board-accent);
+		color: var(--board-accent-text);
 		font-weight: 800;
 	}
 	.board-status {
@@ -269,7 +282,7 @@
 		font-weight: 850;
 	}
 	.hot-board-rank li:nth-child(-n + 3) .hot-rank-number {
-		color: #fff;
+		color: var(--board-on-accent);
 		background: var(--board-accent);
 	}
 	.hot-rank-copy {
@@ -286,7 +299,7 @@
 	}
 	.hot-rank-copy a:focus-visible {
 		border-radius: 3px;
-		outline: 2px solid var(--board-accent);
+		outline: 2px solid var(--board-accent-text);
 		outline-offset: 2px;
 	}
 	.hot-rank-copy p {
@@ -300,7 +313,7 @@
 	.hot-value {
 		max-width: 78px;
 		overflow: hidden;
-		color: var(--board-accent);
+		color: var(--board-accent-text);
 		font-size: 11px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -354,6 +367,10 @@
 		}
 		.layout-columns .hot-board-rank {
 			grid-template-columns: 1fr;
+		}
+		.hot-board-rank {
+			max-height: none;
+			overflow-y: visible;
 		}
 	}
 	@media (max-width: 520px) {

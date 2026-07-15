@@ -14,7 +14,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
+		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
 	);
 	const database: Database & { batch(s: DatabaseStatement[]): Promise<void> } = {
 		prepare(query) {
@@ -174,6 +174,28 @@ describe('hot source refresh', () => {
 				publicDns
 			)
 		).rejects.toThrow(/过大/);
+	});
+	it('rejects overlapping refreshes and preserves the active lease', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET refresh_token='active',refresh_started_at=CURRENT_TIMESTAMP WHERE id=1"
+		);
+		let fetched = false;
+		await expect(
+			refreshHotSource(
+				database,
+				1,
+				async () => {
+					fetched = true;
+					return new Response('{}');
+				},
+				publicDns
+			)
+		).rejects.toMatchObject({ status: 409 });
+		expect(fetched).toBe(false);
+		expect(sqlite.prepare('SELECT refresh_token FROM hot_sources WHERE id=1').get()).toEqual({
+			refresh_token: 'active'
+		});
 	});
 	it('follows validated public redirects', async () => {
 		const { database } = fixture();
