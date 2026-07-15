@@ -5,12 +5,17 @@ const publicPage = readFileSync('src/routes/hotnews/+page.svelte', 'utf8'),
 	adminPage = readFileSync('src/routes/admin/hot-sources/+page.svelte', 'utf8');
 
 describe('custom RSS hot boards', () => {
-	it('provides board navigation and a focused modern ranking panel', () => {
-		expect(publicPage).toContain('hot-board-tabs');
-		expect(publicPage).toContain('activeSlug');
+	it('renders every board simultaneously as a dense customizable card grid', () => {
+		expect(publicPage).toContain('hot-board-card-grid');
+		expect(publicPage).toContain('{#each data.sources as source');
+		expect(publicPage).toContain('hot-board-card');
 		expect(publicPage).toContain('hot-board-rank');
 		expect(publicPage).toContain('source.accentColor');
-		expect(publicPage).toContain('active.showDescription');
+		expect(publicPage).toContain('source.showDescription');
+		expect(publicPage).toMatch(/\.hot-board-rank\s*\{[^}]*max-height:\s*440px/s);
+		expect(publicPage).toMatch(/\.hot-board-rank\s*\{[^}]*overflow-y:\s*auto/s);
+		expect(publicPage).not.toContain('activeSlug');
+		expect(publicPage).not.toContain('hot-board-tabs');
 	});
 	it('exposes RSSHub board branding, layout, limits and order in admin', () => {
 		for (const field of [
