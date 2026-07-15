@@ -160,7 +160,7 @@
 		border-radius: 11px;
 		color: #fff;
 		background: var(--board-accent);
-		font-size: 16px;
+		font-size: 18px;
 		font-weight: 900;
 	}
 	.hot-board-brand > div {
@@ -173,14 +173,14 @@
 	}
 	.hot-board-brand p {
 		color: var(--board-accent);
-		font-size: 8px;
+		font-size: 10px;
 		font-weight: 850;
 		letter-spacing: 0.08em;
 	}
 	.hot-board-brand h2 {
 		margin: 2px 0;
 		overflow: hidden;
-		font-size: 15px;
+		font-size: 18px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -188,7 +188,7 @@
 		display: block;
 		overflow: hidden;
 		color: #777c84;
-		font-size: 9px;
+		font-size: 11px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -197,7 +197,7 @@
 		flex: 0 0 auto;
 		gap: 4px;
 		color: #8b8f96;
-		font-size: 8px;
+		font-size: 11px;
 		text-align: right;
 	}
 	.hot-board-meta span {
@@ -235,7 +235,7 @@
 		border-radius: 7px;
 		color: #8b8f96;
 		background: #f1f2f4;
-		font-size: 9px;
+		font-size: 11px;
 		font-weight: 850;
 	}
 	.hot-board-rank li:nth-child(-n + 3) .hot-rank-number {
@@ -249,7 +249,7 @@
 		display: block;
 		overflow: hidden;
 		color: #34373c;
-		font-size: 11px;
+		font-size: 14px;
 		font-weight: 680;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -258,7 +258,7 @@
 		margin: 3px 0 0;
 		overflow: hidden;
 		color: #8b8f96;
-		font-size: 9px;
+		font-size: 11px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -266,7 +266,7 @@
 		max-width: 78px;
 		overflow: hidden;
 		color: var(--board-accent);
-		font-size: 9px;
+		font-size: 11px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
@@ -278,7 +278,7 @@
 		padding: 8px 12px;
 		color: #969aa1;
 		background: #fbfbfc;
-		font-size: 8px;
+		font-size: 10px;
 	}
 	.board-empty {
 		display: grid;

@@ -17,6 +17,14 @@ describe('custom RSS hot boards', () => {
 		expect(publicPage).not.toContain('activeSlug');
 		expect(publicPage).not.toContain('hot-board-tabs');
 	});
+	it('keeps card typography readable without abandoning the dense grid', () => {
+		expect(publicPage).toMatch(/\.hot-board-brand h2\s*\{[^}]*font-size:\s*18px/s);
+		expect(publicPage).toMatch(/\.hot-rank-copy a\s*\{[^}]*font-size:\s*14px/s);
+		expect(publicPage).toMatch(/\.hot-rank-copy p\s*\{[^}]*font-size:\s*11px/s);
+		expect(publicPage).toMatch(/\.hot-rank-number\s*\{[^}]*font-size:\s*11px/s);
+		expect(publicPage).toMatch(/\.hot-value\s*\{[^}]*font-size:\s*11px/s);
+		expect(publicPage).toMatch(/\.hot-board-meta\s*\{[^}]*font-size:\s*11px/s);
+	});
 	it('exposes RSSHub board branding, layout, limits and order in admin', () => {
 		for (const field of [
 			'name="slug"',
