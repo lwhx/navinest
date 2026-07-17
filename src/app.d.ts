@@ -3,6 +3,7 @@
 declare global {
 	interface Env {
 		AI_CONFIG_ENCRYPTION_KEY?: string;
+		ALLOW_GITHUB_AUTO_PROVISION?: string;
 	}
 
 	namespace App {

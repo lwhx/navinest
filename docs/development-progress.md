@@ -620,6 +620,14 @@ http://127.0.0.1:5173
 - 后台页面：`src/routes/admin/`
 - 后台管理 API：`src/routes/api/admin/`
 
+## P0 审计修复（2026-07-16）
+
+- 新增空库初始化回归测试；`0014_taxonomy_roots.sql`按自然键补齐根分类并修复孤立子分类，Seed移除固定ID并支持重复执行。
+- 新增`0015_submission_review_lease.sql`；投稿审核先原子认领`reviewing + review_token`，成功与补偿均校验Token，避免并发失败请求覆盖已发布状态。
+- AI Provider改用手动同源重定向、逐跳公网校验和2MiB流式响应上限，禁止API Key随跨Origin重定向转发。
+- 新增`0016_ai_usage_reservations.sql`；智能获取在外部请求前原子预留额度，成功/失败结算同一审计事件，消除并发绕过。
+- GitHub OAuth默认禁止陌生身份自动开户；已有绑定和邮箱匹配的本地用户仍可登录，只有`ALLOW_GITHUB_AUTO_PROVISION=true`时才允许创建新用户。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：

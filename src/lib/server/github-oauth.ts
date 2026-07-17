@@ -122,7 +122,18 @@ async function uniqueUsername(database: Database, candidate: string) {
 	}
 	return `github-${crypto.randomUUID()}`;
 }
-export async function loginWithGitHub(database: Database, profile: NormalizedGitHubProfile) {
+export class GitHubRegistrationDisabledError extends Error {
+	constructor() {
+		super('GitHub registration is disabled for unknown users.');
+		this.name = 'GitHubRegistrationDisabledError';
+	}
+}
+
+export async function loginWithGitHub(
+	database: Database,
+	profile: NormalizedGitHubProfile,
+	allowAutoProvision = false
+) {
 	let user = (
 		await database
 			.prepare(
@@ -140,6 +151,7 @@ export async function loginWithGitHub(database: Database, profile: NormalizedGit
 				.bind(profile.email)
 				.all<OAuthUserRow>()
 		).results[0];
+	if (!user && !allowAutoProvision) throw new GitHubRegistrationDisabledError();
 	if (!user) {
 		const username = await uniqueUsername(database, profile.usernameCandidate);
 		user = (

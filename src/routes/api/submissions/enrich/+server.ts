@@ -10,7 +10,7 @@ import {
 	fetchWebSnapshot,
 	WebFetchError
 } from '$lib/server/services/web-enrichment';
-import { AiRateLimitError, assertAiRateLimit, recordAiUsage } from '$lib/server/services/ai-usage';
+import { AiRateLimitError, finalizeAiUsage, reserveAiUsage } from '$lib/server/services/ai-usage';
 import { listCategories } from '$lib/server/services/categories';
 import type { ContentType } from '$lib/types/content';
 import type { RequestHandler } from './$types';
@@ -18,7 +18,8 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.user) return json({ error: '请先登录后再使用网页智能填充。' }, { status: 401 });
 	const database = requireDatabase(platform);
-	let providerId: number | null = null;
+	let providerId: number | null = null,
+		reservationToken: string | null = null;
 	try {
 		const body = (await request.json()) as Record<string, unknown>,
 			url = typeof body.url === 'string' ? body.url.trim() : '',
@@ -26,7 +27,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 				? (String(body.type) as ContentType)
 				: 'site';
 		if (!url || url.length > 2048) return json({ error: '请输入有效的网址。' }, { status: 400 });
-		await assertAiRateLimit(database, locals.user.id);
+		reservationToken = (await reserveAiUsage(database, locals.user.id)).token;
 		const provider = await getEnabledAiProvider(
 				database,
 				platform?.env?.AI_CONFIG_ENCRYPTION_KEY ?? ''
@@ -61,13 +62,13 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			),
 			duplicate = { published, pendingCount };
 		if (!provider) {
-			await recordAiUsage(database, {
-				userId: locals.user.id,
-				action: 'enrich',
+			await finalizeAiUsage(database, {
+				token: reservationToken,
 				providerId: null,
 				success: true,
 				errorCode: null
 			});
+			reservationToken = null;
 			return json({
 				snapshot,
 				suggestion: null,
@@ -79,13 +80,13 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 		providerId = provider.id;
 		await assertPublicFetchTarget(provider.baseUrl);
 		const suggestion = await generateSubmissionSuggestion(provider, snapshot, fetch, categories);
-		await recordAiUsage(database, {
-			userId: locals.user.id,
-			action: 'enrich',
+		await finalizeAiUsage(database, {
+			token: reservationToken,
 			providerId,
 			success: true,
 			errorCode: null
 		});
+		reservationToken = null;
 		return json({
 			snapshot,
 			suggestion,
@@ -96,17 +97,17 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	} catch (error) {
 		if (error instanceof AiRateLimitError)
 			return json({ error: error.message }, { status: 429, headers: { 'retry-after': '5' } });
-		try {
-			await recordAiUsage(database, {
-				userId: locals.user.id,
-				action: 'enrich',
-				providerId,
-				success: false,
-				errorCode: error instanceof Error ? error.name : 'UnknownError'
-			});
-		} catch {
-			// Preserve the original enrichment error if audit logging fails.
-		}
+		if (reservationToken)
+			try {
+				await finalizeAiUsage(database, {
+					token: reservationToken,
+					providerId,
+					success: false,
+					errorCode: error instanceof Error ? error.name : 'UnknownError'
+				});
+			} catch {
+				// Preserve the original enrichment error if audit finalization fails.
+			}
 		if (
 			error instanceof WebFetchError ||
 			error instanceof AiGenerationError ||
