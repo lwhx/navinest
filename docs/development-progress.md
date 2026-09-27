@@ -710,13 +710,21 @@ http://127.0.0.1:5173
 - 后台榜单表单新增「HTML 页面抓取」类型与解析配置提示，前台榜单卡片显示「网页抓取」。
 - 新增 6 个 HTML 解析/刷新测试、3 个类型校验测试与 1 条产品化断言。
 
+## 外部失败告警（2026-09-27）
+
+- `cron-health` 在热榜刷新异常或任务失败时，除写入站内管理员消息外，还会向 `ALERT_WEBHOOK_URL` 推送一条外部告警（未配置则完全跳过）。
+- 新增 `src/lib/server/services/alert-webhook.ts`：按接收方自动适配载荷（企业微信 / 钉钉 `msgtype.text`、飞书 / Lark `msg_type.text`，其余为通用 `navinest.alert` 文档）；地址经过安全校验（内网与非法地址直接拒绝，不发起请求），5 秒超时，且**永不抛出**——告警投递失败不会改变 cron 结果。
+- 新增「静默停滞」检测：即使本次刷新全部成功，也会检查启用中的榜单是否存在超过 48 小时未成功更新的（按 `last_success_at`），命中即外部告警——对应「cron 在跑但某个榜单早已不再更新」这类无声故障。
+- `cloudflare/worker.ts` 定时任务把 `env.ALERT_WEBHOOK_URL` 透传给 `executeMonitoredHotnewsCron`；`Env` 类型与 `.env.example` 同步（可选变量）。部署后可用 `npx wrangler secret put ALERT_WEBHOOK_URL` 或 `vars` 配置。
+- 新增 13 个测试（四种接收方载荷适配、非法地址零请求、HTTP 与网络失败降级为 `ok:false`、失败+停滞合并上报、仅停滞时告警、全部新鲜时静默、webhook 完全不可用不影响 run 结果）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
 1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置、个人自定义导航（导入/搜索/排序/公开分享页）、HTML 热榜抓取。
 2. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
-3. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。
+3. 运维增强：备份定时化、辅助Cron和更严格的nonce CSP。
 4. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
 
 ## 长期维护
