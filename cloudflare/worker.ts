@@ -13,8 +13,12 @@ export default {
 			scheduledTime: new Date(controller.scheduledTime).toISOString()
 		});
 		context.waitUntil(
-			executeMonitoredHotnewsCron(env.DB, controller.cron, controller.scheduledTime, () =>
-				refreshEnabledHotSources(env.DB)
+			executeMonitoredHotnewsCron(
+				env.DB,
+				controller.cron,
+				controller.scheduledTime,
+				() => refreshEnabledHotSources(env.DB),
+				{ alertWebhookUrl: env.ALERT_WEBHOOK_URL }
 			).then((run) => {
 				console.log({
 					event: 'hotnews.cron.completed',
