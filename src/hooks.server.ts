@@ -2,7 +2,12 @@ import { error, type Handle } from '@sveltejs/kit';
 import { adminAuthorizationContext, authorizeAdmin } from '$lib/server/admin-auth';
 import { getDatabase } from '$lib/server/db';
 import { sessionUser, SESSION_COOKIE } from '$lib/server/user-auth';
-import { securityHeaders, shouldPrivateNoStore } from '$lib/server/security-headers';
+import {
+	createCspNonce,
+	requestSecurityHeaders,
+	shouldPrivateNoStore,
+	withScriptNonce
+} from '$lib/server/security-headers';
 
 function isAdminPath(pathname: string): boolean {
 	return (
@@ -26,8 +31,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.admin = authorization.identity;
 	}
 
-	const response = await resolve(event);
-	for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
+	const nonce = createCspNonce();
+	const response = await resolve(event, {
+		transformPageChunk: ({ html }) => withScriptNonce(html, nonce)
+	});
+	for (const [name, value] of Object.entries(requestSecurityHeaders(nonce)))
+		response.headers.set(name, value);
 	if (shouldPrivateNoStore(event.url.pathname))
 		response.headers.set('cache-control', 'private, no-store');
 	return response;
