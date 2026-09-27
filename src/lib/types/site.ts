@@ -9,6 +9,7 @@ export type SiteSettings = {
 	announcementLink: string;
 	announcementLinkLabel: string;
 	submissionsOpen: boolean;
+	registrationOpen: boolean;
 	sitemapEnabled: boolean;
 	robotsExtra: string;
 };
@@ -24,6 +25,7 @@ export const SITE_SETTINGS_DEFAULTS: SiteSettings = {
 	announcementLink: '',
 	announcementLinkLabel: '',
 	submissionsOpen: true,
+	registrationOpen: false,
 	sitemapEnabled: true,
 	robotsExtra: ''
 };

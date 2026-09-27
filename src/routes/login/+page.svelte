@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import AccountShell from '$lib/components/AccountShell.svelte';
 	import type { PageProps } from './$types';
-	let { form }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head><title>登录 | NaviNest 导航巢</title></svelte:head>
@@ -42,10 +42,10 @@
 		</form>
 		<div class="account-divider">或者</div>
 		<div class="account-actions">
-			<a class="account-button secondary" href={resolve('/api/auth/github')}>使用 GitHub 登录</a><a
-				class="account-button secondary"
-				href={resolve('/')}>返回首页</a
-			>
+			<a class="account-button secondary" href={resolve('/api/auth/github')}>使用 GitHub 登录</a
+			>{#if data.registrationOpen}<a class="account-button secondary" href={resolve('/register')}
+					>注册新账号</a
+				>{/if}<a class="account-button secondary" href={resolve('/')}>返回首页</a>
 		</div>
 	</section>
 </AccountShell>

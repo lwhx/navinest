@@ -1,11 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { requireDatabase } from '$lib/server/db';
+import { getDatabase, requireDatabase } from '$lib/server/db';
+import { loadSiteSettings } from '$lib/server/services/site-settings';
 import { loginUser, setSessionCookie } from '$lib/server/user-auth';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, platform }) => {
 	if (locals.user) redirect(303, '/');
-	return {};
+	return { registrationOpen: (await loadSiteSettings(getDatabase(platform))).registrationOpen };
 };
 export const actions: Actions = {
 	default: async ({ platform, request, cookies, getClientAddress }) => {

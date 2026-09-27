@@ -40,6 +40,7 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
 		announcementLink: text(record.announcementLink, '', 300),
 		announcementLinkLabel: text(record.announcementLinkLabel, '', 40),
 		submissionsOpen: flag(record.submissionsOpen, SITE_SETTINGS_DEFAULTS.submissionsOpen),
+		registrationOpen: flag(record.registrationOpen, SITE_SETTINGS_DEFAULTS.registrationOpen),
 		sitemapEnabled: flag(record.sitemapEnabled, SITE_SETTINGS_DEFAULTS.sitemapEnabled),
 		robotsExtra: typeof record.robotsExtra === 'string' ? record.robotsExtra.slice(0, 500) : ''
 	};
@@ -101,6 +102,7 @@ export function validateSiteSettingsInput(
 					announcementLink,
 					announcementLinkLabel,
 					submissionsOpen: flag(input.submissionsOpen, false),
+					registrationOpen: flag(input.registrationOpen, false),
 					sitemapEnabled: flag(input.sitemapEnabled, false),
 					robotsExtra
 				}

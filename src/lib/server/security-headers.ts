@@ -24,6 +24,7 @@ export const securityHeaders: Readonly<Record<string, string>> = {
 export function shouldPrivateNoStore(pathname: string): boolean {
 	return (
 		pathname === '/login' ||
+		pathname === '/register' ||
 		pathname === '/contribute' ||
 		pathname === '/user' ||
 		pathname.startsWith('/user/') ||

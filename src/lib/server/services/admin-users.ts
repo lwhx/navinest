@@ -1,6 +1,14 @@
 import type { Database } from '$lib/server/db';
 import { createPasswordHash } from '$lib/server/auth';
 import { AdminWriteError } from '$lib/server/services/admin-write';
+import {
+	displayNameError,
+	emailError,
+	normalizeEmail,
+	normalizeUsername,
+	passwordError,
+	usernameError
+} from '$lib/server/user-validation';
 import type { ValidationResult } from '$lib/server/admin-validation';
 
 export const USER_ROLES = ['user', 'admin'] as const;
@@ -50,38 +58,22 @@ type UserRow = {
 	sessions: number;
 };
 
-const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 128;
-
-function passwordErrors(password: string, required: boolean, errors: Record<string, string>) {
-	if (!password) {
-		if (required) errors.password = '请为用户设置初始密码。';
-		return;
-	}
-	if (password.length < MIN_PASSWORD_LENGTH)
-		errors.password = `密码至少 ${MIN_PASSWORD_LENGTH} 个字符。`;
-	else if (password.length > MAX_PASSWORD_LENGTH)
-		errors.password = `密码不能超过 ${MAX_PASSWORD_LENGTH} 个字符。`;
-}
-
 export function validateAdminUserInput(
 	input: Record<string, unknown>,
 	options: { requirePassword: boolean }
 ): ValidationResult<AdminUserInput> {
 	const errors: Record<string, string> = {};
-	const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
-	if (!username) errors.username = '用户名不能为空。';
-	else if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username))
-		errors.username = '用户名需为 3–32 位的字母、数字、点、下划线或连字符，并以字母或数字开头。';
+	const username = normalizeUsername(input.username);
+	const usernameIssue = usernameError(username);
+	if (usernameIssue) errors.username = usernameIssue;
 
 	const displayName = typeof input.displayName === 'string' ? input.displayName.trim() : '';
-	if (!displayName) errors.displayName = '显示名称不能为空。';
-	else if (displayName.length > 80) errors.displayName = '显示名称不能超过 80 个字符。';
+	const displayNameIssue = displayNameError(displayName);
+	if (displayNameIssue) errors.displayName = displayNameIssue;
 
-	const rawEmail = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
-	if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail))
-		errors.email = '请输入有效的邮箱地址。';
-	else if (rawEmail.length > 160) errors.email = '邮箱不能超过 160 个字符。';
+	const email = normalizeEmail(input.email);
+	const emailIssue = emailError(email);
+	if (emailIssue) errors.email = emailIssue;
 
 	const role = typeof input.role === 'string' ? input.role : 'user';
 	if (!USER_ROLES.includes(role as UserRole)) errors.role = '角色无效。';
@@ -90,7 +82,8 @@ export function validateAdminUserInput(
 	if (!USER_STATUSES.includes(status as UserStatus)) errors.status = '状态无效。';
 
 	const password = typeof input.password === 'string' ? input.password : '';
-	passwordErrors(password, options.requirePassword, errors);
+	const passwordIssue = passwordError(password, options.requirePassword);
+	if (passwordIssue) errors.password = passwordIssue;
 
 	return Object.keys(errors).length
 		? { valid: false as const, errors }
@@ -99,7 +92,7 @@ export function validateAdminUserInput(
 				data: {
 					username,
 					displayName,
-					email: rawEmail || null,
+					email: email || null,
 					role: role as UserRole,
 					status: status as UserStatus,
 					password: password || null
@@ -235,9 +228,8 @@ export async function updateAdminUser(database: Database, userId: number, input:
 }
 
 export async function resetAdminUserPassword(database: Database, userId: number, password: string) {
-	const errors: Record<string, string> = {};
-	passwordErrors(password, true, errors);
-	if (errors.password) throw new AdminWriteError(errors.password, 'password');
+	const passwordIssue = passwordError(password, true);
+	if (passwordIssue) throw new AdminWriteError(passwordIssue, 'password');
 	const current = await loadUser(database, userId);
 	if (!current) throw new AdminWriteError('用户不存在。', undefined, 404);
 	const passwordHash = await createPasswordHash(password);
