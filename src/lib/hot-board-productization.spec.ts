@@ -61,4 +61,10 @@ describe('custom RSS hot boards', () => {
 		expect(adminPage).toContain('上移榜单');
 		expect(adminPage).toContain('下移榜单');
 	});
+	it('offers HTML page scraping alongside RSS and JSON boards', () => {
+		expect(adminPage).toContain('<option value="html"');
+		expect(adminPage).toContain('HTML 页面抓取');
+		expect(adminPage).toContain('itemSelector');
+		expect(publicPage).toContain('网页抓取');
+	});
 });

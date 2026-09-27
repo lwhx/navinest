@@ -15,6 +15,12 @@ export type JsonParserConfig = {
 	urlField?: string;
 	hotField?: string;
 };
+export type HtmlParserConfig = {
+	itemSelector?: string;
+	titleSelector?: string;
+	hotSelector?: string;
+	baseUrl?: string;
+};
 type SourceRow = {
 	id: number;
 	name: string;
@@ -205,6 +211,83 @@ async function safeFetch(
 	}
 	throw new HotNewsError('热榜重定向次数过多。', 502);
 }
+function escapeRegExp(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+/** Supports tag, .class and tag.class selectors; returns a regex whose `body` group holds the inner HTML. */
+function elementPattern(selector: string) {
+	const match = /^([a-z][a-z0-9-]*)?((?:\.[a-z0-9_-]+)*)$/i.exec(selector.trim());
+	if (!match || (!match[1] && !match[2]))
+		throw new HotNewsError('HTML 选择器格式无效，请使用 tag、.class 或 tag.class。');
+	const tag = match[1]?.toLowerCase(),
+		classes = match[2] ? match[2].slice(1).split('.') : [],
+		guards = classes.map((name) => `(?=[^>]*class=["'][^"']*\\b${escapeRegExp(name)}\\b)`).join('');
+	const open = tag ? `<${tag}\\b${guards}[^>]*>` : `(?<tag>[a-z][a-z0-9-]*)\\b${guards}[^>]*>`,
+		close = tag ? `<\\/${tag}>` : '</\\k<tag>>';
+	return new RegExp(`(?<open>${open})(?<body>[\\s\\S]*?)${close}`, 'gi');
+}
+function elementMatch(block: string, selector: string) {
+	const match = elementPattern(selector).exec(block);
+	return match ? { open: match.groups?.open ?? '', body: match.groups?.body ?? '' } : null;
+}
+function entity(code: string, radix: number) {
+	try {
+		return String.fromCodePoint(parseInt(code, radix));
+	} catch {
+		return '';
+	}
+}
+function text(value: string) {
+	return decode(value)
+		.replace(/&#x([0-9a-f]+);/gi, (_, code: string) => entity(code, 16))
+		.replace(/&#(\d+);/g, (_, code: string) => entity(code, 10))
+		.replace(/&nbsp;/gi, ' ')
+		.replace(/<[^>]+>/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+function anchorFromTag(openTag: string, inner: string) {
+	const href = openTag.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+	return href ? { url: decode(href[1]), title: text(inner) } : null;
+}
+function anchorOf(block: string) {
+	const match = block.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+	return match ? anchorFromTag(match[1], match[2]) : null;
+}
+export function parseHotHtml(html: string, config: HtmlParserConfig = {}) {
+	const itemSelector = (config.itemSelector ?? '').trim();
+	if (!itemSelector) throw new HotNewsError('请先配置 HTML 条目选择器。');
+	const base = (config.baseUrl ?? '').trim();
+	const items: HotItem[] = [];
+	for (const match of html.matchAll(elementPattern(itemSelector))) {
+		if (items.length >= 100) break;
+		const block = match.groups?.body ?? '';
+		const scoped = config.titleSelector ? elementMatch(block, config.titleSelector) : null;
+		const anchor =
+			(scoped ? anchorFromTag(scoped.open, scoped.body) : null) ??
+			anchorOf(scoped?.body ?? '') ??
+			anchorOf(block);
+		const title = anchor?.title || text(scoped?.body ?? '') || text(block);
+		let url = anchor?.url ?? '';
+		if (url && base) {
+			try {
+				url = new URL(url, base).toString();
+			} catch {
+				// keep the raw href when the configured base URL cannot be parsed
+			}
+		}
+		const hot = config.hotSelector ? elementMatch(block, config.hotSelector)?.body : null;
+		const item = safeItem(
+			title,
+			url,
+			hot === null || hot === undefined ? null : text(hot),
+			items.length + 1
+		);
+		if (item) items.push(item);
+	}
+	if (!items.length) throw new HotNewsError('HTML 页面未解析到有效条目。');
+	return items.map((item, index) => ({ ...item, rank: index + 1 }));
+}
 export async function refreshHotSource(
 	database: Database,
 	id: number,
@@ -232,7 +315,9 @@ export async function refreshHotSource(
 		const items =
 			row.type === 'json'
 				? parseHotJson(JSON.parse(body), JSON.parse(row.parser_json))
-				: parseHotRss(body);
+				: row.type === 'html'
+					? parseHotHtml(body, JSON.parse(row.parser_json))
+					: parseHotRss(body);
 		if (!items.length) throw new HotNewsError('热榜没有有效条目。');
 		const currentLease = (
 			await database

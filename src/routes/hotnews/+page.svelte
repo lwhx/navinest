@@ -74,7 +74,13 @@
 						<div class="hot-board-brand">
 							<span>{source.icon}</span>
 							<div>
-								<p>{source.type === 'rss' ? 'RSSHUB / RSS' : 'JSON API'}</p>
+								<p>
+									{source.type === 'rss'
+										? 'RSSHUB / RSS'
+										: source.type === 'html'
+											? '网页抓取'
+											: 'JSON API'}
+								</p>
 								<h2>{source.name}</h2>
 								{#if source.description}<small>{source.description}</small>{/if}
 							</div>

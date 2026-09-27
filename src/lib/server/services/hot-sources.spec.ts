@@ -90,4 +90,75 @@ describe('hot source validation', () => {
 			}
 		});
 	});
+	it('accepts an HTML board and requires its item selector', () => {
+		expect(
+			validateHotSourceInput({
+				name: '网页热榜',
+				slug: 'web-hot',
+				type: 'html',
+				url: 'https://example.com/hot',
+				headersJson: '{}',
+				parserJson:
+					'{"itemSelector":"li.hot-item","titleSelector":"a.title","hotSelector":".num","baseUrl":"https://example.com/hot"}',
+				cacheTtl: '900',
+				isEnabled: 'on'
+			})
+		).toMatchObject({
+			valid: true,
+			data: {
+				type: 'html',
+				parser: {
+					itemSelector: 'li.hot-item',
+					titleSelector: 'a.title',
+					hotSelector: '.num',
+					baseUrl: 'https://example.com/hot'
+				}
+			}
+		});
+		expect(
+			validateHotSourceInput({
+				name: '网页热榜',
+				slug: 'web-hot',
+				type: 'html',
+				url: 'https://example.com/hot',
+				headersJson: '{}',
+				parserJson: '{"titleSelector":"a"}',
+				cacheTtl: '900'
+			})
+		).toMatchObject({ valid: false, errors: { parserJson: 'HTML 榜单必须配置 itemSelector。' } });
+	});
+	it('rejects JSON parser fields on an HTML board and the reverse', () => {
+		expect(
+			validateHotSourceInput({
+				name: '网页热榜',
+				type: 'html',
+				url: 'https://example.com/hot',
+				headersJson: '{}',
+				parserJson: '{"itemSelector":"li","itemsPath":"data"}',
+				cacheTtl: '900'
+			})
+		).toMatchObject({ valid: false, errors: { parserJson: expect.any(String) } });
+		expect(
+			validateHotSourceInput({
+				name: 'JSON 榜',
+				type: 'json',
+				url: 'https://example.com/hot.json',
+				headersJson: '{}',
+				parserJson: '{"itemSelector":"li"}',
+				cacheTtl: '900'
+			})
+		).toMatchObject({ valid: false, errors: { parserJson: expect.any(String) } });
+	});
+	it('rejects unknown subscription types', () => {
+		expect(
+			validateHotSourceInput({
+				name: '未知',
+				type: 'xml',
+				url: 'https://example.com/hot',
+				headersJson: '{}',
+				parserJson: '{}',
+				cacheTtl: '900'
+			})
+		).toMatchObject({ valid: false, errors: { type: '类型必须是 JSON、RSS 或 HTML。' } });
+	});
 });
