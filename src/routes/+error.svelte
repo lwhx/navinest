@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { appConfig } from '$lib/config';
+	import { useSiteSettings } from '$lib/site-context';
+	import { siteDisplayName } from '$lib/types/site';
 
 	let notFound = $derived(page.status === 404);
+	const site = useSiteSettings();
+	const displayName = $derived(siteDisplayName(site()));
 </script>
 
 <svelte:head>
-	<title>{page.status} | {appConfig.displayName}</title>
+	<title>{page.status} | {displayName}</title>
 	<meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 

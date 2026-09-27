@@ -23,6 +23,7 @@
 		{ href: resolve('/admin/ai-providers'), label: 'AI 服务' },
 		{ href: resolve('/admin/home-modules'), label: '首页模块' },
 		{ href: resolve('/admin/search-engines'), label: '搜索源' },
+		{ href: resolve('/admin/settings'), label: '设置' },
 		{ href: resolve('/admin/hot-sources'), label: '热榜源' },
 		{ href: resolve('/admin/cron-runs'), label: '定时任务' },
 		{ href: resolve('/admin/import-export'), label: '导入导出' },

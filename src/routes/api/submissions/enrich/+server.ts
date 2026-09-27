@@ -12,11 +12,14 @@ import {
 } from '$lib/server/services/web-enrichment';
 import { AiRateLimitError, finalizeAiUsage, reserveAiUsage } from '$lib/server/services/ai-usage';
 import { listCategories } from '$lib/server/services/categories';
+import { loadSiteSettings } from '$lib/server/services/site-settings';
 import type { ContentType } from '$lib/types/content';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.user) return json({ error: '请先登录后再使用网页智能填充。' }, { status: 401 });
+	if (!(await loadSiteSettings(requireDatabase(platform))).submissionsOpen)
+		return json({ error: '投稿通道已关闭。' }, { status: 403 });
 	const database = requireDatabase(platform);
 	let providerId: number | null = null,
 		reservationToken: string | null = null;
