@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
 import {
+	parseHotHtml,
 	parseHotJson,
 	parseHotRss,
 	refreshEnabledHotSources,
@@ -242,5 +243,105 @@ describe('hot source refresh', () => {
 			{ ok: true, sourceId: 1, skipped: true },
 			{ ok: true, sourceId: 2, count: 1 }
 		]);
+	});
+	it('refreshes an HTML source into hot_items', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			`INSERT INTO hot_sources(id,name,type,url,parser_json,cache_ttl,is_enabled) VALUES(3,'HTML','html','https://example.com/hot','{"itemSelector":"li.hot-item","hotSelector":".num","baseUrl":"https://example.com/hot"}',900,1)`
+		);
+		const result = await refreshHotSource(
+			database,
+			3,
+			async () =>
+				new Response(
+					'<ul><li class="hot-item"><a href="/topic/1">头条 <em>事件</em></a><span class="num">3.2万</span></li></ul>'
+				),
+			publicDns
+		);
+		expect(result).toEqual({ sourceId: 3, count: 1 });
+		expect(
+			sqlite.prepare('SELECT rank,title,url,hot_value FROM hot_items WHERE source_id=3').all()
+		).toMatchObject([
+			{ rank: 1, title: '头条 事件', url: 'https://example.com/topic/1', hot_value: '3.2万' }
+		]);
+	});
+});
+
+describe('hot html parsing', () => {
+	const page = `<div class="wrap"><ul class="hot-list">
+		<li class="hot-item"><a href="/topic/1" class="title">话题一 &amp; 事件</a><span class="num">1.2万</span></li>
+		<li class="hot-item"><span class="num">9千</span><a href="https://example.com/topic/2">话题二</a></li>
+		<li class="hot-item"><a href="javascript:alert(1)">坏链接</a></li>
+		<li class="hot-item"><a href="http://127.0.0.1/topic/4">内网目标</a></li>
+		<li class="hot-item"><a href="/topic/5">重复 &nbsp;  空白</a></li>
+	</ul></div>`;
+
+	it('extracts items from class selectors with relative links and hot values', () => {
+		expect(
+			parseHotHtml(page, {
+				itemSelector: 'li.hot-item',
+				hotSelector: '.num',
+				baseUrl: 'https://news.example.com/hot'
+			})
+		).toEqual([
+			{
+				rank: 1,
+				title: '话题一 & 事件',
+				url: 'https://news.example.com/topic/1',
+				hotValue: '1.2万',
+				extra: {}
+			},
+			{
+				rank: 2,
+				title: '话题二',
+				url: 'https://example.com/topic/2',
+				hotValue: '9千',
+				extra: {}
+			},
+			{
+				rank: 3,
+				title: '重复 空白',
+				url: 'https://news.example.com/topic/5',
+				hotValue: null,
+				extra: {}
+			}
+		]);
+	});
+	it('supports classless class selectors and bare tag selectors', () => {
+		const rows = `<div class="row"><a href="https://example.com/a">A</a></div><div class="row"><a href="https://example.com/b">B</a></div>`;
+		expect(parseHotHtml(rows, { itemSelector: '.row' }).map((item) => item.title)).toEqual([
+			'A',
+			'B'
+		]);
+		expect(
+			parseHotHtml('<span><a href="https://example.com/c">C</a></span>', {
+				itemSelector: 'span'
+			})
+		).toMatchObject([{ rank: 1, title: 'C', url: 'https://example.com/c' }]);
+	});
+	it('honours a title selector that points at the anchor', () => {
+		const html = `<li class="row"><a class="nav" href="https://example.com/nav">导航</a><a class="topic" href="https://example.com/topic">真题</a></li>`;
+		expect(parseHotHtml(html, { itemSelector: 'li.row', titleSelector: 'a.topic' })).toMatchObject([
+			{ title: '真题', url: 'https://example.com/topic' }
+		]);
+	});
+	it('drops items without a usable link and rejects unusable input', () => {
+		expect(() =>
+			parseHotHtml('<li class="row">没有链接的条目</li>', { itemSelector: 'li.row' })
+		).toThrow('HTML 页面未解析到有效条目。');
+		expect(() => parseHotHtml(page)).toThrow('请先配置 HTML 条目选择器。');
+		expect(() => parseHotHtml(page, { itemSelector: 'li[' })).toThrow('HTML 选择器格式无效');
+		expect(() => parseHotHtml('<p>没有条目</p>', { itemSelector: 'li.row' })).toThrow(
+			'HTML 页面未解析到有效条目。'
+		);
+	});
+	it('caps the parsed list at 100 entries', () => {
+		const many = Array.from(
+			{ length: 130 },
+			(_, index) => `<li class="row"><a href="https://example.com/${index}">第${index}条</a></li>`
+		).join('');
+		const items = parseHotHtml(many, { itemSelector: 'li.row' });
+		expect(items).toHaveLength(100);
+		expect(items.at(-1)).toMatchObject({ rank: 100, url: 'https://example.com/99' });
 	});
 });

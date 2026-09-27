@@ -701,15 +701,23 @@ http://127.0.0.1:5173
 - 公开分享页同样加入搜索框与匹配计数，结果为空时提示无匹配项。
 - 新增 4 个 `navigation-filter` 单测 + 产品化断言（搜索框与 `filterLinks` 接线）。
 
+## HTML 热榜抓取（2026-09-27）
+
+- `hot_sources.type` 新增 `html`：无需自建 RSSHub 路由即可直接抓取网页榜单。
+- 新增 `parseHotHtml`：支持 `itemSelector`（必填，`tag` / `.class` / `tag.class`）、`titleSelector`（可指向标题锚点，直接取其 href 与文本）、`hotSelector`（热度值）与 `baseUrl`（补全相对链接）；统一清洗 HTML 实体、数字实体、`&nbsp;` 与多余空白；100 条上限；无有效链接的条目直接丢弃；未匹配到任何条目时报「HTML 页面未解析到有效条目」。
+- 校验层按类型白名单校验解析配置：HTML 只接受 itemSelector/titleSelector/hotSelector/baseUrl（baseUrl 最长 200 字符）并强制要求 itemSelector，JSON 与 HTML 的字段互不通用。
+- 刷新管线按类型分派（json / html / rss）；失败仍只写 `last_error` 并保留上一份快照。
+- 后台榜单表单新增「HTML 页面抓取」类型与解析配置提示，前台榜单卡片显示「网页抓取」。
+- 新增 6 个 HTML 解析/刷新测试、3 个类型校验测试与 1 条产品化断言。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
-1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置。
-2. 可选产品增强：HTML热榜抓取。
-3. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
-4. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。
-5. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
+1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置、个人自定义导航（导入/搜索/排序/公开分享页）、HTML 热榜抓取。
+2. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
+3. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。
+4. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
 
 ## 长期维护
 

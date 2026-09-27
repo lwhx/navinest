@@ -3,7 +3,7 @@ import { validateExternalTarget } from '$lib/server/safe-target';
 
 export type HotSourceInput = {
 	name: string;
-	type: 'json' | 'rss';
+	type: 'json' | 'rss' | 'html';
 	url: string;
 	headers: Record<string, string>;
 	parser: Record<string, string>;
@@ -57,8 +57,15 @@ export function validateHotSourceInput(
 	}
 	const accentColor = color(input.accentColor, '#e5484d', 'accentColor'),
 		surfaceColor = color(input.surfaceColor, '#fff7f7', 'surfaceColor');
-	const type = input.type === 'rss' ? 'rss' : input.type === 'json' ? 'json' : null;
-	if (!type) errors.type = '类型必须是 JSON 或 RSS。';
+	const type =
+		input.type === 'rss'
+			? 'rss'
+			: input.type === 'json'
+				? 'json'
+				: input.type === 'html'
+					? 'html'
+					: null;
+	if (!type) errors.type = '类型必须是 JSON、RSS 或 HTML。';
 	const url = typeof input.url === 'string' ? input.url.trim() : '';
 	const target = validateExternalTarget(url);
 	if (!target.valid) errors.url = '请输入有效的公网 HTTP/HTTPS 地址。';
@@ -78,17 +85,26 @@ export function validateHotSourceInput(
 	}
 	const rawParser = objectJson(input.parserJson, 'parserJson', errors),
 		parser: Record<string, string> = {};
+	const parserKeys =
+		type === 'html'
+			? ['itemSelector', 'titleSelector', 'hotSelector', 'baseUrl']
+			: ['itemsPath', 'titleField', 'urlField', 'hotField'];
 	for (const [key, value] of Object.entries(rawParser)) {
 		if (
-			!['itemsPath', 'titleField', 'urlField', 'hotField'].includes(key) ||
+			!parserKeys.includes(key) ||
 			typeof value !== 'string' ||
-			value.length > 100
+			value.length > (key === 'baseUrl' ? 200 : 100)
 		) {
-			errors.parserJson = '解析配置字段无效。';
+			errors.parserJson =
+				type === 'html'
+					? 'HTML 解析配置仅支持 itemSelector、titleSelector、hotSelector 与 baseUrl。'
+					: '解析配置字段无效。';
 			break;
 		}
 		if (value) parser[key] = value;
 	}
+	if (type === 'html' && !parser.itemSelector)
+		errors.parserJson = 'HTML 榜单必须配置 itemSelector。';
 	const cacheTtl = Number(input.cacheTtl ?? 900);
 	if (!Number.isInteger(cacheTtl) || cacheTtl < 60 || cacheTtl > 86400)
 		errors.cacheTtl = '缓存时间必须为 60 到 86400 秒。';

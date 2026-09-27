@@ -113,6 +113,8 @@
 									>RSSHub / RSS / Atom</option
 								><option value="json" selected={val('type', data.editing?.type) === 'json'}
 									>自定义 JSON API</option
+								><option value="html" selected={val('type', data.editing?.type) === 'html'}
+									>HTML 页面抓取</option
 								></select
 							></label
 						>
@@ -127,7 +129,7 @@
 								>{/if}</label
 						>
 						<label class="admin-field-wide"
-							><span>RSSHub / RSS / API 公网URL</span><input
+							><span>RSSHub / RSS / API / 页面 公网URL</span><input
 								name="url"
 								type="url"
 								required
@@ -139,7 +141,7 @@
 							></label
 						>
 						<details class="admin-field-wide advanced-config">
-							<summary>高级请求与JSON解析配置</summary><label
+							<summary>高级请求与解析配置</summary><label
 								><span>请求头JSON（禁止凭据）</span><textarea name="headersJson"
 									>{val(
 										'headersJson',
@@ -148,13 +150,16 @@
 								>{#if errors.headersJson}<small class="field-error">{errors.headersJson}</small
 									>{/if}</label
 							><label
-								><span>JSON解析配置</span><textarea name="parserJson"
+								><span>解析配置（JSON / HTML）</span><textarea name="parserJson"
 									>{val(
 										'parserJson',
 										JSON.stringify(data.editing?.parser ?? {}, null, 2)
 									)}</textarea
 								>{#if errors.parserJson}<small class="field-error">{errors.parserJson}</small
-									>{/if}</label
+									>{/if}<small
+									>JSON：itemsPath / titleField / urlField / hotField；HTML：itemSelector（必填，如
+									li.hot-item）/ titleSelector / hotSelector / baseUrl。</small
+								></label
 							>
 						</details>
 					</div>
@@ -253,7 +258,11 @@
 				<span>{source.icon}</span>
 				<div>
 					<strong>{source.name}</strong><small
-						>{source.type === 'rss' ? 'RSSHUB / RSS / ATOM' : 'JSON API'} · 排序 {source.sortOrder}</small
+						>{source.type === 'rss'
+							? 'RSSHUB / RSS / ATOM'
+							: source.type === 'html'
+								? 'HTML 页面'
+								: 'JSON API'} · 排序 {source.sortOrder}</small
 					>
 				</div>
 				<em>{source.isEnabled ? '启用' : '停用'}</em>
