@@ -27,7 +27,8 @@ function cleanError(error: unknown) {
 	const message = error instanceof Error ? error.message : String(error);
 	return message.replace(/[\r\n\t]+/g, ' ').slice(0, 500);
 }
-async function alertAdmins(
+/** Alerts every active administrator with an in-app message. */
+export async function alertActiveAdmins(
 	database: Database,
 	title: string,
 	content: string,
@@ -99,7 +100,7 @@ export async function executeMonitoredHotnewsCron(
 				database,
 				options.staleAfterHours ?? DEFAULT_STALE_HOURS
 			);
-			await alertAdmins(
+			await alertActiveAdmins(
 				database,
 				'热榜定时刷新异常',
 				`${failed} 个热榜源刷新失败，请在后台定时任务页面查看详情。${staleSources.length ? `当前有 ${staleSources.length} 个榜单长时间未成功更新。` : ''}`,
@@ -143,7 +144,7 @@ export async function executeMonitoredHotnewsCron(
 			)
 			.bind(message, inserted.id)
 			.all();
-		await alertAdmins(
+		await alertActiveAdmins(
 			database,
 			'热榜定时任务失败',
 			'热榜定时任务未能完成，请在后台定时任务页面查看详情。',

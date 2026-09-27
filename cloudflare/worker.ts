@@ -1,6 +1,6 @@
 import svelteWorker from '../.svelte-kit/cloudflare/_worker.js';
-import { refreshEnabledHotSources } from '../src/lib/server/services/hotnews';
-import { executeMonitoredHotnewsCron } from '../src/lib/server/services/cron-health';
+import { runScheduledJob } from '../src/lib/server/services/scheduled-jobs';
+import type { BackupBucket } from '../src/lib/server/services/scheduled-backup';
 
 export default {
 	fetch(request: Request, env: Env, context: ExecutionContext) {
@@ -8,27 +8,20 @@ export default {
 	},
 	scheduled(controller: ScheduledController, env: Env, context: ExecutionContext) {
 		console.log({
-			event: 'hotnews.cron.started',
+			event: 'cron.started',
 			cron: controller.cron,
 			scheduledTime: new Date(controller.scheduledTime).toISOString()
 		});
 		context.waitUntil(
-			executeMonitoredHotnewsCron(
-				env.DB,
-				controller.cron,
-				controller.scheduledTime,
-				() => refreshEnabledHotSources(env.DB),
-				{ alertWebhookUrl: env.ALERT_WEBHOOK_URL }
-			).then((run) => {
+			runScheduledJob(env.DB, controller.cron, controller.scheduledTime, {
+				bucket: env.FILES as unknown as BackupBucket | undefined,
+				alertWebhookUrl: env.ALERT_WEBHOOK_URL
+			}).then((result) => {
 				console.log({
-					event: 'hotnews.cron.completed',
+					event: 'cron.completed',
 					cron: controller.cron,
-					run
+					result
 				});
-				for (const result of run.results) {
-					if (!result.ok)
-						console.error(`Hot source ${result.sourceId} refresh failed: ${result.error}`);
-				}
 			})
 		);
 	}

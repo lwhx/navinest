@@ -718,13 +718,22 @@ http://127.0.0.1:5173
 - `cloudflare/worker.ts` 定时任务把 `env.ALERT_WEBHOOK_URL` 透传给 `executeMonitoredHotnewsCron`；`Env` 类型与 `.env.example` 同步（可选变量）。部署后可用 `npx wrangler secret put ALERT_WEBHOOK_URL` 或 `vars` 配置。
 - 新增 13 个测试（四种接收方载荷适配、非法地址零请求、HTTP 与网络失败降级为 `ok:false`、失败+停滞合并上报、仅停滞时告警、全部新鲜时静默、webhook 完全不可用不影响 run 结果）。
 
+## 定时备份（2026-09-27）
+
+- 新增第二个 cron 触发 `0 19 * * *`（北京时间 03:00），`wrangler.jsonc` 的 `crons` 已同步。
+- 新增 `src/lib/server/services/scheduled-backup.ts`：`runScheduledBackup` 把站点快照写入 R2（`FILES` 绑定的 `backups/navinest-YYYY-MM-DD.json`），并保留最新 14 份（`DEFAULT_BACKUP_RETENTION`；只清理 `backups/` 下的 `*.json`，不动其他对象）；另提供 `listScheduledBackups` 与 `readScheduledBackup`（严格限制前缀与 `.json` 后缀）。
+- 新增 `src/lib/server/services/scheduled-jobs.ts`：按 cron 表达式分派任务（热榜 / 备份），未知表达式只返回 `unknown` 不报错；备份失败会先写站内管理员告警、推送外部 webhook，再抛出。
+- `cloudflare/worker.ts` 改为调用 `runScheduledJob`，日志事件统一为 `cron.started` / `cron.completed`。
+- 后台「导入导出」页新增「定时备份」区块：列出已存快照（文件名、大小、时间）并可下载；新增 `GET /api/admin/backup/scheduled`（无参数为列表，带 `?key=` 为单文件下载，仅接受备份前缀）。
+- 新增 11 个测试（键名、保留窗口与清理顺序、retention=1、缺 bucket 报错、列表过滤与排序、读取边界、三类分派结果、失败告警链路）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
 1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置、个人自定义导航（导入/搜索/排序/公开分享页）、HTML 热榜抓取。
 2. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
-3. 运维增强：备份定时化、辅助Cron和更严格的nonce CSP。
+3. 运维增强：辅助Cron和更严格的nonce CSP。
 4. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
 
 ## 长期维护
