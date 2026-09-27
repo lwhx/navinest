@@ -679,12 +679,20 @@ http://127.0.0.1:5173
 - 新增 `POST /api/user/navigation/import`；组件导入成功后通过 sessionStorage 回显统计并刷新列表。
 - 新增 9 个服务层测试（嵌套文件夹与实体解码、不安全目标过滤、空/超大/无链接文件拒绝、超量截断、分类复用与排序延续、去重与用户隔离）。
 
+## 公开分享页（2026-09-27）
+
+- 新增 `migrations/0019_user_share_pages.sql`：`users` 增加 `share_slug`、`share_enabled`，并建立部分唯一索引（slug 唯一但允许为空）。
+- 新增 `/u/[slug]` 公开分享页：按分类分组展示该用户状态为「启用」的自定义链接（空分类自动隐藏，未分类归入独立分组），复用 `PublicShell` 与站点设置里的品牌信息，外链统一走 `/go?url=`。
+- 新增 `src/lib/server/services/share-pages.ts`：`validateShareSlug`（3–30 位小写字母、数字或连字符，保留词拦截）、`getShareSettings`、`saveShareSettings`（slug 冲突返回 409；留空则沿用原 slug）、`loadPublicShare`（仅在开关开启且账号为启用状态时返回，只输出启用链接与总数）。
+- 账号安全中心新增「公开分享页」卡片：填写分享地址、开关对外展示、保存后回显 `/u/<slug>`；对应 `GET/PATCH /api/user/share`。
+- 新增 8 个服务层测试（slug 归一化与保留词、开启/关闭与保留 slug、冲突 409、停用账号与未开启返回空、只暴露启用链接与分组结构）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
 1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置。
-2. 可选产品增强：自定义导航拖拽、自定义链接搜索、公开分享页、HTML热榜抓取。
+2. 可选产品增强：自定义导航拖拽、自定义链接搜索、HTML热榜抓取。
 3. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
 4. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。
 5. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。

@@ -32,10 +32,41 @@
 		deactivateError = $state(''),
 		deactivateBusy = $state(false);
 
+	let shareSlug = $state(''),
+		shareEnabled = $state(false),
+		shareMessage = $state(''),
+		shareError = $state(''),
+		shareBusy = $state(false);
+
 	onMount(() => {
 		sessions = data.sessions;
 		github = data.github;
+		shareSlug = data.share.slug;
+		shareEnabled = data.share.enabled;
 	});
+
+	async function saveShare(event: SubmitEvent) {
+		event.preventDefault();
+		shareBusy = true;
+		shareMessage = '';
+		shareError = '';
+		const { response, body } = await send('/api/user/share', {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ slug: shareSlug, enabled: shareEnabled })
+		});
+		shareBusy = false;
+		if (!response.ok) {
+			shareError = String(body.error ?? '保存分享设置失败，请稍后重试。');
+			return;
+		}
+		const saved = body.data as { slug: string; enabled: boolean };
+		shareSlug = saved.slug;
+		shareEnabled = saved.enabled;
+		shareMessage = saved.enabled
+			? `分享页已开启：/u/${saved.slug}`
+			: '分享设置已保存，当前未对外展示。';
+	}
 
 	function deviceLabel(agent: string | null) {
 		if (!agent) return '未知设备';
@@ -274,6 +305,42 @@
 				</p>{/if}
 		</section>
 	</div>
+
+	<section class="account-card" aria-labelledby="share-title">
+		<div class="account-card-header">
+			<div>
+				<h2 id="share-title">公开分享页</h2>
+				<p>开启后可以用 /u/你的地址 对外分享自定义导航，只展示状态为“启用”的链接。</p>
+			</div>
+			<span class="account-status {shareEnabled ? 'published' : ''}"
+				>{shareEnabled ? '已公开' : '未公开'}</span
+			>
+		</div>
+		{#if shareMessage}<p class="account-note" role="status">{shareMessage}</p>{/if}
+		{#if shareError}<p class="account-note danger-note" role="alert">{shareError}</p>{/if}
+		<form class="account-form" onsubmit={saveShare}>
+			<label class="account-wide"
+				><span>分享地址</span><input
+					bind:value={shareSlug}
+					maxlength="30"
+					placeholder="例如 my-links"
+					autocomplete="off"
+				/>
+				<small class="account-muted"
+					>3–30 位小写字母、数字或连字符；开启后可访问 /u/{shareSlug || '你的地址'}。</small
+				></label
+			>
+			<label class="account-wide share-toggle"
+				><input type="checkbox" bind:checked={shareEnabled} /><span>允许任何人访问该分享页</span
+				></label
+			>
+			<div class="account-actions">
+				<button class="account-button" type="submit" disabled={shareBusy}
+					>{shareBusy ? '保存中…' : '保存分享设置'}</button
+				>
+			</div>
+		</form>
+	</section>
 
 	<section class="account-card" aria-labelledby="sessions-title">
 		<div class="account-card-header">
