@@ -132,7 +132,8 @@ export class GitHubRegistrationDisabledError extends Error {
 export async function loginWithGitHub(
 	database: Database,
 	profile: NormalizedGitHubProfile,
-	allowAutoProvision = false
+	allowAutoProvision = false,
+	context: { userAgent?: string | null; ipAddress?: string | null } = {}
 ) {
 	let user = (
 		await database
@@ -170,7 +171,10 @@ export async function loginWithGitHub(
 		)
 		.bind(user.id, profile.providerUserId, profile.providerUsername)
 		.all();
-	const session = await createUserSession(database, user.id);
+	const session = await createUserSession(database, user.id, {
+		userAgent: context.userAgent ?? null,
+		ipAddress: context.ipAddress ?? null
+	});
 	return {
 		user: {
 			id: user.id,

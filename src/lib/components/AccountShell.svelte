@@ -20,6 +20,7 @@
 		{ label: '个人空间', href: resolve('/user') },
 		{ label: '我的投稿', href: resolve('/user/submissions') },
 		{ label: '站内消息', href: resolve('/user/messages') },
+		{ label: '账号安全', href: resolve('/user/settings') },
 		{ label: '提交内容', href: resolve('/contribute') }
 	];
 </script>

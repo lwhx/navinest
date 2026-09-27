@@ -15,7 +15,7 @@ function oauthFixture() {
 	sqlite.exec(`
 CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE,username TEXT UNIQUE,display_name TEXT,role TEXT,status TEXT,last_login_at TEXT);
 CREATE TABLE oauth_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,provider TEXT,provider_user_id TEXT,provider_username TEXT,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(provider,provider_user_id));
-CREATE TABLE user_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER,expires_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+CREATE TABLE user_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER,expires_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP,user_agent TEXT,ip_address TEXT);`);
 	const database: Database = {
 		prepare(query) {
 			let values: DatabaseValue[] = [];

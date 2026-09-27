@@ -25,6 +25,7 @@ describe('production smoke specification', () => {
 	it('keeps protected checks anonymous and read only', () => {
 		expect(protectedRoutes).toEqual([
 			{ path: '/user', expected: [302, 303] },
+			{ path: '/user/settings', expected: [302, 303] },
 			{ path: '/admin', expected: [301, 302, 303, 401, 403] }
 		]);
 		const script = readFileSync('scripts/production-smoke.mjs', 'utf8');

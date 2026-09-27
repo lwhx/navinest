@@ -18,7 +18,8 @@ export const actions: Actions = {
 			requireDatabase(platform),
 			identifier,
 			password,
-			getClientAddress()
+			getClientAddress(),
+			{ userAgent: request.headers.get('user-agent') }
 		);
 		if (!result.ok)
 			return fail(result.reason === 'locked' ? 429 : 401, {

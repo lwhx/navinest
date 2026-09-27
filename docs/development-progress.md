@@ -628,11 +628,22 @@ http://127.0.0.1:5173
 - 新增`0016_ai_usage_reservations.sql`；智能获取在外部请求前原子预留额度，成功/失败结算同一审计事件，消除并发绕过。
 - GitHub OAuth默认禁止陌生身份自动开户；已有绑定和邮箱匹配的本地用户仍可登录，只有`ALLOW_GITHUB_AUTO_PROVISION=true`时才允许创建新用户。
 
+## 账号安全中心（2026-09-27）
+
+- 新增 `/user/settings` 账号安全中心：修改密码、登录会话管理、GitHub 解绑和账号停用，复用 `AccountShell`，并在账户子导航新增“账号安全”入口。
+- 新增 `0017_session_metadata.sql`：`user_sessions` 增加 `user_agent`、`ip_address` 与 `(user_id,last_seen_at DESC)` 索引；密码登录和 GitHub 登录在创建会话时写入设备与来源 IP。
+- 会话标识使用不可逆派生值（`sha256('navinest-session:' + token_hash)` 前 16 位），原始 token 与 `token_hash` 都不出服务端；列表只显示未过期会话并标记“当前会话”。
+- `PATCH /api/user/password` 校验当前密码后写入分段 PBKDF2 新哈希，并注销除当前会话外的全部会话（同时清理已过期的历史行）。
+- `GET /api/user/sessions`、`DELETE /api/user/sessions/[id]`、`POST /api/user/sessions/revoke-others` 支持列出、单个注销和批量注销；注销当前会话时前端跳转登录页。
+- `DELETE /api/user/oauth/github` 在没有密码的账号上返回 `409`，避免解绑后无法登录。
+- `POST /api/user/deactivate` 要求当前密码（无密码账号需输入用户名确认），停用前阻止停用最后一个 active 管理员，停用后 `status='disabled'`、清空全部会话、保留数据，可由管理员恢复。
+- 新增 13 个服务层测试（真实 SQLite 覆盖会话隔离、当前会话识别、密码校验、解绑保护和停用保护）；`/user/settings` 已纳入账户子导航断言与匿名只读生产冒烟保护路由。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
-1. 有效但尚未实现：公开注册开关、账号安全中心、后台用户管理、后台消息管理、站点设置页。
+1. 有效但尚未实现：公开注册开关、后台用户管理、后台消息管理、站点设置页。
 2. 可选产品增强：自定义导航拖拽、浏览器书签导入、自定义链接搜索、公开分享页、HTML热榜抓取。
 3. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
 4. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。

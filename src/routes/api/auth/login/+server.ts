@@ -23,7 +23,8 @@ export const POST: RequestHandler = async ({ platform, request, cookies, getClie
 		requireDatabase(platform),
 		identifier,
 		password,
-		getClientAddress()
+		getClientAddress(),
+		{ userAgent: request.headers.get('user-agent') }
 	);
 	if (!result.ok)
 		return json(

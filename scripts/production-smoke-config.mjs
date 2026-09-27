@@ -73,6 +73,7 @@ export const machineRoutes = [
 ];
 export const protectedRoutes = [
 	{ path: '/user', expected: [302, 303] },
+	{ path: '/user/settings', expected: [302, 303] },
 	{ path: '/admin', expected: [301, 302, 303, 401, 403] }
 ];
 export const safeTargets = [

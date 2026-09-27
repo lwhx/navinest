@@ -9,7 +9,13 @@ import {
 } from '$lib/server/github-oauth';
 import { setSessionCookie } from '$lib/server/user-auth';
 import type { RequestHandler } from './$types';
-export const GET: RequestHandler = async ({ platform, cookies, url }) => {
+export const GET: RequestHandler = async ({
+	platform,
+	cookies,
+	url,
+	request,
+	getClientAddress
+}) => {
 	const code = url.searchParams.get('code'),
 		state = url.searchParams.get('state'),
 		stored = cookies.get(OAUTH_STATE_COOKIE);
@@ -30,7 +36,11 @@ export const GET: RequestHandler = async ({ platform, cookies, url }) => {
 		session = await loginWithGitHub(
 			requireDatabase(platform),
 			profile,
-			platform?.env?.ALLOW_GITHUB_AUTO_PROVISION === 'true'
+			platform?.env?.ALLOW_GITHUB_AUTO_PROVISION === 'true',
+			{
+				userAgent: request.headers.get('user-agent'),
+				ipAddress: getClientAddress()
+			}
 		);
 	} catch (error) {
 		if (error instanceof GitHubRegistrationDisabledError)
