@@ -36,13 +36,13 @@
 </script>
 
 <svelte:head
-	><title>{appConfig.displayName}</title><meta
+	><title>{`${data.site.siteName} ${data.site.siteTagline}`}</title><meta
 		name="description"
-		content={appConfig.tagline}
+		content={data.site.siteDescription}
 	/><link rel="canonical" href={appConfig.url} /><meta
 		property="og:title"
-		content={appConfig.displayName}
-	/><meta property="og:description" content={appConfig.tagline} /><meta
+		content={`${data.site.siteName} ${data.site.siteTagline}`}
+	/><meta property="og:description" content={data.site.siteDescription} /><meta
 		property="og:type"
 		content="website"
 	/><meta property="og:url" content={appConfig.url} /></svelte:head

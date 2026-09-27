@@ -655,11 +655,20 @@ http://127.0.0.1:5173
 - 新增管理 API：`GET/POST /api/admin/messages`、`DELETE /api/admin/messages/[batchId]`，与页面 form actions 共用同一服务。
 - 新增 9 个服务层测试（真实 SQLite 覆盖校验、收件人过滤、群发/仅管理员/指定用户三种范围、停用账号 404、批次聚合与已读进度、类型统计、整批撤回与投稿通知不受影响）。
 
+## 站点设置（2026-09-27）
+
+- 新增 `/admin/settings` 与 `GET/PUT /api/admin/settings`：站点标识（名称、副标题、描述）、公告条（开关、内容、站内路径或 http(s) 链接、链接文字）、投稿开关、`sitemap.xml` 开关与 robots.txt 附加规则；设置以单个 `settings` 行（`key='site'`）保存，缺失或损坏时回退到代码默认值。
+- 新增 `src/lib/types/site.ts`（客户端安全类型与默认值）、`src/lib/site-context.ts`（根布局注入 `provideSiteSettings`，组件用 `useSiteSettings()` 读取）和 `src/lib/server/services/site-settings.ts`（读取、归一化、校验、写入）。
+- 真实生效点：根布局输出浏览器标题/`og:site_name` 并按公告内容（关闭后按内容记住）渲染公告条；`PublicShell` 的头部品牌、侧边栏、页脚品牌与描述改读设置；首页 `<title>`/description/og 改读设置；`/error` 标题改读设置。
+- 投稿开关同时约束三处：`/contribute` 页面显示“投稿暂未开放”替代表单，`POST /api/submissions` 与 `POST /api/submissions/enrich` 返回 `403`。
+- SEO 开关：关闭 sitemap 时 `/sitemap.xml` 返回 404 且 robots.txt 不再输出 Sitemap 行；附加规则接在默认 Disallow 列表之后。
+- 新增 11 个服务层测试（真实 SQLite 覆盖默认回退、往返写入与单行 upsert、脏数据与坏 JSON 容忍、归一化截断、校验与不安全链接拒绝）和 5 个接线断言（布局注入、品牌读取、SEO 开关、投稿门禁、后台页面/API/导航存在）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
-1. 有效但尚未实现：公开注册开关、站点设置页。
+1. 有效但尚未实现：公开注册开关。
 2. 可选产品增强：自定义导航拖拽、浏览器书签导入、自定义链接搜索、公开分享页、HTML热榜抓取。
 3. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
 4. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。

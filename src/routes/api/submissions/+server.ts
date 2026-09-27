@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
 import { createSubmission, SubmissionError } from '$lib/server/services/submissions';
+import { loadSiteSettings } from '$lib/server/services/site-settings';
 import type { RequestHandler } from './$types';
 function record(value: unknown): Record<string, unknown> | null {
 	return value && typeof value === 'object' && !Array.isArray(value)
@@ -9,6 +10,8 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
+	if (!(await loadSiteSettings(requireDatabase(platform))).submissionsOpen)
+		return json({ error: '投稿通道已关闭。' }, { status: 403 });
 	try {
 		const body = (await request.json()) as Record<string, unknown>;
 		const web = record(body.webSnapshot),

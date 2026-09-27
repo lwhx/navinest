@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { appConfig } from '$lib/config';
+	import { useSiteSettings } from '$lib/site-context';
 	import './public-shell.css';
 	import './public-content.css';
 	import './public-detail.css';
@@ -9,6 +9,7 @@
 	import './public-rankings.css';
 	let { title, eyebrow, children }: { title: string; eyebrow?: string; children: Snippet } =
 		$props();
+	const site = useSiteSettings();
 	let menuOpen = $state(false);
 	const links = [
 		{ label: '首页', href: resolve('/') },
@@ -27,7 +28,7 @@
 		aria-expanded={menuOpen}
 		aria-controls="public-mobile-drawer"
 		onclick={() => (menuOpen = !menuOpen)}>☰</button
-	><a class="public-logo" href={resolve('/')}><span>N</span><strong>{appConfig.name}</strong></a>
+	><a class="public-logo" href={resolve('/')}><span>N</span><strong>{site().siteName}</strong></a>
 	<nav aria-label="主导航">
 		{#each links as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
 	</nav>
@@ -55,7 +56,9 @@
 	</aside>{/if}
 <main class="public-shell">
 	<aside class="public-sidebar">
-		<div class="public-sidebar-brand"><span>N</span><strong>{appConfig.displayName}</strong></div>
+		<div class="public-sidebar-brand">
+			<span>N</span><strong>{site().siteName} {site().siteTagline}</strong>
+		</div>
 		<nav>
 			{#each links as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
 		</nav>
@@ -67,8 +70,10 @@
 		{#if eyebrow}<p class="public-eyebrow">{eyebrow}</p>{/if}{@render children()}
 		<footer class="public-footer public-footer-grid">
 			<section>
-				<div class="footer-brand"><span>N</span><strong>{appConfig.displayName}</strong></div>
-				<p>{appConfig.tagline}</p>
+				<div class="footer-brand">
+					<span>N</span><strong>{site().siteName} {site().siteTagline}</strong>
+				</div>
+				<p>{site().siteDescription}</p>
 				<small>把常用入口、内容收藏与热点信息整理成安静可靠的起点。</small>
 			</section>
 			<section>
