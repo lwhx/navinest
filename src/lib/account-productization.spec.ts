@@ -48,6 +48,8 @@ describe('account productization', () => {
 		expect(manager).toContain("fetch('/api/user/navigation'");
 		expect(manager).toContain("fetch('/api/user/navigation/import'");
 		expect(manager).toContain("resource: 'order'");
+		expect(manager).toContain('filterLinks');
+		expect(manager).toContain('placeholder="标题、网址、摘要或分类"');
 		for (const label of ['上移分类', '下移分类', '上移链接', '下移链接'])
 			expect(manager).toContain(`aria-label="${label}"`);
 		expect(read('src/routes/user/settings/+page.svelte')).toContain("'/api/user/share'");

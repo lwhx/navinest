@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { filterLinks } from '$lib/navigation-filter';
 	import PublicShell from '$lib/components/PublicShell.svelte';
 	import { siteDisplayName } from '$lib/types/site';
 	import { useSiteSettings } from '$lib/site-context';
@@ -8,6 +9,19 @@
 	let { data }: PageProps = $props();
 	const site = useSiteSettings();
 	const title = $derived(`${data.share.owner.displayName} 的导航`);
+	let query = $state('');
+	const groups = $derived(
+		data.share.groups
+			.map((group) => ({
+				...group,
+				links: filterLinks(
+					group.links.map((link) => ({ ...link, categoryName: group.name })),
+					query
+				)
+			}))
+			.filter((group) => group.links.length > 0)
+	);
+	const matched = $derived(groups.reduce((total, group) => total + group.links.length, 0));
 
 	function host(url: string) {
 		try {
@@ -35,8 +49,15 @@
 			由 @{data.share.owner.username} 分享的 {data.share.total} 个入口，共 {data.share.groups
 				.length} 组。
 		</p>
+		<label class="share-search">
+			<span>搜索</span>
+			<input bind:value={query} type="search" placeholder="标题、网址或分类" />
+		</label>
+		{#if query.trim()}
+			<p class="share-search-result" role="status">匹配 {matched} / {data.share.total} 个入口。</p>
+		{/if}
 	</section>
-	{#each data.share.groups as group (group.id ?? 'uncategorized')}
+	{#each groups as group (group.id ?? 'uncategorized')}
 		<section class="share-group" aria-labelledby={`share-group-${group.id ?? 'none'}`}>
 			<h2 id={`share-group-${group.id ?? 'none'}`}>{group.name ?? '未分类'}</h2>
 			<ul class="share-links">
@@ -58,6 +79,8 @@
 	{/each}
 	{#if !data.share.groups.length}
 		<p class="share-empty">这位用户还没有公开任何入口。</p>
+	{:else if !groups.length}
+		<p class="share-empty">没有匹配「{query.trim()}」的入口。</p>
 	{/if}
 </PublicShell>
 
@@ -73,6 +96,31 @@
 	.share-intro p {
 		margin: 0;
 		color: #7b8087;
+	}
+
+	.share-search {
+		display: grid;
+		gap: 4px;
+		max-width: 320px;
+		margin-top: 12px;
+	}
+
+	.share-search span {
+		color: #6b7078;
+		font-size: 12px;
+	}
+
+	.share-search input {
+		padding: 8px 10px;
+		border: 1px solid #e4e7eb;
+		border-radius: 10px;
+		font-size: 14px;
+	}
+
+	.share-search-result {
+		margin: 6px 0 0;
+		color: #7b8087;
+		font-size: 12px;
 	}
 
 	.share-group {

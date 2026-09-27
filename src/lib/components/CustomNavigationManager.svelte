@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { filterLinks } from '$lib/navigation-filter';
 	let {
 		navigation
 	}: {
@@ -24,7 +25,18 @@
 		linkCategory = $state(''),
 		linkSort = $state(0),
 		importing = $state(false),
+		query = $state(''),
 		message = $state('');
+	const visibleLinks = $derived(
+		filterLinks(
+			navigation.links.map((link) => ({
+				...link,
+				categoryName:
+					navigation.categories.find((category) => category.id === link.categoryId)?.name ?? null
+			})),
+			query
+		)
+	);
 	onMount(() => {
 		const stored = sessionStorage.getItem('navinest-import-result');
 		if (stored) {
@@ -116,11 +128,16 @@
 	function remove(resource: 'category' | 'link', id: number) {
 		return request('DELETE', { resource, id });
 	}
-	function move(kind: 'category' | 'link', index: number, delta: -1 | 1) {
+	function position(kind: 'category' | 'link', id: number) {
+		const list = kind === 'link' ? navigation.links : navigation.categories;
+		return list.findIndex((item) => item.id === id);
+	}
+	function move(kind: 'category' | 'link', id: number, delta: -1 | 1) {
 		const list: Array<{ id: number }> =
 			kind === 'link' ? [...navigation.links] : [...navigation.categories];
+		const index = list.findIndex((item) => item.id === id);
 		const target = index + delta;
-		if (target < 0 || target >= list.length) return;
+		if (index < 0 || target < 0 || target >= list.length) return;
 		[list[index], list[target]] = [list[target], list[index]];
 		return request('PATCH', { resource: 'order', kind, ids: list.map((item) => item.id) });
 	}
@@ -155,7 +172,7 @@
 			type="submit">添加分类</button
 		>
 	</form>
-	{#each navigation.categories as category, index (category.id)}
+	{#each navigation.categories as category (category.id)}
 		<form
 			class="account-form"
 			onsubmit={(event) => {
@@ -170,15 +187,15 @@
 				<button
 					class="account-button secondary"
 					type="button"
-					disabled={index === 0}
+					disabled={position('category', category.id) === 0}
 					aria-label="上移分类"
-					onclick={() => move('category', index, -1)}>↑</button
+					onclick={() => move('category', category.id, -1)}>↑</button
 				><button
 					class="account-button secondary"
 					type="button"
-					disabled={index === navigation.categories.length - 1}
+					disabled={position('category', category.id) === navigation.categories.length - 1}
 					aria-label="下移分类"
-					onclick={() => move('category', index, 1)}>↓</button
+					onclick={() => move('category', category.id, 1)}>↓</button
 				><button class="account-button" type="submit">保存</button><button
 					class="account-button secondary"
 					type="button"
@@ -209,7 +226,18 @@
 			type="submit">添加链接</button
 		>
 	</form>
-	{#each navigation.links as link, index (link.id)}
+	<form class="account-form" onsubmit={(event) => event.preventDefault()}>
+		<h3>搜索链接</h3>
+		<label
+			><span>关键字</span><input
+				bind:value={query}
+				type="search"
+				placeholder="标题、网址、摘要或分类"
+			/></label
+		>
+		<p class="account-muted">匹配 {visibleLinks.length} / {navigation.links.length} 条链接。</p>
+	</form>
+	{#each visibleLinks as link (link.id)}
 		<form
 			class="account-form"
 			onsubmit={(event) => {
@@ -239,15 +267,15 @@
 				<button
 					class="account-button secondary"
 					type="button"
-					disabled={index === 0}
+					disabled={position('link', link.id) === 0}
 					aria-label="上移链接"
-					onclick={() => move('link', index, -1)}>↑</button
+					onclick={() => move('link', link.id, -1)}>↑</button
 				><button
 					class="account-button secondary"
 					type="button"
-					disabled={index === navigation.links.length - 1}
+					disabled={position('link', link.id) === navigation.links.length - 1}
 					aria-label="下移链接"
-					onclick={() => move('link', index, 1)}>↓</button
+					onclick={() => move('link', link.id, 1)}>↓</button
 				><a
 					class="account-button secondary"
 					href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/')}
