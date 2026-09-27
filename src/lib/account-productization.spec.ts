@@ -6,7 +6,13 @@ describe('account productization', () => {
 		const shell = read('src/lib/components/AccountShell.svelte');
 		expect(shell).toContain('<PublicShell');
 		expect(shell).toContain('account-subnav');
-		for (const href of ['/user', '/user/submissions', '/user/messages', '/contribute'])
+		for (const href of [
+			'/user',
+			'/user/submissions',
+			'/user/messages',
+			'/user/settings',
+			'/contribute'
+		])
 			expect(shell).toContain(`resolve('${href}')`);
 	});
 	it('uses the shared shell across account, contribution and authentication pages', () => {
@@ -14,6 +20,7 @@ describe('account productization', () => {
 			'src/routes/user/+page.svelte',
 			'src/routes/user/submissions/+page.svelte',
 			'src/routes/user/messages/+page.svelte',
+			'src/routes/user/settings/+page.svelte',
 			'src/routes/contribute/+page.svelte',
 			'src/routes/login/+page.svelte'
 		])
@@ -24,6 +31,8 @@ describe('account productization', () => {
 		expect(read('src/routes/contribute/+page.svelte')).toContain("fetch('/api/submissions'");
 		expect(read('src/routes/user/submissions/+page.svelte')).toContain('/go?url=');
 		expect(read('src/routes/login/+page.svelte')).toContain('/api/auth/github');
+		expect(read('src/routes/user/settings/+page.svelte')).toContain("'/api/user/password'");
+		expect(read('src/routes/user/settings/+page.svelte')).toContain("'/api/user/sessions'");
 	});
 	it('shows the admin entry only for administrators', () => {
 		const shell = read('src/lib/components/AccountShell.svelte'),

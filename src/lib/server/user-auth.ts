@@ -44,8 +44,9 @@ export async function loginUser(
 	identifier: string,
 	password: string,
 	ip: string,
-	now = new Date()
+	options: { now?: Date; userAgent?: string | null } = {}
 ) {
+	const now = options.now ?? new Date();
 	const key = loginAttemptKey(identifier, ip);
 	const attempt = (
 		await database
@@ -83,19 +84,47 @@ export async function loginUser(
 		.prepare('DELETE FROM login_attempts WHERE attempt_key IN (?, ?)')
 		.bind(loginAttemptKey(user.username, ip), loginAttemptKey(user.email ?? user.username, ip))
 		.all();
-	const session = await createUserSession(database, user.id, now);
+	const session = await createUserSession(database, user.id, {
+		now,
+		userAgent: options.userAgent ?? null,
+		ipAddress: ip
+	});
 	await database
 		.prepare('UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?')
 		.bind(user.id)
 		.all();
 	return { ok: true as const, user: identity(user), ...session };
 }
-export async function createUserSession(database: Database, userId: number, now = new Date()) {
+export type SessionContext = {
+	now?: Date;
+	userAgent?: string | null;
+	ipAddress?: string | null;
+};
+
+function auditField(value: string | null | undefined, limit: number) {
+	const trimmed = typeof value === 'string' ? value.trim() : '';
+	return trimmed ? trimmed.slice(0, limit) : null;
+}
+
+export async function createUserSession(
+	database: Database,
+	userId: number,
+	context: SessionContext = {}
+) {
+	const now = context.now ?? new Date();
 	const token = createSessionToken();
 	const expires = new Date(now.getTime() + SESSION_SECONDS * 1000);
 	await database
-		.prepare('INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)')
-		.bind(await hashSessionToken(token), userId, expires.toISOString())
+		.prepare(
+			'INSERT INTO user_sessions(token_hash,user_id,expires_at,user_agent,ip_address) VALUES(?,?,?,?,?)'
+		)
+		.bind(
+			await hashSessionToken(token),
+			userId,
+			expires.toISOString(),
+			auditField(context.userAgent, 255),
+			auditField(context.ipAddress, 64)
+		)
 		.all();
 	return { token, expires };
 }
