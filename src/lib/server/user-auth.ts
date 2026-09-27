@@ -1,11 +1,21 @@
 import type { Cookies } from '@sveltejs/kit';
 import type { Database } from '$lib/server/db';
 import {
+	createPasswordHash,
 	createSessionToken,
 	hashSessionToken,
 	normalizeLoginIdentifier,
 	verifyPasswordHash
 } from '$lib/server/auth';
+import {
+	displayNameError,
+	emailError,
+	normalizeEmail,
+	normalizeUsername,
+	passwordError,
+	usernameError,
+	type ValidationOutcome
+} from '$lib/server/user-validation';
 
 export const SESSION_COOKIE = 'navinest_session';
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
@@ -157,4 +167,98 @@ export function setSessionCookie(cookies: Cookies, token: string, expires: Date)
 }
 export function clearSessionCookie(cookies: Cookies) {
 	cookies.delete(SESSION_COOKIE, { path: '/' });
+}
+
+export type RegistrationInput = {
+	username: string;
+	displayName: string;
+	email: string | null;
+	password: string;
+};
+
+export class RegistrationError extends Error {
+	constructor(
+		message: string,
+		public readonly field?: 'username' | 'email',
+		public readonly status: 400 | 403 | 409 = 400
+	) {
+		super(message);
+		this.name = 'RegistrationError';
+	}
+}
+
+export function validateRegistrationInput(
+	input: Record<string, unknown>
+): ValidationOutcome<RegistrationInput> {
+	const errors: Record<string, string> = {};
+	const username = normalizeUsername(input.username);
+	const usernameIssue = usernameError(username);
+	if (usernameIssue) errors.username = usernameIssue;
+
+	const displayName = typeof input.displayName === 'string' ? input.displayName.trim() : '';
+	const displayNameIssue = displayNameError(displayName);
+	if (displayNameIssue) errors.displayName = displayNameIssue;
+
+	const email = normalizeEmail(input.email);
+	const emailIssue = emailError(email);
+	if (emailIssue) errors.email = emailIssue;
+
+	const password = typeof input.password === 'string' ? input.password : '';
+	const passwordIssue = passwordError(password, true);
+	if (passwordIssue) errors.password = passwordIssue;
+
+	return Object.keys(errors).length
+		? { valid: false as const, errors }
+		: { valid: true as const, data: { username, displayName, email: email || null, password } };
+}
+
+function registrationUniqueField(error: unknown) {
+	if (!(error instanceof Error) || !/UNIQUE constraint failed/i.test(error.message)) return null;
+	if (/users\.username/i.test(error.message)) return 'username' as const;
+	if (/users\.email/i.test(error.message)) return 'email' as const;
+	return null;
+}
+
+/** Public self-service registration: always creates an active plain user and logs them in. */
+export async function registerUser(
+	database: Database,
+	input: RegistrationInput,
+	context: SessionContext = {}
+) {
+	const passwordHash = await createPasswordHash(input.password);
+	let userId: number;
+	try {
+		const row = (
+			await database
+				.prepare(
+					`INSERT INTO users(email,username,display_name,role,status,password_hash)
+					 VALUES(?,?,?,'user','active',?) RETURNING id`
+				)
+				.bind(input.email, input.username, input.displayName, passwordHash)
+				.all<{ id: number }>()
+		).results[0];
+		if (!row) throw new RegistrationError('注册失败，请稍后再试。');
+		userId = row.id;
+	} catch (error) {
+		const field = registrationUniqueField(error);
+		if (field === 'username') throw new RegistrationError('该用户名已被使用。', 'username', 409);
+		if (field === 'email') throw new RegistrationError('该邮箱已被使用。', 'email', 409);
+		throw error;
+	}
+	const now = context.now ?? new Date();
+	const session = await createUserSession(database, userId, { ...context, now });
+	await database
+		.prepare('UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?')
+		.bind(userId)
+		.all();
+	return {
+		user: {
+			id: userId,
+			email: input.email,
+			username: input.username,
+			displayName: input.displayName,
+			role: 'user'
+		},
+		...session
+	};
 }

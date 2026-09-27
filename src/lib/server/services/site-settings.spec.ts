@@ -116,6 +116,7 @@ describe('site settings validation', () => {
 				announcementLink: '/bulletins/maintenance',
 				announcementLinkLabel: ' 查看 ',
 				submissionsOpen: 'on',
+				registrationOpen: 'on',
 				sitemapEnabled: '',
 				robotsExtra: 'Disallow: /draft'
 			})
@@ -130,9 +131,18 @@ describe('site settings validation', () => {
 				announcementLink: '/bulletins/maintenance',
 				announcementLinkLabel: '查看',
 				submissionsOpen: true,
+				registrationOpen: true,
 				sitemapEnabled: false,
 				robotsExtra: 'Disallow: /draft'
 			}
+		});
+	});
+
+	it('keeps public registration closed unless it is switched on', () => {
+		expect(SITE_SETTINGS_DEFAULTS.registrationOpen).toBe(false);
+		expect(validateSiteSettingsInput({ siteName: 'NaviNest' })).toMatchObject({
+			valid: true,
+			data: { registrationOpen: false }
 		});
 	});
 

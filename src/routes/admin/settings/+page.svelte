@@ -106,9 +106,21 @@
 					checked={checked('submissionsOpen', data.settings.submissionsOpen)}
 				/><span>开放用户投稿</span></label
 			>
+			<label class="checkbox-field"
+				><input
+					type="checkbox"
+					name="registrationOpen"
+					checked={checked('registrationOpen', data.settings.registrationOpen)}
+				/><span>开放公开注册</span></label
+			>
 		</div>
 		<p class="admin-form-hint">
-			关闭后：投稿页显示“投稿暂未开放”，网页智能填充与投稿接口返回 403。已提交的待审核投稿不受影响。
+			关闭投稿后：投稿页显示“投稿暂未开放”，网页智能填充与投稿接口返回
+			403。已提交的待审核投稿不受影响。
+		</p>
+		<p class="admin-form-hint">
+			公开注册默认关闭：关闭时 /register 显示未开放提示、注册接口返回
+			403，登录页不显示注册入口；开启后注册账号一律为普通用户，管理员可在用户管理里调整。
 		</p>
 	</section>
 
