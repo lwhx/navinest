@@ -1,13 +1,21 @@
 import { redirect } from '@sveltejs/kit';
 import { getDatabase } from '$lib/server/db';
 import { listUserSessions } from '$lib/server/services/account-security';
+import { getShareSettings } from '$lib/server/services/share-pages';
 import { SESSION_COOKIE } from '$lib/server/user-auth';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, platform, cookies }) => {
 	if (!locals.user) redirect(303, '/login');
 	const database = getDatabase(platform);
-	if (!database) return { user: locals.user, github: false, hasPassword: false, sessions: [] };
+	if (!database)
+		return {
+			user: locals.user,
+			github: false,
+			hasPassword: false,
+			sessions: [],
+			share: { slug: '', enabled: false }
+		};
 	const account =
 		(
 			await database
@@ -32,6 +40,7 @@ export const load: PageServerLoad = async ({ locals, platform, cookies }) => {
 		user: locals.user,
 		github,
 		hasPassword: Boolean(account?.password_hash),
-		sessions
+		sessions,
+		share: await getShareSettings(database, locals.user.id)
 	};
 };
