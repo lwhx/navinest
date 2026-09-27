@@ -106,6 +106,28 @@ try {
 				`${viewport.name} ${route.path}: HTTP ${response?.status()}`
 			);
 			await assertHeaders(response, route);
+			const policy =
+				(await response.allHeaders())['content-security-policy'] ??
+				response.headers.get('content-security-policy') ??
+				'';
+			const nonce = /'nonce-([A-Za-z0-9_-]+)'/.exec(policy)?.[1];
+			assert(nonce, `${viewport.name} ${route.path}: missing CSP nonce`);
+			assert(
+				!policy.includes("script-src 'self' 'unsafe-inline'"),
+				`${viewport.name} ${route.path}: inline scripts still allowed`
+			);
+			const scripts = await page.evaluate(() => {
+				const nodes = [...document.querySelectorAll('script')];
+				return {
+					total: nodes.length,
+					nonces: [...new Set(nodes.map((node) => node.nonce || node.getAttribute('nonce') || ''))]
+				};
+			});
+			assert(scripts.total > 0, `${viewport.name} ${route.path}: no scripts found`);
+			assert(
+				scripts.nonces.length === 1 && scripts.nonces[0] === nonce,
+				`${viewport.name} ${route.path}: script nonce mismatch ${JSON.stringify(scripts.nonces)}`
+			);
 			const result = await page.evaluate(
 				({ selector }) => ({
 					h1: document.querySelectorAll('h1').length,

@@ -734,14 +734,21 @@ http://127.0.0.1:5173
 - `scheduled-jobs` 新增 `MAINTENANCE_CRON` 分派，返回四类清理计数。
 - 新增 6 个测试（只删过期 Session、保留活跃锁定、cron 历史按窗口裁剪、AI 预留释放且不影响进行中/已完成、自定义窗口与下限保护、维护分派）。
 
+## nonce 级 CSP（2026-09-27）
+
+- `script-src` 去掉 `'unsafe-inline'`，改为按请求下发 nonce：`hooks.server.ts` 生成 nonce（16 字节随机数的 base64url），经 `resolve(event, { transformPageChunk })` 给文档里**每个** script 标签盖章（含 `app.html` 主题内联脚本、SvelteKit 引导脚本、`{@html}` 注入的 JSON-LD），并把带 nonce 的策略写进响应头；`style-src` 仍保留 `'unsafe-inline'`（Svelte 运行时注入样式所需）。
+- `security-headers.ts` 拆出 `createCspNonce` / `contentSecurityPolicy(nonce)` / `requestSecurityHeaders(nonce)` / `withScriptNonce(html, nonce)`，默认（无 nonce）策略保持 `script-src 'self'`。
+- `production-smoke.mjs` 增加断言：响应头必须带 nonce 且不得出现 `script-src 'self' 'unsafe-inline'`，页面上每个 script 的 nonce 必须与响应头一致（部署后跑冒烟即验证）。
+- 验证：本地浏览器（Chrome，Playwright 驱动）跑 `/`、`/hotnews`、`/login` —— 头 nonce 与 DOM 全部 script 一致、无 CSP 违规、无 console 错误、主题内联脚本执行、`/` → `/hotnews` 客户端路由成功；再用 `wrangler dev` 跑构建产物，`/` 200 两个 script 全部盖章、错误页（本地无 D1 导致 /hotnews 500）同样盖章。
+- 新增 5 个测试（nonce 生成与唯一性、策略含 nonce 且不含 unsafe-inline、请求头不削弱共享头、盖章幂等与边界、文档壳仍含主题脚本）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
 1. 核心功能均已具备：公开注册开关、账号安全中心、后台用户/消息/站点设置、个人自定义导航（导入/搜索/排序/公开分享页）、HTML 热榜抓取。
 2. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
-3. 运维增强：更严格的nonce CSP。
-4. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
+3. 仓库治理：私有个人仓库的main保护规则当前为 `Not enforced`；升级GitHub Team/Enterprise后绑定 `verify` 为必需检查。
 
 ## 长期维护
 
