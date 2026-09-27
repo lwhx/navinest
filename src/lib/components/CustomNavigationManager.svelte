@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	let {
 		navigation
@@ -22,7 +23,50 @@
 		linkUrl = $state(''),
 		linkCategory = $state(''),
 		linkSort = $state(0),
+		importing = $state(false),
 		message = $state('');
+	onMount(() => {
+		const stored = sessionStorage.getItem('navinest-import-result');
+		if (stored) {
+			message = stored;
+			sessionStorage.removeItem('navinest-import-result');
+		}
+	});
+	async function importBookmarks(event: SubmitEvent) {
+		event.preventDefault();
+		const input = (event.currentTarget as HTMLFormElement).querySelector(
+			'input[type="file"]'
+		) as HTMLInputElement | null;
+		const file = input?.files?.[0];
+		if (!file) {
+			message = '请选择浏览器导出的书签 HTML 文件。';
+			return;
+		}
+		importing = true;
+		try {
+			const response = await fetch('/api/user/navigation/import', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ html: await file.text() })
+			});
+			const data = await response.json();
+			if (!response.ok) {
+				message = data.error ?? '导入失败，请重试。';
+				return;
+			}
+			sessionStorage.setItem(
+				'navinest-import-result',
+				`导入完成：新增 ${data.imported} 条，跳过重复 ${data.duplicates} 条，忽略无效 ${data.skipped} 条${
+					data.limited ? `，超出上限 ${data.limited} 条未导入` : ''
+				}。`
+			);
+			location.reload();
+		} catch {
+			message = '导入失败，请重试。';
+		} finally {
+			importing = false;
+		}
+	}
 	async function request(method: string, body: Record<string, unknown>) {
 		const response = await fetch('/api/user/navigation', {
 			method,
@@ -77,6 +121,18 @@
 <section class="account-card" aria-labelledby="custom-navigation-title">
 	<h2 id="custom-navigation-title">自定义导航</h2>
 	{#if message}<p class="admin-form-message" role="alert">{message}</p>{/if}
+	<form class="account-form" onsubmit={importBookmarks}>
+		<h3>导入浏览器书签</h3>
+		<p>
+			支持 Chrome、Edge、Firefox、Safari 导出的 HTML
+			书签文件；书签文件夹会成为分类，重复网址会自动跳过，单次最多导入 500 条。
+		</p>
+		<label><span>书签文件</span><input type="file" accept=".html,.htm,text/html" /></label><button
+			class="account-button"
+			type="submit"
+			disabled={importing}>{importing ? '正在导入…' : '导入书签'}</button
+		>
+	</form>
 	<form
 		class="account-form"
 		onsubmit={(event) => {
