@@ -8,6 +8,8 @@ import {
 	deleteCustomCategory,
 	deleteCustomLink,
 	listCustomNavigation,
+	reorderCustomCategories,
+	reorderCustomLinks,
 	updateCustomCategory,
 	updateCustomLink
 } from '$lib/server/services/custom-navigation';
@@ -141,3 +143,98 @@ describe('custom navigation', () => {
 		});
 	});
 });
+
+describe('custom navigation ordering', () => {
+	async function threeLinks(database: Database) {
+		const ids: number[] = [];
+		for (const [index, title] of ['A', 'B', 'C'].entries())
+			ids.push(
+				await createCustomLink(database, 7, {
+					categoryId: null,
+					title,
+					url: `https://example.com/${title.toLowerCase()}`,
+					summary: null,
+					sortOrder: index * 10,
+					status: 'active'
+				})
+			);
+		return ids;
+	}
+
+	it('persists a new order and spaces sort_order by ten', async () => {
+		const { sqlite, database } = fixture();
+		const [a, b, c] = await threeLinks(database);
+		expect(await reorderCustomLinks(database, 7, [c, a, b])).toBe(3);
+		expect(
+			sqlite.prepare('SELECT id,sort_order FROM custom_links ORDER BY sort_order').all()
+		).toEqual([
+			{ id: c, sort_order: 10 },
+			{ id: a, sort_order: 20 },
+			{ id: b, sort_order: 30 }
+		]);
+		const navigation = await listCustomNavigation(database, 7);
+		expect(navigation.links.map((item) => item.id)).toEqual([c, a, b]);
+	});
+
+	it('deduplicates ids and only touches the records it is given', async () => {
+		const { sqlite, database } = fixture();
+		const [a, b, c] = await threeLinks(database);
+		expect(await reorderCustomLinks(database, 7, [b, b, c])).toBe(2);
+		expect(sortOrders(sqlite)).toEqual([
+			{ id: a, sort_order: 0 },
+			{ id: b, sort_order: 10 },
+			{ id: c, sort_order: 20 }
+		]);
+	});
+
+	it('reorders categories without leaking across users', async () => {
+		const { sqlite, database } = fixture();
+		const work = await createCustomCategory(database, 7, {
+			name: 'Work',
+			icon: null,
+			sortOrder: 0
+		});
+		const fun = await createCustomCategory(database, 7, {
+			name: 'Fun',
+			icon: null,
+			sortOrder: 10
+		});
+		const foreign = await createCustomCategory(database, 8, {
+			name: 'Foreign',
+			icon: null,
+			sortOrder: 0
+		});
+		expect(await reorderCustomCategories(database, 7, [fun, work])).toBe(2);
+		expect(
+			sqlite.prepare('SELECT id,sort_order FROM custom_categories ORDER BY sort_order').all()
+		).toEqual([
+			{ id: foreign, sort_order: 0 },
+			{ id: fun, sort_order: 10 },
+			{ id: work, sort_order: 20 }
+		]);
+		await expect(reorderCustomCategories(database, 7, [foreign])).rejects.toMatchObject({
+			status: 404
+		});
+	});
+
+	it('rejects empty, oversized and malformed payloads', async () => {
+		const { database } = fixture();
+		const [a] = await threeLinks(database);
+		await expect(reorderCustomLinks(database, 7, [])).rejects.toBeInstanceOf(CustomNavigationError);
+		await expect(reorderCustomLinks(database, 7, [0, -1, Number.NaN])).rejects.toThrow(
+			'排序列表为空'
+		);
+		await expect(
+			reorderCustomLinks(
+				database,
+				7,
+				Array.from({ length: 501 }, (_, index) => index + 1)
+			)
+		).rejects.toThrow('一次最多调整 500 条记录');
+		expect(await reorderCustomLinks(database, 7, [a])).toBe(1);
+	});
+});
+
+function sortOrders(sqlite: DatabaseSync) {
+	return sqlite.prepare('SELECT id,sort_order FROM custom_links ORDER BY sort_order,id').all();
+}
