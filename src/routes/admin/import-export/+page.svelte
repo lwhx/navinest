@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import type { PageProps } from './$types';
+	let { data }: PageProps = $props();
 	let file = $state<File | null>(null),
 		message = $state(''),
 		restoring = $state(false);
+	function size(bytes: number | null) {
+		if (bytes === null) return '大小未知';
+		return bytes >= 1024 * 1024
+			? `${(bytes / 1024 / 1024).toFixed(2)} MiB`
+			: `${Math.max(1, Math.round(bytes / 1024))} KiB`;
+	}
 	async function restore() {
 		if (!file || restoring) return;
 		if (
@@ -43,6 +51,37 @@
 	</div>
 </section>
 <section class="admin-editor">
+	<div class="admin-editor-header"><h2>定时备份</h2></div>
+	<div class="detail-content">
+		<p>
+			每天 03:00（北京时间）自动把站点快照写入 R2（<code>FILES</code> 绑定的
+			<code>backups/</code> 前缀下），仅保留最新 {data.retention} 份；超过保留份数的旧备份会被自动删除。
+		</p>
+		{#if !data.backups.length}
+			<p>
+				暂无定时备份。首次定时任务执行后，或在 <code>wrangler</code> 配置第二个 cron 触发后即可看到。
+			</p>
+		{:else}
+			<ul class="backup-list">
+				{#each data.backups as backup (backup.key)}
+					<li>
+						<a
+							href={resolve(
+								`/api/admin/backup/scheduled?key=${encodeURIComponent(backup.key)}` as '/api/admin/backup/scheduled'
+							)}>{backup.key.split('/').pop()}</a
+						>
+						<small
+							>{size(backup.size)} · {backup.uploadedAt
+								? new Date(backup.uploadedAt).toLocaleString('zh-CN')
+								: '时间未知'}</small
+						>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</div>
+</section>
+<section class="admin-editor">
 	<div class="admin-editor-header"><h2>恢复 JSON 备份</h2></div>
 	{#if message}<p class="admin-form-message" role="status">{message}</p>{/if}
 	<div class="admin-form">
@@ -63,3 +102,28 @@
 		</div>
 	</div>
 </section>
+
+<style>
+	.backup-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.backup-list li {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 6px 0;
+		border-bottom: 1px solid #e4e7eb;
+	}
+
+	.backup-list a {
+		color: #2563eb;
+		text-decoration: none;
+	}
+
+	.backup-list small {
+		color: #6b7078;
+	}
+</style>
