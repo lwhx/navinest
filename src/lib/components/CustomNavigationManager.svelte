@@ -116,6 +116,14 @@
 	function remove(resource: 'category' | 'link', id: number) {
 		return request('DELETE', { resource, id });
 	}
+	function move(kind: 'category' | 'link', index: number, delta: -1 | 1) {
+		const list: Array<{ id: number }> =
+			kind === 'link' ? [...navigation.links] : [...navigation.categories];
+		const target = index + delta;
+		if (target < 0 || target >= list.length) return;
+		[list[index], list[target]] = [list[target], list[index]];
+		return request('PATCH', { resource: 'order', kind, ids: list.map((item) => item.id) });
+	}
 </script>
 
 <section class="account-card" aria-labelledby="custom-navigation-title">
@@ -147,7 +155,7 @@
 			type="submit">添加分类</button
 		>
 	</form>
-	{#each navigation.categories as category (category.id)}
+	{#each navigation.categories as category, index (category.id)}
 		<form
 			class="account-form"
 			onsubmit={(event) => {
@@ -159,7 +167,19 @@
 				><span>分类名称</span><input bind:value={category.name} maxlength="80" required /></label
 			><label><span>排序</span><input bind:value={category.sortOrder} type="number" /></label>
 			<div class="account-actions">
-				<button class="account-button" type="submit">保存</button><button
+				<button
+					class="account-button secondary"
+					type="button"
+					disabled={index === 0}
+					aria-label="上移分类"
+					onclick={() => move('category', index, -1)}>↑</button
+				><button
+					class="account-button secondary"
+					type="button"
+					disabled={index === navigation.categories.length - 1}
+					aria-label="下移分类"
+					onclick={() => move('category', index, 1)}>↓</button
+				><button class="account-button" type="submit">保存</button><button
 					class="account-button secondary"
 					type="button"
 					onclick={() => remove('category', category.id)}>删除</button
@@ -189,7 +209,7 @@
 			type="submit">添加链接</button
 		>
 	</form>
-	{#each navigation.links as link (link.id)}
+	{#each navigation.links as link, index (link.id)}
 		<form
 			class="account-form"
 			onsubmit={(event) => {
@@ -216,7 +236,19 @@
 				></label
 			>
 			<div class="account-actions">
-				<a
+				<button
+					class="account-button secondary"
+					type="button"
+					disabled={index === 0}
+					aria-label="上移链接"
+					onclick={() => move('link', index, -1)}>↑</button
+				><button
+					class="account-button secondary"
+					type="button"
+					disabled={index === navigation.links.length - 1}
+					aria-label="下移链接"
+					onclick={() => move('link', index, 1)}>↓</button
+				><a
 					class="account-button secondary"
 					href={resolve(`/go?url=${encodeURIComponent(link.url)}` as '/')}
 					target="_blank"

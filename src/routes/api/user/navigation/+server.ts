@@ -6,6 +6,8 @@ import {
 	CustomNavigationError,
 	deleteCustomCategory,
 	deleteCustomLink,
+	reorderCustomCategories,
+	reorderCustomLinks,
 	updateCustomCategory,
 	updateCustomLink
 } from '$lib/server/services/custom-navigation';
@@ -53,10 +55,18 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 export const PATCH: RequestHandler = async ({ locals, platform, request }) => {
 	if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 	try {
-		const body = (await request.json()) as Record<string, unknown>,
-			recordId = id(body.id);
-		if (!recordId) return json({ error: 'Invalid ID' }, { status: 400 });
+		const body = (await request.json()) as Record<string, unknown>;
 		const db = requireDatabase(platform);
+		if (body.resource === 'order') {
+			const ids = Array.isArray(body.ids) ? body.ids.map(Number) : [];
+			const reordered =
+				body.kind === 'category'
+					? await reorderCustomCategories(db, locals.user.id, ids)
+					: await reorderCustomLinks(db, locals.user.id, ids);
+			return json({ reordered });
+		}
+		const recordId = id(body.id);
+		if (!recordId) return json({ error: 'Invalid ID' }, { status: 400 });
 		if (body.resource === 'category')
 			await updateCustomCategory(db, locals.user.id, recordId, category(body));
 		else if (body.resource === 'link')

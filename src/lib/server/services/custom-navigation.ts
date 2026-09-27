@@ -203,3 +203,35 @@ export async function deleteCustomLink(database: Database, userId: number, id: n
 		'链接不存在。'
 	);
 }
+
+type ReorderTable = 'custom_links' | 'custom_categories';
+
+async function applyOrder(database: Database, userId: number, table: ReorderTable, ids: number[]) {
+	const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+	if (!unique.length) throw new CustomNavigationError('排序列表为空。');
+	if (unique.length > 500) throw new CustomNavigationError('一次最多调整 500 条记录。');
+	const owned = new Set(
+		(
+			await database.prepare(`SELECT id FROM ${table} WHERE user_id=?`).bind(userId).all<IdRow>()
+		).results.map((row) => row.id)
+	);
+	if (unique.some((id) => !owned.has(id)))
+		throw new CustomNavigationError('排序列表包含不属于当前用户的记录。', undefined, 404);
+	for (const [index, id] of unique.entries())
+		await database
+			.prepare(
+				`UPDATE ${table} SET sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`
+			)
+			.bind((index + 1) * 10, id, userId)
+			.all();
+	return unique.length;
+}
+
+/** Persists a new ordering for the given records, spacing sort_order by ten. */
+export function reorderCustomLinks(database: Database, userId: number, ids: number[]) {
+	return applyOrder(database, userId, 'custom_links', ids);
+}
+
+export function reorderCustomCategories(database: Database, userId: number, ids: number[]) {
+	return applyOrder(database, userId, 'custom_categories', ids);
+}

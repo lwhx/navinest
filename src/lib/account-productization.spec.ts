@@ -43,4 +43,13 @@ describe('account productization', () => {
 		expect(page).toContain('role={data.user.role}');
 		expect(page).toContain("data.user.role === 'admin'");
 	});
+	it('ships custom navigation ordering and bookmark import controls', () => {
+		const manager = read('src/lib/components/CustomNavigationManager.svelte');
+		expect(manager).toContain("fetch('/api/user/navigation'");
+		expect(manager).toContain("fetch('/api/user/navigation/import'");
+		expect(manager).toContain("resource: 'order'");
+		for (const label of ['上移分类', '下移分类', '上移链接', '下移链接'])
+			expect(manager).toContain(`aria-label="${label}"`);
+		expect(read('src/routes/user/settings/+page.svelte')).toContain("'/api/user/share'");
+	});
 });
