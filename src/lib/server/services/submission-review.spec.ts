@@ -1,14 +1,18 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
-import { reviewSubmission, SubmissionReviewError } from '$lib/server/services/submission-review';
+import {
+	claimSubmissionReview,
+	reviewSubmission,
+	SubmissionReviewError
+} from '$lib/server/services/submission-review';
 
 const connections: DatabaseSync[] = [];
 function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(`
-CREATE TABLE submissions(id INTEGER PRIMARY KEY,user_id INTEGER,target_item_id INTEGER,type TEXT,title TEXT,payload_json TEXT,status TEXT DEFAULT 'pending',reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE submissions(id INTEGER PRIMARY KEY,user_id INTEGER,target_item_id INTEGER,type TEXT,title TEXT,payload_json TEXT,status TEXT DEFAULT 'pending',review_token TEXT,review_started_at TEXT,reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE items(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT,category_id INTEGER,author_id INTEGER,title TEXT,slug TEXT UNIQUE,summary TEXT,content TEXT,icon_file_id INTEGER,cover_file_id INTEGER,status TEXT,visibility TEXT,sort_order INTEGER,is_featured INTEGER,published_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE tags(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT,name TEXT,slug TEXT,description TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
 CREATE TABLE files(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,bucket TEXT,object_key TEXT,mime_type TEXT,size INTEGER);
@@ -113,6 +117,21 @@ describe('submission review', () => {
 		await expect(
 			reviewSubmission(database, 1, 9, { decision: 'reject', message: ' ' })
 		).rejects.toBeInstanceOf(SubmissionReviewError);
+	});
+
+	it('atomically grants one review lease and rejects a concurrent reviewer', async () => {
+		const { database, sqlite } = fixture();
+		await expect(claimSubmissionReview(database, 1, 'first-token')).resolves.toMatchObject({
+			id: 1
+		});
+		await expect(claimSubmissionReview(database, 1, 'second-token')).rejects.toMatchObject({
+			status: 409
+		});
+		expect(sqlite.prepare('SELECT status,review_token FROM submissions WHERE id=1').get()).toEqual({
+			status: 'reviewing',
+			review_token: 'first-token'
+		});
+		expect(sqlite.prepare('SELECT COUNT(*) count FROM items').get()).toEqual({ count: 0 });
 	});
 
 	it('creates selected missing tags, reuses existing names, and links them on publish', async () => {

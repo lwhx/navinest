@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
 import {
 	exchangeGitHubCode,
+	GitHubRegistrationDisabledError,
 	loginWithGitHub,
 	OAUTH_STATE_COOKIE,
 	validateOAuthState
@@ -26,8 +27,14 @@ export const GET: RequestHandler = async ({ platform, cookies, url }) => {
 			code,
 			new URL('/api/auth/github/callback', url.origin).toString()
 		);
-		session = await loginWithGitHub(requireDatabase(platform), profile);
+		session = await loginWithGitHub(
+			requireDatabase(platform),
+			profile,
+			platform?.env?.ALLOW_GITHUB_AUTO_PROVISION === 'true'
+		);
 	} catch (error) {
+		if (error instanceof GitHubRegistrationDisabledError)
+			return new Response('GitHub registration is not open.', { status: 403 });
 		console.error('GitHub OAuth callback failed', error);
 		return new Response('GitHub login failed.', { status: 502 });
 	}

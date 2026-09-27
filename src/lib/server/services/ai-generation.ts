@@ -1,4 +1,8 @@
-import type { WebSnapshot } from '$lib/server/services/web-enrichment';
+import {
+	assertPublicFetchTarget,
+	type WebSnapshot,
+	WebFetchError
+} from '$lib/server/services/web-enrichment';
 
 export type AiProviderRuntimeConfig = {
 	baseUrl: string;
@@ -25,6 +29,64 @@ export class AiGenerationError extends Error {
 		super(message);
 		this.name = 'AiGenerationError';
 	}
+}
+
+type AiRequestOptions = {
+	resolveHost?: (hostname: string) => Promise<string[]>;
+	maxResponseBytes?: number;
+};
+
+async function readLimitedJson(response: Response, maximum: number): Promise<unknown> {
+	const declared = Number(response.headers.get('content-length'));
+	if (Number.isFinite(declared) && declared > maximum)
+		throw new AiGenerationError('AI 服务响应过大。');
+	if (!response.body) throw new AiGenerationError('AI 服务返回了无法解析的响应。');
+	const reader = response.body.getReader(),
+		chunks: Uint8Array[] = [];
+	let size = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (!value) continue;
+		size += value.length;
+		if (size > maximum) {
+			await reader.cancel();
+			throw new AiGenerationError('AI 服务响应过大。');
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(size);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.length;
+	}
+	try {
+		return JSON.parse(new TextDecoder().decode(bytes));
+	} catch {
+		throw new AiGenerationError('AI 服务返回了无法解析的响应。');
+	}
+}
+
+async function postWithSafeRedirects(
+	url: string,
+	init: RequestInit,
+	fetcher: typeof fetch,
+	resolveHost?: (hostname: string) => Promise<string[]>
+) {
+	const originalOrigin = new URL(url).origin;
+	let current = url;
+	for (let redirects = 0; redirects <= 3; redirects++) {
+		current = await assertPublicFetchTarget(current, resolveHost);
+		if (new URL(current).origin !== originalOrigin)
+			throw new AiGenerationError('AI 服务不允许跨站重定向。');
+		const response = await fetcher(current, { ...init, redirect: 'manual' });
+		if (response.status < 300 || response.status >= 400) return response;
+		const location = response.headers.get('location');
+		if (!location || redirects === 3) throw new AiGenerationError('AI 服务重定向无效或次数过多。');
+		current = new URL(location, current).href;
+	}
+	throw new AiGenerationError('AI 服务重定向次数过多。');
 }
 
 function completionUrl(baseUrl: string): string {
@@ -166,7 +228,8 @@ export async function generateSubmissionSuggestion(
 	config: AiProviderRuntimeConfig,
 	snapshot: WebSnapshot,
 	fetcher: typeof fetch = fetch,
-	categories?: SubmissionCategoryCandidate[]
+	categories?: SubmissionCategoryCandidate[],
+	options: AiRequestOptions = {}
 ): Promise<SubmissionSuggestion> {
 	const controller = new AbortController(),
 		timer = setTimeout(
@@ -187,20 +250,27 @@ export async function generateSubmissionSuggestion(
 			]
 		};
 		if (jsonMode) body.response_format = { type: 'json_object' };
-		return fetcher(completionUrl(config.baseUrl), {
-			method: 'POST',
-			signal: controller.signal,
-			headers: {
-				'content-type': 'application/json',
-				authorization: `Bearer ${config.apiKey}`
+		return postWithSafeRedirects(
+			completionUrl(config.baseUrl),
+			{
+				method: 'POST',
+				signal: controller.signal,
+				headers: {
+					'content-type': 'application/json',
+					authorization: `Bearer ${config.apiKey}`
+				},
+				body: JSON.stringify(body)
 			},
-			body: JSON.stringify(body)
-		});
+			fetcher,
+			options.resolveHost
+		);
 	};
 	try {
 		response = await request(true);
 		if (response.status === 400 || response.status === 422) response = await request(false);
-	} catch {
+	} catch (error) {
+		if (error instanceof AiGenerationError) throw error;
+		if (error instanceof WebFetchError) throw new AiGenerationError(error.message);
 		throw new AiGenerationError('AI 服务请求失败或超时。');
 	} finally {
 		clearTimeout(timer);
@@ -210,8 +280,12 @@ export async function generateSubmissionSuggestion(
 	if (!response.ok) throw new AiGenerationError(`AI 服务返回了 ${response.status} 状态。`);
 	let body: unknown;
 	try {
-		body = await response.json();
-	} catch {
+		body = await readLimitedJson(
+			response,
+			Math.max(1024, Math.min(options.maxResponseBytes ?? 2_000_000, 2_000_000))
+		);
+	} catch (error) {
+		if (error instanceof AiGenerationError) throw error;
 		throw new AiGenerationError('AI 服务返回了无法解析的响应。');
 	}
 	const content = contentOf(body);

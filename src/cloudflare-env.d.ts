@@ -7,4 +7,5 @@ interface Env {
 	PUBLIC_SITE_URL: 'https://nss.whks.de';
 	GITHUB_CLIENT_ID?: string;
 	GITHUB_CLIENT_SECRET?: string;
+	ALLOW_GITHUB_AUTO_PROVISION?: string;
 }

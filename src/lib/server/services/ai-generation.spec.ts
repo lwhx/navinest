@@ -24,6 +24,12 @@ const categories = [
 	{ id: 17, name: '前端开发', description: '前端框架与构建工具' }
 ];
 
+const publicDns = async () => ['93.184.216.34'];
+const generate = (fetcher: typeof fetch, selectedCategories?: typeof categories) =>
+	generateSubmissionSuggestion(config, snapshot, fetcher, selectedCategories, {
+		resolveHost: publicDns
+	});
+
 describe('OpenAI-compatible submission generation', () => {
 	it('sends an authenticated chat completion and normalizes structured output', async () => {
 		const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -46,7 +52,7 @@ describe('OpenAI-compatible submission generation', () => {
 				]
 			});
 		});
-		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toEqual({
+		await expect(generate(fetcher)).resolves.toEqual({
 			title: 'Example AI',
 			summary: '简洁介绍。',
 			content: '适合团队使用。',
@@ -69,14 +75,12 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		await expect(generateSubmissionSuggestion(config, snapshot, fenced)).resolves.toMatchObject({
+		await expect(generate(fenced)).resolves.toMatchObject({
 			title: 'A'
 		});
 		const malformed = async () =>
 			Response.json({ choices: [{ message: { content: '{"title":"A"}' } }] });
-		await expect(generateSubmissionSuggestion(config, snapshot, malformed)).rejects.toBeInstanceOf(
-			AiGenerationError
-		);
+		await expect(generate(malformed)).rejects.toBeInstanceOf(AiGenerationError);
 	});
 
 	it('caps generated fields and reports provider failures without leaking the key', async () => {
@@ -95,15 +99,57 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		const result = await generateSubmissionSuggestion(config, snapshot, tooLong);
+		const result = await generate(tooLong);
 		expect(result.title).toHaveLength(60);
 		expect(result.summary).toHaveLength(300);
 		expect(result.content).toHaveLength(2000);
 		expect(result.tags).toHaveLength(8);
 		const failed = async () => new Response('secret-key upstream exploded', { status: 500 });
-		await expect(generateSubmissionSuggestion(config, snapshot, failed)).rejects.not.toThrow(
-			'secret-key'
+		await expect(generate(failed)).rejects.not.toThrow('secret-key');
+	});
+
+	it('rejects redirects to private targets before issuing the redirected request', async () => {
+		const fetcher = vi.fn(
+			async () =>
+				new Response(null, { status: 307, headers: { location: 'http://127.0.0.1/private' } })
 		);
+		await expect(
+			generateSubmissionSuggestion(config, snapshot, fetcher, undefined, {
+				resolveHost: async () => ['93.184.216.34']
+			})
+		).rejects.toThrow('私网');
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		expect(fetcher).toHaveBeenCalledWith(
+			'https://api.example.com/v1/chat/completions',
+			expect.objectContaining({ redirect: 'manual' })
+		);
+	});
+
+	it('rejects AI responses above the configured byte limit', async () => {
+		const oversized = async () =>
+			new Response(
+				JSON.stringify({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									title: 'A',
+									summary: 'B',
+									content: 'x'.repeat(4096),
+									tags: []
+								})
+							}
+						}
+					]
+				}),
+				{ headers: { 'content-type': 'application/json' } }
+			);
+		await expect(
+			generateSubmissionSuggestion(config, snapshot, oversized, undefined, {
+				resolveHost: async () => ['93.184.216.34'],
+				maxResponseBytes: 1024
+			})
+		).rejects.toThrow('响应过大');
 	});
 
 	it('retries without response_format for compatible providers that reject JSON mode', async () => {
@@ -120,7 +166,7 @@ describe('OpenAI-compatible submission generation', () => {
 				choices: [{ message: { content: '{"title":"A","summary":"B","content":"C","tags":[]}' } }]
 			});
 		});
-		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toMatchObject({
+		await expect(generate(fetcher)).resolves.toMatchObject({
 			title: 'A'
 		});
 		expect(fetcher).toHaveBeenCalledTimes(2);
@@ -137,7 +183,7 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toEqual({
+		await expect(generate(fetcher)).resolves.toEqual({
 			title: 'MiniMax',
 			summary: '简洁介绍',
 			content: '补充说明',
@@ -159,19 +205,15 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		await expect(generateSubmissionSuggestion(config, snapshot, fetcher)).resolves.toMatchObject({
+		await expect(generate(fetcher)).resolves.toMatchObject({
 			title: 'A'
 		});
 	});
 
 	it('explains upstream rate limits without exposing provider response bodies', async () => {
 		const limited = async () => new Response('secret quota details', { status: 429 });
-		await expect(generateSubmissionSuggestion(config, snapshot, limited)).rejects.toThrow(
-			'限流或配额'
-		);
-		await expect(generateSubmissionSuggestion(config, snapshot, limited)).rejects.not.toThrow(
-			'secret quota details'
-		);
+		await expect(generate(limited)).rejects.toThrow('限流或配额');
+		await expect(generate(limited)).rejects.not.toThrow('secret quota details');
 	});
 
 	it('accepts only category IDs from the supplied real category list', async () => {
@@ -192,9 +234,7 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		await expect(
-			generateSubmissionSuggestion(config, snapshot, valid, categories)
-		).resolves.toMatchObject({
+		await expect(generate(valid, categories)).resolves.toMatchObject({
 			categoryId: 17,
 			categoryName: '前端开发',
 			categoryReason: '内容与前端构建工具高度匹配'
@@ -216,9 +256,7 @@ describe('OpenAI-compatible submission generation', () => {
 					}
 				]
 			});
-		await expect(
-			generateSubmissionSuggestion(config, snapshot, invented, categories)
-		).resolves.toMatchObject({
+		await expect(generate(invented, categories)).resolves.toMatchObject({
 			categoryId: null,
 			categoryName: null
 		});

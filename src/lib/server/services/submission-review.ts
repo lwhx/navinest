@@ -15,28 +15,28 @@ export class SubmissionReviewError extends Error {
 type ReviewInput =
 	| { decision: 'reject'; message: string }
 	| { decision: 'approve'; message: string; item: ItemInput; newTagNames?: string[] };
-async function pending(database: Database, id: number) {
+export async function claimSubmissionReview(database: Database, id: number, token: string) {
 	const row = (
 		await database
 			.prepare(
-				"SELECT id,user_id,title,type FROM submissions WHERE id=? AND status='pending' LIMIT 1"
+				`UPDATE submissions SET status='reviewing',review_token=?,review_started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+				 WHERE id=? AND (status='pending' OR (status='reviewing' AND review_started_at<datetime('now','-10 minutes')))
+				 RETURNING id,user_id,title,type`
 			)
-			.bind(id)
+			.bind(token, id)
 			.all<{ id: number; user_id: number; title: string; type: string }>()
 	).results[0];
-	if (!row) {
-		const exists = (
-			await database
-				.prepare('SELECT id FROM submissions WHERE id=? LIMIT 1')
-				.bind(id)
-				.all<{ id: number }>()
-		).results[0];
-		throw new SubmissionReviewError(
-			exists ? '投稿已经审核，不能重复处理。' : '投稿不存在。',
-			exists ? 409 : 404
-		);
-	}
-	return row;
+	if (row) return row;
+	const exists = (
+		await database
+			.prepare('SELECT status FROM submissions WHERE id=? LIMIT 1')
+			.bind(id)
+			.all<{ status: string }>()
+	).results[0];
+	throw new SubmissionReviewError(
+		exists ? '投稿正在审核或已经处理，不能重复审核。' : '投稿不存在。',
+		exists ? 409 : 404
+	);
 }
 
 function normalizeTagNames(values: string[] | undefined) {
@@ -148,16 +148,18 @@ export async function reviewSubmission(
 	reviewerId: number,
 	input: ReviewInput
 ) {
-	const submission = await pending(database, submissionId);
 	const message = input.message.trim();
+	if (input.decision === 'reject' && !message)
+		throw new SubmissionReviewError('拒绝投稿时必须填写审核意见。');
+	const token = crypto.randomUUID(),
+		submission = await claimSubmissionReview(database, submissionId, token);
 	if (input.decision === 'reject') {
-		if (!message) throw new SubmissionReviewError('拒绝投稿时必须填写审核意见。');
 		const row = (
 			await database
 				.prepare(
-					"UPDATE submissions SET status='rejected',reviewer_id=?,review_message=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending' RETURNING id"
+					"UPDATE submissions SET status='rejected',reviewer_id=?,review_message=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='reviewing' AND review_token=? RETURNING id"
 				)
-				.bind(reviewerId, message, submissionId)
+				.bind(reviewerId, message, submissionId, token)
 				.all<{ id: number }>()
 		).results[0];
 		if (!row) throw new SubmissionReviewError('投稿已经审核，不能重复处理。', 409);
@@ -174,40 +176,43 @@ export async function reviewSubmission(
 		} catch (error) {
 			await database
 				.prepare(
-					"UPDATE submissions SET status='pending',reviewer_id=NULL,review_message=NULL,reviewed_at=NULL WHERE id=?"
+					"UPDATE submissions SET status='pending',review_token=NULL,review_started_at=NULL,reviewer_id=NULL,review_message=NULL,reviewed_at=NULL WHERE id=? AND status='rejected' AND review_token=?"
 				)
-				.bind(submissionId)
+				.bind(submissionId, token)
 				.all();
 			throw error;
 		}
+		await database
+			.prepare(
+				"UPDATE submissions SET review_token=NULL,review_started_at=NULL WHERE id=? AND status='rejected' AND review_token=?"
+			)
+			.bind(submissionId, token)
+			.all();
 		return { status: 'rejected' as const, itemId: null };
 	}
-	await validateSubmissionIcon(database, submission.user_id, input.item.iconFileId);
-	const names = normalizeTagNames(input.newTagNames),
-		resolved = await resolveTagIds(database, input.item.type, input.item.tagIds, names),
-		publishInput: ItemInput = {
-			...input.item,
-			tagIds: resolved.ids,
-			status: 'published',
-			visibility: 'public'
-		};
-	let itemId: number;
+	let itemId: number | null = null,
+		createdTags: number[] = [];
 	try {
+		await validateSubmissionIcon(database, submission.user_id, input.item.iconFileId);
+		const names = normalizeTagNames(input.newTagNames),
+			resolved = await resolveTagIds(database, input.item.type, input.item.tagIds, names),
+			publishInput: ItemInput = {
+				...input.item,
+				tagIds: resolved.ids,
+				status: 'published',
+				visibility: 'public'
+			};
+		createdTags = resolved.created;
 		itemId = await createItem(database, publishInput, reviewerId);
-	} catch (error) {
-		await cleanupCreatedTags(database, resolved.created);
-		throw error;
-	}
-	try {
 		const row = (
 			await database
 				.prepare(
-					"UPDATE submissions SET status='published',target_item_id=?,reviewer_id=?,review_message=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending' RETURNING id"
+					"UPDATE submissions SET status='published',target_item_id=?,reviewer_id=?,review_message=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='reviewing' AND review_token=? RETURNING id"
 				)
-				.bind(itemId, reviewerId, message || null, submissionId)
+				.bind(itemId, reviewerId, message || null, submissionId, token)
 				.all<{ id: number }>()
 		).results[0];
-		if (!row) throw new SubmissionReviewError('投稿已经审核，不能重复处理。', 409);
+		if (!row) throw new SubmissionReviewError('投稿正在审核或已经处理，不能重复审核。', 409);
 		await createReviewMessage(database, {
 			userId: submission.user_id,
 			senderId: reviewerId,
@@ -217,16 +222,22 @@ export async function reviewSubmission(
 			content: message || '投稿已通过审核并发布。',
 			item: { id: itemId, type: publishInput.type, slug: publishInput.slug }
 		});
+		await database
+			.prepare(
+				"UPDATE submissions SET review_token=NULL,review_started_at=NULL WHERE id=? AND status='published' AND review_token=?"
+			)
+			.bind(submissionId, token)
+			.all();
+		return { status: 'published' as const, itemId };
 	} catch (error) {
 		await database
 			.prepare(
-				"UPDATE submissions SET status='pending',target_item_id=NULL,reviewer_id=NULL,review_message=NULL,reviewed_at=NULL WHERE id=?"
+				"UPDATE submissions SET status='pending',target_item_id=NULL,review_token=NULL,review_started_at=NULL,reviewer_id=NULL,review_message=NULL,reviewed_at=NULL WHERE id=? AND status IN ('reviewing','published') AND review_token=?"
 			)
-			.bind(submissionId)
+			.bind(submissionId, token)
 			.all();
-		await deleteItem(database, itemId);
-		await cleanupCreatedTags(database, resolved.created);
+		if (itemId !== null) await deleteItem(database, itemId);
+		await cleanupCreatedTags(database, createdTags);
 		throw error;
 	}
-	return { status: 'published' as const, itemId };
 }

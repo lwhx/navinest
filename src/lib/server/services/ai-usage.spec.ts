@@ -1,14 +1,24 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
-import { AiRateLimitError, assertAiRateLimit, recordAiUsage } from '$lib/server/services/ai-usage';
+import { AiRateLimitError, finalizeAiUsage, reserveAiUsage } from '$lib/server/services/ai-usage';
+
 const connections: DatabaseSync[] = [];
 function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
-	sqlite.exec(
-		`CREATE TABLE ai_usage_events(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT,provider_id INTEGER,success INTEGER,error_code TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);`
-	);
+	sqlite.exec(`CREATE TABLE ai_usage_events(
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER,
+		action TEXT,
+		provider_id INTEGER,
+		success INTEGER,
+		error_code TEXT,
+		reservation_token TEXT UNIQUE,
+		status TEXT NOT NULL DEFAULT 'completed',
+		created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+		finished_at TEXT
+	);`);
 	const database: Database = {
 		prepare(query) {
 			let values: DatabaseValue[] = [];
@@ -30,37 +40,47 @@ function fixture() {
 	};
 	return { sqlite, database };
 }
-afterEach(() => connections.splice(0).forEach((c) => c.close()));
-describe('AI enrichment usage limits', () => {
-	it('allows normal usage and records auditable outcomes', async () => {
+afterEach(() => connections.splice(0).forEach((connection) => connection.close()));
+
+describe('AI enrichment usage reservations', () => {
+	it('reserves before work and finalizes the same auditable event', async () => {
 		const { database, sqlite } = fixture();
-		await expect(assertAiRateLimit(database, 7)).resolves.toBeUndefined();
-		await recordAiUsage(database, {
-			userId: 7,
-			action: 'enrich',
+		const reservation = await reserveAiUsage(database, 7, 'token-1');
+		expect(reservation).toEqual({ id: 1, token: 'token-1' });
+		expect(sqlite.prepare('SELECT status,success FROM ai_usage_events WHERE id=1').get()).toEqual({
+			status: 'in_flight',
+			success: 0
+		});
+		await finalizeAiUsage(database, {
+			token: reservation.token,
 			providerId: 2,
 			success: true,
 			errorCode: null
 		});
 		expect(
-			sqlite.prepare('SELECT user_id,action,provider_id,success FROM ai_usage_events').get()
-		).toEqual({ user_id: 7, action: 'enrich', provider_id: 2, success: 1 });
+			sqlite
+				.prepare('SELECT provider_id,status,success,error_code FROM ai_usage_events WHERE id=1')
+				.get()
+		).toEqual({ provider_id: 2, status: 'completed', success: 1, error_code: null });
 	});
-	it('rejects bursts and ten requests inside the rolling window', async () => {
+
+	it('atomically rejects a second concurrent reservation inside the burst interval', async () => {
 		const { database, sqlite } = fixture();
-		sqlite
-			.prepare(
-				"INSERT INTO ai_usage_events(user_id,action,success,created_at) VALUES(7,'enrich',1,CURRENT_TIMESTAMP)"
-			)
-			.run();
-		await expect(assertAiRateLimit(database, 7)).rejects.toBeInstanceOf(AiRateLimitError);
-		sqlite.exec('DELETE FROM ai_usage_events;');
-		for (let i = 0; i < 10; i++)
+		await reserveAiUsage(database, 7, 'first');
+		await expect(reserveAiUsage(database, 7, 'second')).rejects.toBeInstanceOf(AiRateLimitError);
+		expect(sqlite.prepare('SELECT COUNT(*) count FROM ai_usage_events').get()).toEqual({
+			count: 1
+		});
+	});
+
+	it('rejects the eleventh reservation inside the rolling window', async () => {
+		const { database, sqlite } = fixture();
+		for (let index = 0; index < 10; index++)
 			sqlite
 				.prepare(
-					"INSERT INTO ai_usage_events(user_id,action,success,created_at) VALUES(7,'enrich',1,datetime('now',?))"
+					"INSERT INTO ai_usage_events(user_id,action,success,reservation_token,status,created_at) VALUES(7,'enrich',1,?,'completed',datetime('now',?))"
 				)
-				.run(`-${i + 1} minutes`);
-		await expect(assertAiRateLimit(database, 7)).rejects.toThrow('10 分钟');
+				.run(`old-${index}`, `-${index + 1} minutes`);
+		await expect(reserveAiUsage(database, 7, 'eleventh')).rejects.toThrow('10 分钟');
 	});
 });
