@@ -647,11 +647,19 @@ http://127.0.0.1:5173
 - 新增管理 API：`GET/POST /api/admin/users`、`PATCH /api/admin/users/[id]`、`POST /api/admin/users/[id]/password`；页面 form actions 与 JSON API 共用同一服务与校验，`AdminWriteError` 状态码扩展到 `409` 以表达唯一约束冲突。
 - 新增 11 个服务层测试（真实 SQLite 覆盖创建、唯一约束、管理员优先排序与计数、停用清会话、最后一个管理员保护、密码重置与会话失效、状态快速切换）。
 
+## 后台消息管理（2026-09-27）
+
+- 新增 `migrations/0018_message_batches.sql`：`messages` 增加 `batch_id` 与索引，后台群发按批次归组，便于统计已读和整批撤回。
+- 新增 `/admin/messages`：统计条（发送批次、公告、系统通知、投稿通知、未读总数）、发送表单（接收范围 = 全部启用用户 / 仅管理员 / 指定用户，类型 = 公告 / 系统通知，标题 ≤120、正文 ≤2000），以及发送记录表格（标题、类型、发送者、接收人数、已读进度、发送时间、撤回）。
+- 新增 `src/lib/server/services/admin-messages.ts`：`validateAdminMessageInput`、`listMessageRecipients`（仅启用账号、管理员优先）、`sendAdminMessage`（批次 ID 为 UUID，逐条写入收件人消息）、`listMessageBatches`（按批次聚合标题/发送者/接收人数/已读，排除系统生成的投稿通知）、`messageStats`、`withdrawMessageBatch`（整批删除并报告未知批次 404）。
+- 新增管理 API：`GET/POST /api/admin/messages`、`DELETE /api/admin/messages/[batchId]`，与页面 form actions 共用同一服务。
+- 新增 9 个服务层测试（真实 SQLite 覆盖校验、收件人过滤、群发/仅管理员/指定用户三种范围、停用账号 404、批次聚合与已读进度、类型统计、整批撤回与投稿通知不受影响）。
+
 ## 后续增强清单
 
 核心MVP已经完成，以下不再称为“未完成阶段”，而是按需求选择的后续增强：
 
-1. 有效但尚未实现：公开注册开关、后台消息管理、站点设置页。
+1. 有效但尚未实现：公开注册开关、站点设置页。
 2. 可选产品增强：自定义导航拖拽、浏览器书签导入、自定义链接搜索、公开分享页、HTML热榜抓取。
 3. 内容完善：为11条新增官方内容补齐真实R2图标或封面。
 4. 运维增强：外部失败告警、备份定时化、辅助Cron和更严格的nonce CSP。
