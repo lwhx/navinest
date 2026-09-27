@@ -33,7 +33,7 @@
 		"directory": ".svelte-kit/cloudflare"
 	},
 	"triggers": {
-		"crons": ["15 1 * * *", "0 19 * * *"]
+		"crons": ["15 1 * * *", "0 3 * * *", "0 19 * * *"]
 	},
 	"observability": {
 		"enabled": true,

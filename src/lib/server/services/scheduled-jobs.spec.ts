@@ -1,7 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
-import { BACKUP_CRON, HOTNEWS_CRON, runScheduledJob } from '$lib/server/services/scheduled-jobs';
+import {
+	BACKUP_CRON,
+	HOTNEWS_CRON,
+	MAINTENANCE_CRON,
+	runScheduledJob
+} from '$lib/server/services/scheduled-jobs';
 import type { BackupBucket } from '$lib/server/services/scheduled-backup';
 import type { SiteBackup } from '$lib/server/services/site-backup';
 
@@ -11,7 +16,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,status TEXT);CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,sender_id INTEGER,type TEXT,title TEXT,content TEXT,data_json TEXT,is_read INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE cron_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,cron TEXT,scheduled_at TEXT,started_at TEXT DEFAULT CURRENT_TIMESTAMP,finished_at TEXT,status TEXT,total_sources INTEGER DEFAULT 0,succeeded_sources INTEGER DEFAULT 0,failed_sources INTEGER DEFAULT 0,result_json TEXT,error_message TEXT);CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 0,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO users VALUES(1,'admin','active'),(2,'user','active');`
+		`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,status TEXT);CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,sender_id INTEGER,type TEXT,title TEXT,content TEXT,data_json TEXT,is_read INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE cron_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,cron TEXT,scheduled_at TEXT,started_at TEXT DEFAULT CURRENT_TIMESTAMP,finished_at TEXT,status TEXT,total_sources INTEGER DEFAULT 0,succeeded_sources INTEGER DEFAULT 0,failed_sources INTEGER DEFAULT 0,result_json TEXT,error_message TEXT);CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 0,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE login_attempts(attempt_key TEXT PRIMARY KEY,failed_count INTEGER DEFAULT 0,window_started_at TEXT DEFAULT CURRENT_TIMESTAMP,locked_until TEXT,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE ai_usage_events(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT,reservation_token TEXT,status TEXT DEFAULT 'completed',created_at TEXT DEFAULT CURRENT_TIMESTAMP,finished_at TEXT);INSERT INTO users VALUES(1,'admin','active'),(2,'user','active');`
 	);
 	const db: Database = {
 		prepare(query) {
@@ -116,5 +121,17 @@ describe('scheduled job dispatch', () => {
 			count: 0
 		});
 		expect(sqlite.prepare('SELECT COUNT(*) count FROM messages').get()).toMatchObject({ count: 0 });
+	});
+	it('runs housekeeping for the maintenance trigger', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(
+			`CREATE TABLE user_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER,expires_at TEXT NOT NULL);
+			 INSERT INTO user_sessions VALUES('stale',1,'2020-01-01T00:00:00.000Z');`
+		);
+		const result = await runScheduledJob(db, MAINTENANCE_CRON, Date.parse('2026-09-27T03:00:00Z'));
+		expect(result).toMatchObject({ job: 'maintenance', expiredSessions: 1 });
+		expect(sqlite.prepare('SELECT COUNT(*) count FROM user_sessions').get()).toMatchObject({
+			count: 0
+		});
 	});
 });

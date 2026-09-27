@@ -2,11 +2,13 @@ import type { Database } from '$lib/server/db';
 import { sendAlertWebhook } from '$lib/server/services/alert-webhook';
 import { alertActiveAdmins, executeMonitoredHotnewsCron } from '$lib/server/services/cron-health';
 import { refreshEnabledHotSources } from '$lib/server/services/hotnews';
+import { runMaintenance, type MaintenanceResult } from '$lib/server/services/maintenance';
 import { runScheduledBackup, type BackupBucket } from '$lib/server/services/scheduled-backup';
 import type { SiteBackup } from '$lib/server/services/site-backup';
 
 export const HOTNEWS_CRON = '15 1 * * *';
 export const BACKUP_CRON = '0 19 * * *';
+export const MAINTENANCE_CRON = '0 3 * * *';
 
 export type ScheduledJobOptions = {
 	bucket?: BackupBucket;
@@ -18,6 +20,7 @@ export type ScheduledJobOptions = {
 export type ScheduledJobResult =
 	| { job: 'hotnews'; runId: number; status: string; failedSources: number }
 	| { job: 'backup'; key: string; bytes: number; pruned: string[] }
+	| ({ job: 'maintenance' } & MaintenanceResult)
 	| { job: 'unknown'; cron: string };
 
 /** Dispatches one cron trigger to its job; unknown triggers are reported instead of failing the worker. */
@@ -68,5 +71,6 @@ export async function runScheduledJob(
 			throw error;
 		}
 	}
+	if (cron === MAINTENANCE_CRON) return { job: 'maintenance', ...(await runMaintenance(database)) };
 	return { job: 'unknown', cron };
 }
