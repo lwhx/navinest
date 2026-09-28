@@ -48,6 +48,7 @@ export async function runScheduledJob(
 	if (cron === BACKUP_CRON) {
 		try {
 			const backup = await runScheduledBackup(options.bucket, database, {
+				now: new Date(scheduledTime),
 				exporter: options.exporter
 			});
 			return { job: 'backup', key: backup.key, bytes: backup.bytes, pruned: backup.pruned };
