@@ -72,6 +72,7 @@
 	}
 	.mobile-tabbar a {
 		display: grid;
+		min-height: 48px;
 		gap: 3px;
 		place-items: center;
 		border-radius: 10px;
@@ -79,7 +80,8 @@
 		color: #777;
 		font-size: 9px;
 	}
-	.mobile-tabbar a:hover {
+	.mobile-tabbar a:hover,
+	.mobile-tabbar a.active {
 		color: #f1404b;
 		background: rgba(241, 64, 75, 0.08);
 	}

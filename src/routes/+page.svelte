@@ -24,6 +24,22 @@
 		activeCategory = sections[0].id;
 		return () => observer.disconnect();
 	});
+
+	function closeMenuOnEscape(event: KeyboardEvent) {
+		if (event.key === 'Escape') mobileMenuOpen = false;
+	}
+
+	$effect(() => {
+		if (!mobileMenuOpen) return;
+		const documentOverflow = document.documentElement.style.overflow;
+		const bodyOverflow = document.body.style.overflow;
+		document.documentElement.style.overflow = 'hidden';
+		document.body.style.overflow = 'hidden';
+		return () => {
+			document.documentElement.style.overflow = documentOverflow;
+			document.body.style.overflow = bodyOverflow;
+		};
+	});
 	const categorySymbols: Record<string, string> = {
 		favorites: '★',
 		'dev-tools': '</>',
@@ -34,6 +50,8 @@
 		bulletins: '!'
 	};
 </script>
+
+<svelte:window onkeydown={closeMenuOnEscape} />
 
 <svelte:head
 	><title>{`${data.site.siteName} ${data.site.siteTagline}`}</title><meta
@@ -57,9 +75,8 @@
 		onclick={() => (mobileMenuOpen = !mobileMenuOpen)}>☰</button
 	><a class="home-logo" href={resolve('/')}><span>N</span><strong>{appConfig.name}</strong></a>
 	<nav aria-label="主导航">
-		<a href={resolve('/')}>首页</a><a href={resolve('/contribute')}>投稿收录</a><a
-			href={resolve('/rankings')}>排行榜</a
-		><a href={resolve('/hotnews')}>今日热点</a>
+		<a href={resolve('/')} aria-current="page">首页</a><a href={resolve('/contribute')}>投稿收录</a
+		><a href={resolve('/rankings')}>排行榜</a><a href={resolve('/hotnews')}>今日热点</a>
 	</nav>
 	<div class="home-header-actions">
 		{#if data.user}<a class="user-pill" href={resolve('/user')}>{data.user.displayName}</a>{:else}<a
