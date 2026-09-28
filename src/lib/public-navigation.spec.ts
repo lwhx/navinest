@@ -8,6 +8,15 @@ describe('public navigation completion', () => {
 		expect(shell).toContain('mobile-tabbar');
 		expect(shell).toContain('友情链接');
 	});
+	it('keeps the global theme control clear of the mobile tabbar', () => {
+		const layoutCss = readFileSync('src/routes/layout.css', 'utf8');
+		expect(layoutCss).toMatch(
+			/@media \(max-width: 900px\)[\s\S]*?\.theme-toggle\s*\{[^}]*bottom:\s*calc\(88px \+ env\(safe-area-inset-bottom\)\)/
+		);
+		expect(layoutCss).toMatch(
+			/@media \(max-width: 900px\)[\s\S]*?\.theme-toggle\s*\{[^}]*min-height:\s*44px/
+		);
+	});
 	it('uses the shared public shell for rankings and hotnews', () => {
 		for (const file of ['src/routes/rankings/+page.svelte', 'src/routes/hotnews/+page.svelte']) {
 			const page = readFileSync(file, 'utf8');
