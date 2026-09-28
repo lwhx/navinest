@@ -118,11 +118,12 @@
 	grid-row: 1 / span 30;
 }
 .popular-grid {
-	grid-template-columns: repeat(6, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 	gap: 16px;
 }
 .site-grid {
-	grid-template-columns: repeat(6, minmax(0, 1fr));
+	container-type: inline-size;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
 	gap: 10px;
 }
 .benchmark-card {
@@ -173,35 +174,35 @@
 	min-height: 56px;
 }
 .site-grid .card-site:not(.compact) {
-	min-height: 56px;
-	grid-template-columns: 32px minmax(0, 1fr) 26px;
-	gap: 8px;
-	padding: 7px 8px;
+	min-height: 64px;
+	grid-template-columns: 36px minmax(0, 1fr) 32px;
+	gap: 10px;
+	padding: 10px;
 }
 .site-grid .card-site:not(.compact) .site-icon {
-	width: 32px;
-	height: 32px;
+	width: 36px;
+	height: 36px;
 	border-radius: 8px;
 }
 .site-grid .card-site:not(.compact) .site-icon img {
-	width: 32px;
-	height: 32px;
+	width: 36px;
+	height: 36px;
 }
 .site-grid .card-site:not(.compact) .site-icon span {
-	width: 24px;
-	height: 24px;
+	width: 28px;
+	height: 28px;
 	border-radius: 6px;
 }
 .site-grid .card-site:not(.compact) h3,
 .site-grid .card-site:not(.compact) .card-title-link {
 	overflow: hidden;
-	font-size: 11px;
+	font-size: 13px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .site-grid .card-site:not(.compact) .card-actions a {
-	min-width: 26px;
-	height: 26px;
+	min-width: 32px;
+	height: 32px;
 }
 .card-site:not(.compact) .site-content > p,
 .card-site:not(.compact) .type-chip,

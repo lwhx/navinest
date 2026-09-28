@@ -24,7 +24,7 @@ describe('home reference parity', () => {
 	});
 	it('locks measured desktop and mobile proportions to the live reference', () => {
 		expect(css).toContain('height: 604px');
-		expect(css).toContain('grid-template-columns: repeat(6, minmax(0, 1fr))');
+		expect(css).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr))');
 		expect(css).toContain('min-height: 60px');
 		expect(css).toContain('@media (max-width: 620px)');
 		expect(css).toContain('height: 510px');

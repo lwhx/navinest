@@ -734,6 +734,12 @@ http://127.0.0.1:5173
 - `scheduled-jobs` 新增 `MAINTENANCE_CRON` 分派，返回四类清理计数。
 - 新增 6 个测试（只删过期 Session、保留活跃锁定、cron 历史按窗口裁剪、AI 预留释放且不影响进行中/已完成、自定义窗口与下限保护、维护分派）。
 
+## UI 响应式基础修复（2026-09-28）
+
+- 首页内容网格改为按实际容器宽度自适应，不再在「左侧导航 + 右侧信息栏」夹出的中栏中强制六列；站点卡片现在以 `170px` 为最小目标宽度自动排布，并恢复 13px 标题、36px 图标与 32px 操作区。
+- 1440×900 浏览器实测 8 个首页内容卡片标题均无裁切；移动公共页的主题开关移到固定底栏上方，390×844 实测两个矩形不再相交。
+- 对应结构测试锁定容器自适应规则、卡片最小尺寸及移动安全距离。
+
 ## nonce 级 CSP（2026-09-27）
 
 - `script-src` 去掉 `'unsafe-inline'`，改为按请求下发 nonce：`hooks.server.ts` 生成 nonce（16 字节随机数的 base64url），经 `resolve(event, { transformPageChunk })` 给文档里**每个** script 标签盖章（含 `app.html` 主题内联脚本、SvelteKit 引导脚本、`{@html}` 注入的 JSON-LD），并把带 nonce 的策略写进响应头；`style-src` 仍保留 `'unsafe-inline'`（Svelte 运行时注入样式所需）。
