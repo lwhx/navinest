@@ -270,6 +270,9 @@
 		height: 80px;
 		background: rgba(55, 12, 105, 0.24);
 	}
+	.home-header nav {
+		display: none;
+	}
 	.home-shell {
 		display: block;
 		min-height: 0;
