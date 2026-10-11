@@ -138,6 +138,12 @@ export async function checkHomeExperience(page, baseUrl) {
 				await page.screenshot({
 					path: join(screenshots, `home-${width}-${dark ? 'dark' : 'light'}.png`)
 				});
+			if (screenshots && [375, 1366].includes(width)) {
+				await page.locator('.popular-sites').scrollIntoViewIfNeeded();
+				await page.screenshot({
+					path: join(screenshots, `ranking-${width}-${dark ? 'dark' : 'light'}.png`)
+				});
+			}
 			// Clone production markup for visual edge cases; no formal data or route is changed.
 			await page.evaluate(() => {
 				const card = document.querySelector('#favorites .benchmark-card');
@@ -158,13 +164,6 @@ export async function checkHomeExperience(page, baseUrl) {
 				empty.querySelector('.card-summary').remove();
 				empty.querySelector('img')?.remove();
 				grid.appendChild(empty);
-				const metrics = document.querySelector('.card-metrics');
-				const formatter = new Intl.NumberFormat('zh-CN', {
-					notation: 'compact',
-					maximumFractionDigits: 1
-				});
-				metrics.children[0].textContent = `浏览 ${formatter.format(123456789)}`;
-				metrics.children[1].textContent = `收藏 ${formatter.format(9876543)}`;
 			});
 			const sample = await page.evaluate(() => ({
 				overflow: document.documentElement.scrollWidth - innerWidth,
@@ -174,7 +173,7 @@ export async function checkHomeExperience(page, baseUrl) {
 					const title = card.querySelector('.card-title-link');
 					const heading = card.querySelector('h3');
 					const type = card.querySelector('.type-chip');
-					const metrics = card.querySelector('.card-metrics');
+					const metadata = card.querySelector('.card-secondary');
 					return {
 						overflow: card.scrollWidth - card.clientWidth,
 						textWidth: content.getBoundingClientRect().width,
@@ -192,16 +191,10 @@ export async function checkHomeExperience(page, baseUrl) {
 						order:
 							!summary ||
 							heading.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top + 1,
-						metricsOrder:
+						secondaryOrder:
 							!summary ||
-							!metrics ||
-							summary.getBoundingClientRect().bottom <= metrics.getBoundingClientRect().top + 1,
-						metricsRows:
-							!metrics ||
-							Math.abs(
-								metrics.children[0].getBoundingClientRect().top -
-									metrics.children[1].getBoundingClientRect().top
-							) <= 1
+							summary.getBoundingClientRect().bottom <= metadata.getBoundingClientRect().top + 1,
+						metricsAbsent: !card.querySelector('.card-metrics')
 					};
 				})
 			}));
@@ -220,8 +213,8 @@ export async function checkHomeExperience(page, baseUrl) {
 				assert.equal(card.titleSize, '16px', `${label}: preserve title size`);
 				assert.equal(card.titleWeight, '600', `${label}: preserve title weight`);
 				assert.ok(
-					card.order && card.metricsOrder && card.metricsRows,
-					`${label}: title/purpose/metadata order and one-row statistics`
+					card.order && card.secondaryOrder && card.metricsAbsent,
+					`${label}: title/purpose/type order without view/favorite counts`
 				);
 			}
 			if (screenshots) {
@@ -249,6 +242,6 @@ export async function checkHomeExperience(page, baseUrl) {
 		}
 	}
 	console.log(
-		'Ranking detail clicks, safe visit, sparse/edge-case cards and 10 Chinese themed layouts passed (320–2560px).'
+		'Ranking detail clicks, safe visit, stat-free sparse/edge-case cards and 10 Chinese themed layouts passed (320–2560px).'
 	);
 }

@@ -102,7 +102,6 @@
 								item={entry.item}
 								compact
 								dense
-								metrics={{ views: entry.metrics.views, favorites: entry.metrics.favorites }}
 							/>{/each}
 					</div>{:else}<div class="inline-empty">
 						<p>暂无排行内容。</p>

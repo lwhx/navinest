@@ -11,6 +11,18 @@ import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
 
 describe('homepage content rendering', () => {
+	it('omits view and favorite counts from home cards while keeping ranked content reachable', () => {
+		const home = fallbackHomeData();
+		home.dashboard.popular[0].views = 123456789;
+		home.dashboard.popular[0].favorites = 9876543;
+		const { body } = render(HomeModuleFlow, { props: { home, mode: 'content' } });
+		expect(body).not.toContain('class="card-metrics"');
+		expect(body).not.toMatch(/(?:浏览|收藏) \d/);
+		expect(body).toContain('href="/sites/cloudflare-dashboard"');
+		expect(body).toContain('href="/rankings"');
+		expect(body).toContain('class="card-summary"');
+		expect(body).toContain('>网址</span>');
+	});
 	it('makes the dense title and purpose one native detail target without nesting the visit link', () => {
 		const item = navigationItems[0];
 		const { body } = render(NavigationCard, { props: { item, dense: true, compact: true } });
