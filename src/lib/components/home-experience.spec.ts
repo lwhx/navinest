@@ -9,6 +9,8 @@ import RankingsPage from '../../routes/rankings/+page.svelte';
 import { SITE_SETTINGS_DEFAULTS } from '$lib/types/site';
 import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
+import { contentDetailRoute } from '$lib/content-routing';
+import type { ContentType } from '$lib/types/content';
 
 describe('homepage content rendering', () => {
 	it('omits view and favorite counts from home cards while keeping ranked content reachable', () => {
@@ -21,7 +23,8 @@ describe('homepage content rendering', () => {
 		expect(body).toContain('href="/sites/cloudflare-dashboard"');
 		expect(body).toContain('href="/rankings"');
 		expect(body).toContain('class="card-summary"');
-		expect(body).toContain('>网址</span>');
+		expect(body).not.toContain('type-chip');
+		expect(body).not.toContain('card-secondary');
 	});
 	it('makes the dense title and purpose one native detail target without nesting the visit link', () => {
 		const item = navigationItems[0];
@@ -57,7 +60,7 @@ describe('homepage content rendering', () => {
 		])
 			expect(body).toContain(`href="${path}"`);
 		for (const label of ['网址', '文章', '软件', '书籍', '公告'])
-			expect(body).toContain(`<small>${label}</small>`);
+			expect(body).not.toContain(`<small>${label}</small>`);
 	});
 	it('keeps a ranked item reachable even when it has no loaded category card', () => {
 		const home = fallbackHomeData();
@@ -77,9 +80,24 @@ describe('homepage content rendering', () => {
 		const { body } = render(HomeModuleFlow, { props: { home, mode: 'content' } });
 		expect(body).toContain('href="/posts/uncategorized-post"');
 		expect(body).toContain('未分类文章');
-		expect(body).toContain('>文章</span>');
+		expect(body).not.toContain('type-chip');
+		expect(body).not.toContain('card-secondary');
 		expect(body).not.toContain('/go?url=');
 	});
+	it.each<ContentType>(['site', 'post', 'app', 'book', 'bulletin'])(
+		'removes the %s badge from both home and public cards while preserving detail routing',
+		(type) => {
+			const item = { ...navigationItems[0], type };
+			for (const dense of [false, true]) {
+				const { body } = render(NavigationCard, { props: { item, dense, compact: dense } });
+				expect(body).not.toContain('type-chip');
+				expect(body).not.toContain('card-secondary');
+				expect(body).toContain(`href="${contentDetailRoute(type).replace('[slug]', item.slug)}"`);
+				expect(body).toContain(item.summary);
+				expect(body).toContain('rel="external noopener noreferrer"');
+			}
+		}
+	);
 	it('omits blank summaries and retains exact counts alongside compact visible metrics', () => {
 		const { body } = render(NavigationCard, {
 			props: {

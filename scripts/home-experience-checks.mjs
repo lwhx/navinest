@@ -26,12 +26,12 @@ export async function checkHomeExperience(page, baseUrl) {
 		cards.map((card) => ({
 			href: card.querySelector('.card-title-link').getAttribute('href'),
 			title: card.querySelector('h3').textContent,
-			type: card.querySelector('.type-chip').textContent
+			type: new URL(card.querySelector('.card-title-link').href).pathname.split('/')[1]
 		}))
 	);
 	assert.deepEqual(
 		[...new Set(rankCards.map((card) => card.type))].sort(),
-		['网址', '软件', '文章', '书籍', '公告'].sort()
+		['sites', 'apps', 'posts', 'books', 'bulletins'].sort()
 	);
 	for (const card of rankCards) {
 		await page.goto(baseUrl, { waitUntil: 'networkidle' });
@@ -49,8 +49,7 @@ export async function checkHomeExperience(page, baseUrl) {
 	const rankings = await page.locator('.ranking-list .ranking-title').evaluateAll((links) =>
 		links.map((link) => ({
 			href: link.getAttribute('href'),
-			title: link.textContent,
-			type: link.nextElementSibling.textContent
+			title: link.textContent
 		}))
 	);
 	// The existing local ranking loader returns an empty list without D1.
@@ -172,8 +171,6 @@ export async function checkHomeExperience(page, baseUrl) {
 					const summary = card.querySelector('.card-summary');
 					const title = card.querySelector('.card-title-link');
 					const heading = card.querySelector('h3');
-					const type = card.querySelector('.type-chip');
-					const metadata = card.querySelector('.card-secondary');
 					return {
 						overflow: card.scrollWidth - card.clientWidth,
 						textWidth: content.getBoundingClientRect().width,
@@ -186,14 +183,11 @@ export async function checkHomeExperience(page, baseUrl) {
 							summary.getBoundingClientRect().width <= content.getBoundingClientRect().width + 1,
 						titleSize: getComputedStyle(title).fontSize,
 						titleWeight: getComputedStyle(title).fontWeight,
-						typeVisible:
-							getComputedStyle(type).display !== 'none' && type.getBoundingClientRect().height > 0,
+						typeAbsent: !card.querySelector('.type-chip'),
+						secondaryAbsent: !card.querySelector('.card-secondary'),
 						order:
 							!summary ||
 							heading.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top + 1,
-						secondaryOrder:
-							!summary ||
-							summary.getBoundingClientRect().bottom <= metadata.getBoundingClientRect().top + 1,
 						metricsAbsent: !card.querySelector('.card-metrics')
 					};
 				})
@@ -209,12 +203,15 @@ export async function checkHomeExperience(page, baseUrl) {
 					card.summaryVisible && card.summaryFits,
 					`${label}: purpose must be visible and contained`
 				);
-				assert.ok(card.typeVisible, `${label}: content type must be visible`);
+				assert.ok(
+					card.typeAbsent && card.secondaryAbsent,
+					`${label}: no type badge or empty metadata row`
+				);
 				assert.equal(card.titleSize, '16px', `${label}: preserve title size`);
 				assert.equal(card.titleWeight, '600', `${label}: preserve title weight`);
 				assert.ok(
-					card.order && card.secondaryOrder && card.metricsAbsent,
-					`${label}: title/purpose/type order without view/favorite counts`
+					card.order && card.metricsAbsent,
+					`${label}: title/purpose order without view/favorite counts`
 				);
 			}
 			if (screenshots) {

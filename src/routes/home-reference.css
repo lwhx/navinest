@@ -216,7 +216,6 @@
 	padding: 8px 9px;
 }
 .benchmark-card.compact .site-content > p,
-.benchmark-card.compact .type-chip,
 .benchmark-card.compact .tag-row,
 .benchmark-card.compact .card-actions {
 	display: none;
@@ -285,11 +284,9 @@
 	height: 32px;
 }
 .card-site:not(.compact) .site-content > p,
-.card-site:not(.compact) .type-chip,
 .card-site:not(.compact) .tag-row,
 .card-site:not(.compact) .detail-link,
 .site-grid .card-app:not(.compact) .site-content > p,
-.site-grid .card-app:not(.compact) .type-chip,
 .site-grid .card-app:not(.compact) .tag-row,
 .site-grid .card-app:not(.compact) .detail-link {
 	display: none;

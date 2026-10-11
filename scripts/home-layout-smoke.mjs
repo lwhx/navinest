@@ -156,7 +156,9 @@ try {
 						textWidth: card.querySelector('.site-content')?.getBoundingClientRect().width,
 						overflow: card.scrollWidth - card.clientWidth
 					})),
-					metricCount: document.querySelectorAll('.card-metrics').length
+					metricCount: document.querySelectorAll('.card-metrics').length,
+					typeCount: document.querySelectorAll('.type-chip').length,
+					secondaryCount: document.querySelectorAll('.card-secondary').length
 				};
 			});
 			const label = `${width}px ${dark ? 'dark' : 'light'}`;
@@ -175,6 +177,8 @@ try {
 				0,
 				`${label}: home cards must not show view/favorite counts`
 			);
+			assert.equal(layout.typeCount, 0, `${label}: home cards must not show type badges`);
+			assert.equal(layout.secondaryCount, 0, `${label}: no empty card metadata rows`);
 			await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
 			const headerColors = await page.locator('.home-header').evaluate((header) => ({
 				background: getComputedStyle(header).backgroundColor,

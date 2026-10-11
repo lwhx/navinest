@@ -48,9 +48,6 @@
 	display: block;
 	font-weight: 700;
 }
-.ranking-list small {
-	color: #93959a;
-}
 .ranking-metrics {
 	display: flex;
 	gap: 18px;
