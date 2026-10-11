@@ -22,13 +22,10 @@ describe('home reference parity', () => {
 		expect(css).toContain('.benchmark-card.compact .type-chip');
 		expect(css).toContain('.benchmark-card.compact .card-actions');
 	});
-	it('locks measured desktop and mobile proportions to the live reference', () => {
-		expect(css).toContain('height: 604px');
+	it('keeps the responsive card and category navigation rules', () => {
 		expect(css).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr))');
 		expect(css).toContain('min-height: 60px');
 		expect(css).toContain('@media (max-width: 620px)');
-		expect(css).toContain('height: 510px');
-		expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
 		expect(css).toMatch(/\.home-sidebar\s*\{\s*display:\s*none/);
 	});
 	it('keeps anchored category headings below the fixed header', () => {

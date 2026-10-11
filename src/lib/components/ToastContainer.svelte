@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { getToasts, removeToast } from '$lib/toast';
+	import { getToasts, removeToast } from '$lib/toast.svelte';
 	const toasts = $derived(getToasts());
 </script>
 
 {#if toasts.length}
 	<div class="toast-container" role="status" aria-live="polite">
 		{#each toasts as toast (toast.id)}
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<div
 				class="toast-item {toast.type}"
 				role="button"

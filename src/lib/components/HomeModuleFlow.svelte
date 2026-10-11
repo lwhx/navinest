@@ -73,7 +73,7 @@
 					</div>
 				</div>
 				<div class="hero-links">
-					<strong>热门</strong><a href={resolve('/rankings')}>本周排行榜</a><a
+					<strong>快捷入口</strong><a href={resolve('/rankings')}>本周排行榜</a><a
 						href={resolve('/hotnews')}>今日热点</a
 					><a href={resolve('/contribute')}>立即投稿</a>
 				</div>

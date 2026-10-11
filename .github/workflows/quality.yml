@@ -32,6 +32,10 @@ jobs:
         run: npm run check
       - name: Unit and integration tests
         run: npm run test
+      - name: Install browser for homepage checks
+        run: npx playwright install --with-deps chromium
+      - name: Homepage SSR and responsive layouts
+        run: npm run test:home-layout
       - name: Build without rewriting the Worker entrypoint
         shell: bash
         run: |

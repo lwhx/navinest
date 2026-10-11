@@ -104,7 +104,9 @@
 		line-height: 1;
 		cursor: pointer;
 		opacity: 0.7;
-		transition: opacity 120ms ease, background 120ms ease;
+		transition:
+			opacity 120ms ease,
+			background 120ms ease;
 	}
 
 	.site-announcement button:hover {

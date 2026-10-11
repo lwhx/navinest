@@ -24,6 +24,26 @@
 	color: #a51f2b !important;
 }
 
+:root[data-theme='dark'] .sidebar-brand small,
+:root[data-theme='dark'] .sidebar-shortcuts a,
+:root[data-theme='dark'] .module-title > a,
+:root[data-theme='dark'] .site-content > p,
+:root[data-theme='dark'] .type-chip,
+:root[data-theme='dark'] .tag-row a,
+:root[data-theme='dark'] .detail-link,
+:root[data-theme='dark'] .subcategory-tabs a,
+:root[data-theme='dark'] .card-metrics span,
+:root[data-theme='dark'] .rail-card > p,
+:root[data-theme='dark'] .site-stats span,
+:root[data-theme='dark'] .rail-title > a {
+	color: #b8bec6 !important;
+}
+:root[data-theme='dark'] .home-sidebar nav a:hover,
+:root[data-theme='dark'] .home-sidebar nav a.active,
+:root[data-theme='dark'] .rail-list > li > span {
+	color: #ff939b !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
