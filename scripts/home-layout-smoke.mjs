@@ -39,6 +39,90 @@ try {
 	const page = await browser.newPage();
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
+	// Sparse categories near the bottom must still align with the clicked menu entry.
+	for (const width of [1100, 1920, 375]) {
+		await page.setViewportSize({ width, height: 842 });
+		await page.goto(baseUrl, { waitUntil: 'networkidle' });
+		const slugs = await page
+			.locator('[data-category-section]')
+			.evaluateAll((sections) => sections.map((section) => section.id));
+		assert.deepEqual(
+			await page
+				.locator('.home-sidebar nav a')
+				.evaluateAll((links) => links.map((link) => link.hash.slice(1))),
+			slugs,
+			'Category menu order must match the rendered content modules'
+		);
+		for (const slug of [...slugs].reverse()) {
+			const menu = width > 900 ? '.home-sidebar' : '.mobile-drawer';
+			if (width <= 900) await page.getByRole('button', { name: '打开分类菜单' }).click();
+			await page.locator(`${menu} a[href="#${slug}"]`).click();
+			await page
+				.waitForFunction(
+					(slug) => {
+						const target = document.getElementById(slug);
+						const offset = parseFloat(getComputedStyle(target).scrollMarginTop);
+						return Math.abs(target.getBoundingClientRect().top - offset) <= 2;
+					},
+					slug,
+					{ timeout: 3000 }
+				)
+				.catch(async () => {
+					assert.fail(`${width}px: clicking #${slug} did not align its heading below the header`);
+				});
+			await page.waitForFunction(
+				(slug) =>
+					document.querySelector('.home-sidebar a[aria-current="location"]')?.hash === `#${slug}`,
+				slug,
+				{ timeout: 3000 }
+			);
+			assert.equal(new URL(page.url()).hash, `#${slug}`);
+			if (width <= 900) assert.equal(await page.locator('.mobile-drawer').count(), 0);
+		}
+		// Native history and direct fragment URLs must retain their category association.
+		await page.goBack();
+		await page.waitForFunction(
+			() =>
+				document.querySelector('.home-sidebar a[aria-current="location"]')?.hash === location.hash
+		);
+		await page.goto(`${baseUrl}#${slugs.at(-1)}`, { waitUntil: 'networkidle' });
+		await page.waitForFunction(() => {
+			const target = document.getElementById(location.hash.slice(1));
+			return (
+				Math.abs(
+					target.getBoundingClientRect().top - parseFloat(getComputedStyle(target).scrollMarginTop)
+				) <= 2
+			);
+		});
+		// Manual scrolling through a tall category must not leave a stale selected menu item.
+		await page.evaluate((slug) => {
+			const target = document.getElementById(slug);
+			target.style.minHeight = '1200px';
+		}, slugs[0]);
+		await page.evaluate((slug) => {
+			const target = document.getElementById(slug);
+			scrollTo(0, target.getBoundingClientRect().top + scrollY + 400);
+		}, slugs[0]);
+		await page.waitForFunction(
+			(slug) =>
+				document.querySelector('.home-sidebar a[aria-current="location"]')?.hash === `#${slug}`,
+			slugs[0]
+		);
+		// Resize to a taller viewport after hydration, then click the final category again.
+		await page.setViewportSize({ width, height: 1100 });
+		if (width <= 900) await page.getByRole('button', { name: '打开分类菜单' }).click();
+		await page
+			.locator(`${width > 900 ? '.home-sidebar' : '.mobile-drawer'} a[href="#${slugs.at(-1)}"]`)
+			.click();
+		await page.waitForFunction(() => {
+			const target = document.getElementById(location.hash.slice(1));
+			return (
+				Math.abs(
+					target.getBoundingClientRect().top - parseFloat(getComputedStyle(target).scrollMarginTop)
+				) <= 2
+			);
+		});
+	}
 	for (const width of [320, 375, 768, 1024, 1366, 1920]) {
 		await page.setViewportSize({ width, height: 900 });
 		for (const dark of [false, true]) {
@@ -127,7 +211,9 @@ try {
 		}
 	}
 	assert.deepEqual(errors, [], 'Homepage produced browser runtime errors');
-	console.log('Homepage SSR and 12 layouts passed (320–1920px, light and dark).');
+	console.log(
+		'Homepage category navigation, SSR and 12 layouts passed (320–1920px, light and dark).'
+	);
 } finally {
 	await browser?.close();
 	server?.kill('SIGTERM');

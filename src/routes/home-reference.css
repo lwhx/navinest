@@ -7,6 +7,10 @@
 .category-module[data-category-section] {
 	scroll-margin-top: 104px;
 }
+.mobile-drawer nav a.active {
+	color: var(--nav-red);
+	background: rgba(241, 64, 75, 0.08);
+}
 .home-page {
 	min-height: 100vh;
 	color: var(--nav-text);

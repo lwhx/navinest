@@ -3,28 +3,15 @@
 	import { resolve } from '$app/paths';
 	import HomeModuleFlow from '$lib/components/HomeModuleFlow.svelte';
 	import { appConfig } from '$lib/config';
+	import { buildHomeCategoryLinks, trackHomeCategories } from '$lib/home-category-navigation';
 	import './home-reference.css';
 	import '$lib/components/public-navigation.css';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	let activeCategory = $state(''),
 		mobileMenuOpen = $state(false);
-	onMount(() => {
-		const sections = [...document.querySelectorAll<HTMLElement>('[data-category-section]')];
-		if (!sections.length) return;
-		const observer = new IntersectionObserver(
-			(entries) => {
-				const visible = entries
-					.filter((x) => x.isIntersecting)
-					.sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-				if (visible?.target.id) activeCategory = visible.target.id;
-			},
-			{ rootMargin: '-20% 0px -65%', threshold: [0, 0.25, 0.5] }
-		);
-		sections.forEach((x) => observer.observe(x));
-		activeCategory = sections[0].id;
-		return () => observer.disconnect();
-	});
+	let categoryLinks = $derived(buildHomeCategoryLinks(data.modulePlan, data.sections));
+	onMount(() => trackHomeCategories((slug) => (activeCategory = slug)));
 
 	function closeMenuOnEscape(event: KeyboardEvent) {
 		if (event.key === 'Escape') mobileMenuOpen = false;
@@ -108,8 +95,10 @@
 			>
 		</div>
 		<nav>
-			{#each data.categories.filter((x) => !x.parentId) as category (category.slug)}<a
+			{#each categoryLinks as category (category.slug)}<a
 					href={`#${category.slug}`}
+					class:active={activeCategory === category.slug}
+					aria-current={activeCategory === category.slug ? 'location' : undefined}
 					onclick={() => (mobileMenuOpen = false)}
 					><span class="nav-symbol">{categorySymbols[category.slug] ?? '•'}</span>{category.name}</a
 				>{/each}
@@ -124,7 +113,7 @@
 				<div><strong>{appConfig.displayName}</strong><small>{appConfig.tagline}</small></div>
 			</div>
 			<nav>
-				{#each data.categories.filter((x) => !x.parentId) as category (category.slug)}<a
+				{#each categoryLinks as category (category.slug)}<a
 						href={`#${category.slug}`}
 						class:active={activeCategory === category.slug}
 						aria-current={activeCategory === category.slug ? 'location' : undefined}
@@ -182,6 +171,7 @@
 			</div>
 		</div>
 	</div>
+	<div class="home-anchor-spacer" aria-hidden="true"></div>
 	<footer class="home-footer">
 		<span>© {new Date().getFullYear()} {appConfig.displayName}</span>
 		<nav aria-label="页脚导航">
