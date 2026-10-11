@@ -159,6 +159,10 @@ try {
 						const range = document.createRange();
 						range.selectNodeContents(span);
 						return range.getClientRects().length > 1;
+					}),
+					metricsRows: [...document.querySelectorAll('.card-metrics')].some((metrics) => {
+						const tops = [...metrics.children].map((span) => span.getBoundingClientRect().top);
+						return tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 1;
 					})
 				};
 			});
@@ -174,6 +178,7 @@ try {
 				assert.ok(card.overflow <= 1, `${label}: ${card.title} overflows by ${card.overflow}px`);
 			}
 			assert.equal(layout.metricsWrap, false, `${label}: card metrics wrap into separate lines`);
+			assert.equal(layout.metricsRows, false, `${label}: card metrics split into multiple rows`);
 			const metricColors = await page.locator('.card-metrics span').evaluateAll((spans) =>
 				spans.map((span) => ({
 					background: getComputedStyle(span.closest('.benchmark-card')).backgroundColor,

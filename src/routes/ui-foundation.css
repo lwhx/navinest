@@ -317,6 +317,9 @@
 	gap: 8px;
 	padding: 8px;
 }
+.home-page .popular-grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
 .home-page .benchmark-card .site-icon,
 .home-page .benchmark-card .site-icon img {
 	width: 36px;
