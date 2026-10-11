@@ -4,6 +4,8 @@
 
 	import './layout.css';
 	import './quality-hardening.css';
+	import './design-tokens.css';
+	import './ui-foundation.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';

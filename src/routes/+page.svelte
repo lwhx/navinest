@@ -4,6 +4,7 @@
 	import HomeModuleFlow from '$lib/components/HomeModuleFlow.svelte';
 	import { appConfig } from '$lib/config';
 	import { buildHomeCategoryLinks, trackHomeCategories } from '$lib/home-category-navigation';
+	import { modalDrawer } from '$lib/ui-actions';
 	import './home-reference.css';
 	import '$lib/components/public-navigation.css';
 	import type { PageData } from './$types';
@@ -82,11 +83,19 @@
 </header>
 {#if mobileMenuOpen}<button
 		class="mobile-drawer-backdrop"
+		data-drawer-backdrop
 		type="button"
 		aria-label="关闭分类菜单"
 		onclick={() => (mobileMenuOpen = false)}
 	></button>
-	<aside id="mobile-drawer" class="mobile-drawer" aria-label="移动分类导航">
+	<div
+		id="mobile-drawer"
+		class="mobile-drawer"
+		role="dialog"
+		aria-modal="true"
+		aria-label="分类导航"
+		use:modalDrawer={() => (mobileMenuOpen = false)}
+	>
 		<div class="mobile-drawer-header">
 			<strong>分类导航</strong><button
 				type="button"
@@ -103,7 +112,7 @@
 					><span class="nav-symbol">{categorySymbols[category.slug] ?? '•'}</span>{category.name}</a
 				>{/each}
 		</nav>
-	</aside>{/if}
+	</div>{/if}
 <main class="home-page">
 	<HomeModuleFlow home={data} mode="hero" />
 	<div class="home-shell">

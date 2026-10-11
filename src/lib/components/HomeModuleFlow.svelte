@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import NavigationCard from './NavigationCard.svelte';
+	import SearchForm from './SearchForm.svelte';
 	import type { HomeData } from '$lib/server/services/home';
 	let { home, mode }: { home: HomeData; mode: 'hero' | 'content' } = $props();
 	let query = $state(''),
@@ -42,26 +43,21 @@
 				<div class="search-core">
 					<div class="search-kicker">探索、收藏并整理互联网</div>
 					<h1>今天想找点什么？</h1>
-					<div class="engine-tabs">
+					<div class="engine-tabs" role="group" aria-label="选择搜索引擎">
 						{#each home.searchEngines as item (item.key)}<button
 								type="button"
 								class:active={item.key === engine.key}
+								aria-pressed={item.key === engine.key}
 								onclick={() => (engineKey = item.key)}>{item.name}</button
 							>{/each}
 					</div>
-					<form
-						class="hero-search-form"
-						onsubmit={(e) => {
-							e.preventDefault();
-							search();
-						}}
-					>
-						<span aria-hidden="true">⌕</span><input
-							bind:value={query}
-							aria-label={`${engine?.name ?? '站内'}搜索`}
-							placeholder={`使用 ${engine?.name ?? '站内'} 搜索`}
-						/><button type="submit">搜索</button>
-					</form>
+					<SearchForm
+						bind:value={query}
+						variant="hero"
+						label={`${engine?.name ?? '站内'}搜索`}
+						placeholder={`使用 ${engine?.name ?? '站内'} 搜索`}
+						onSearch={search}
+					/>
 					<div class="search-hotwords">
 						<span>热门：</span>{#each words as word (word)}<button
 								type="button"

@@ -23,6 +23,15 @@ describe('toast feedback', () => {
 		vi.advanceTimersByTime(1);
 		expect(getToasts()).toHaveLength(0);
 	});
+	it('keeps errors visible until dismissed unless an explicit duration is provided', async () => {
+		const { showToast, getToasts, removeToast } = await import('./toast.svelte');
+		const persistent = showToast('保存失败，请重试。', 'error');
+		const timed = showToast('临时错误', 'error', 1000);
+		vi.advanceTimersByTime(10000);
+		expect(getToasts().map((toast) => toast.id)).toEqual([persistent]);
+		removeToast(persistent);
+		expect(getToasts().some((toast) => toast.id === timed)).toBe(false);
+	});
 
 	it('dismisses only the selected toast and leaves persistent messages visible', async () => {
 		const { showToast, getToasts, removeToast } = await import('./toast.svelte');

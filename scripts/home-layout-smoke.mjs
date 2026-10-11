@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { checkPublicUI } from './public-ui-checks.mjs';
 
 // Exercise the real homepage with fallback content, including all five card types.
 const baseUrl = process.env.NAVINEST_LAYOUT_URL ?? 'http://127.0.0.1:5175';
@@ -39,6 +40,7 @@ try {
 	const page = await browser.newPage();
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
+	await checkPublicUI(page, baseUrl);
 	// Sparse categories near the bottom must still align with the clicked menu entry.
 	for (const width of [1100, 1920, 375]) {
 		await page.setViewportSize({ width, height: 842 });
@@ -157,6 +159,10 @@ try {
 						const range = document.createRange();
 						range.selectNodeContents(span);
 						return range.getClientRects().length > 1;
+					}),
+					metricsRows: [...document.querySelectorAll('.card-metrics')].some((metrics) => {
+						const tops = [...metrics.children].map((span) => span.getBoundingClientRect().top);
+						return tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 1;
 					})
 				};
 			});
@@ -172,6 +178,7 @@ try {
 				assert.ok(card.overflow <= 1, `${label}: ${card.title} overflows by ${card.overflow}px`);
 			}
 			assert.equal(layout.metricsWrap, false, `${label}: card metrics wrap into separate lines`);
+			assert.equal(layout.metricsRows, false, `${label}: card metrics split into multiple rows`);
 			const metricColors = await page.locator('.card-metrics span').evaluateAll((spans) =>
 				spans.map((span) => ({
 					background: getComputedStyle(span.closest('.benchmark-card')).backgroundColor,

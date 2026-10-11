@@ -1,0 +1,59 @@
+/* Shared public UI vocabulary, adapted from UI Handbook to a compact navigation site. */
+:root {
+	--ui-bg: #f5f6f8;
+	--ui-surface: #ffffff;
+	--ui-soft: #edf0f4;
+	--ui-text: #242830;
+	--ui-muted: #606873;
+	--ui-line: #dfe3e8;
+	--ui-accent: #b32632;
+	--ui-accent-hover: #941e29;
+	--ui-accent-soft: #fff0f1;
+	--ui-on-accent: #ffffff;
+	--ui-brand: #b32632;
+	--ui-success: #18734b;
+	--ui-error: #b32632;
+	--ui-radius-small: 6px;
+	--ui-radius-card: 12px;
+	--ui-radius-overlay: 16px;
+	--ui-space-1: 4px;
+	--ui-space-2: 8px;
+	--ui-space-3: 12px;
+	--ui-space-4: 16px;
+	--ui-space-6: 24px;
+	--ui-space-8: 32px;
+	--ui-font-small: 12px;
+	--ui-font-body: 14px;
+	--ui-font-section: 20px;
+	--ui-font-page: 32px;
+	--ui-control: 44px;
+	--ui-motion-fast: 150ms;
+	--ui-motion-overlay: 220ms;
+	--ui-ease: cubic-bezier(0.16, 1, 0.3, 1);
+	--ui-shadow-card: 0 2px 8px rgb(24 32 44 / 4%);
+	--ui-shadow-overlay: 0 12px 32px rgb(24 32 44 / 16%);
+	--ui-layer-raised: 10;
+	--ui-layer-header: 40;
+	--ui-layer-tabbar: 45;
+	--ui-layer-backdrop: 50;
+	--ui-layer-drawer: 51;
+	--ui-layer-toast: 60;
+	--ui-layer-skip: 70;
+}
+
+:root[data-theme='dark'] {
+	--ui-bg: #171a20;
+	--ui-surface: #22262e;
+	--ui-soft: #2a3039;
+	--ui-text: #f1f4f8;
+	--ui-muted: #bac3cf;
+	--ui-line: #3d4652;
+	--ui-accent: #ff99a1;
+	--ui-accent-hover: #ffb9be;
+	--ui-accent-soft: #3d252b;
+	--ui-on-accent: #23191b;
+	--ui-success: #87dab1;
+	--ui-error: #ff99a1;
+	--ui-shadow-card: 0 2px 8px rgb(0 0 0 / 12%);
+	--ui-shadow-overlay: 0 12px 32px rgb(0 0 0 / 32%);
+}

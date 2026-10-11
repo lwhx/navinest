@@ -14,7 +14,7 @@ export function getToasts(): Toast[] {
 export function showToast(
 	message: string,
 	type: 'info' | 'success' | 'error' = 'info',
-	duration = 3200
+	duration = type === 'error' ? 0 : 3200
 ): number {
 	const id = ++counter;
 	toasts.push({ id, type, message });

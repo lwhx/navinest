@@ -9,6 +9,8 @@ NaviNest 是一个部署在 Cloudflare 上的个人导航、收藏与内容管�
 - Cloudflare Workers、D1、R2、KV 与 Access
 - Vitest 与 Playwright
 
+公共界面的设计与交互约定见 [`docs/ui-guidelines.md`](docs/ui-guidelines.md)。
+
 ## 本地开发
 
 ```bash

@@ -11,17 +11,17 @@
 .rail-card > p,
 .site-stats span,
 .rail-title > a {
-	color: #5f656d !important;
+	color: var(--ui-muted) !important;
 }
 .home-sidebar nav a:hover,
 .home-sidebar nav a.active {
-	color: #b32632 !important;
+	color: var(--ui-accent) !important;
 }
 .hero-search-form button {
-	background: #b32632 !important;
+	background: var(--ui-accent) !important;
 }
 .rail-list > li > span {
-	color: #a51f2b !important;
+	color: var(--ui-accent) !important;
 }
 
 :root[data-theme='dark'] .sidebar-brand small,
@@ -36,12 +36,12 @@
 :root[data-theme='dark'] .rail-card > p,
 :root[data-theme='dark'] .site-stats span,
 :root[data-theme='dark'] .rail-title > a {
-	color: #b8bec6 !important;
+	color: var(--ui-muted) !important;
 }
 :root[data-theme='dark'] .home-sidebar nav a:hover,
 :root[data-theme='dark'] .home-sidebar nav a.active,
 :root[data-theme='dark'] .rail-list > li > span {
-	color: #ff939b !important;
+	color: var(--ui-accent) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

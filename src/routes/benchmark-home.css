@@ -1,11 +1,11 @@
 /* OneNav benchmark homepage */
 :root {
-	--nav-red: #f1404b;
-	--nav-bg: #f2f4f7;
-	--nav-card: #fff;
-	--nav-text: #484b4f;
-	--nav-muted: #93959a;
-	--nav-line: rgba(72, 75, 79, 0.09);
+	--nav-red: var(--ui-accent);
+	--nav-bg: var(--ui-bg);
+	--nav-card: var(--ui-surface);
+	--nav-text: var(--ui-text);
+	--nav-muted: var(--ui-muted);
+	--nav-line: var(--ui-line);
 }
 .home-header {
 	position: fixed;
@@ -432,11 +432,11 @@
 	background: var(--nav-red);
 }
 :root[data-theme='dark'] {
-	--nav-bg: #1b1d1f;
-	--nav-card: #2d2e2f;
-	--nav-text: #d5d7da;
-	--nav-muted: #8d9095;
-	--nav-line: rgba(255, 255, 255, 0.08);
+	--nav-bg: var(--ui-bg);
+	--nav-card: var(--ui-surface);
+	--nav-text: var(--ui-text);
+	--nav-muted: var(--ui-muted);
+	--nav-line: var(--ui-line);
 }
 :root[data-theme='dark'] .home-header,
 :root[data-theme='dark'] .home-sidebar {
