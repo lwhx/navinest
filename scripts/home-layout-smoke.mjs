@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { checkPublicUI } from './public-ui-checks.mjs';
+import { checkHomeExperience } from './home-experience-checks.mjs';
 
 // Exercise the real homepage with fallback content, including all five card types.
 const baseUrl = process.env.NAVINEST_LAYOUT_URL ?? 'http://127.0.0.1:5175';
@@ -221,6 +222,7 @@ try {
 			}
 		}
 	}
+	await checkHomeExperience(page, baseUrl);
 	assert.deepEqual(errors, [], 'Homepage produced browser runtime errors');
 	console.log(
 		'Homepage category navigation, SSR and 12 layouts passed (320–1920px, light and dark).'

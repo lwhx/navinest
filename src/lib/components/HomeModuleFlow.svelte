@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import NavigationCard from './NavigationCard.svelte';
 	import SearchForm from './SearchForm.svelte';
+	import type { NavigationItem } from '$lib/data/navigation';
 	import type { HomeData } from '$lib/server/services/home';
 	let { home, mode }: { home: HomeData; mode: 'hero' | 'content' } = $props();
 	let query = $state(''),
@@ -14,7 +15,18 @@
 	let popular = $derived(
 		home.dashboard.popular.map((metrics) => ({
 			metrics,
-			item: all.find((x) => x.slug === metrics.slug && x.type === metrics.type)
+			item:
+				all.find((x) => x.slug === metrics.slug && x.type === metrics.type) ??
+				({
+					type: metrics.type,
+					slug: metrics.slug,
+					title: metrics.title,
+					summary: '',
+					url: null,
+					category: '',
+					tags: [],
+					accent: '#64748b'
+				} satisfies NavigationItem)
 		}))
 	);
 	let modules = $derived(
@@ -83,15 +95,18 @@
 						<span class="module-icon">★</span>
 						<h2 id={`module-${module.key}`}>{module.title}</h2>
 					</div>
-					<a href={resolve('/rankings')}>完整榜单</a>
+					<a href={resolve('/rankings')}>更多</a>
 				</div>
-				<div class="popular-grid">
-					{#each popular as entry (`${entry.metrics.type}-${entry.metrics.slug}`)}{#if entry.item}<NavigationCard
+				{#if popular.length}<div class="popular-grid">
+						{#each popular as entry (`${entry.metrics.type}-${entry.metrics.slug}`)}<NavigationCard
 								item={entry.item}
 								compact
 								metrics={{ views: entry.metrics.views, favorites: entry.metrics.favorites }}
-							/>{/if}{/each}
-				</div>
+							/>{/each}
+					</div>{:else}<div class="inline-empty">
+						<p>暂无排行内容。</p>
+						<a href={resolve('/rankings')}>查看全部</a>
+					</div>{/if}
 			</section>
 		{:else if module.type === 'content'}{@const section = home.sections.find(
 				(x) => x.slug === module.categorySlug
@@ -132,11 +147,14 @@
 										>{/each}
 								</div>{/if}
 						</div>
-						<a href={resolve('/categories/[slug]', { slug: section.slug })}>more+</a>
+						<a href={resolve('/categories/[slug]', { slug: section.slug })}>更多</a>
 					</div>
 					{#if visibleItems.length}<div class="site-grid" aria-live="polite">
 							{#each visibleItems as item (item.slug)}<NavigationCard {item} />{/each}
-						</div>{:else}<p class="inline-empty">此分类暂时没有内容。</p>{/if}
+						</div>{:else}<div class="inline-empty" aria-live="polite">
+							<p>此分类暂时没有内容。</p>
+							<a href={resolve('/search')}>搜索其他资源</a>
+						</div>{/if}
 				</section>{/if}
 		{:else if module.type === 'hot'}<section class="category-module">
 				<div class="module-title">
@@ -144,17 +162,20 @@
 						<span class="module-icon">热</span>
 						<h2>{module.title}</h2>
 					</div>
-					<a href={resolve('/hotnews')}>more+</a>
+					<a href={resolve('/hotnews')}>更多</a>
 				</div>
-				<ol class="home-hot-list">
-					{#each home.dashboard.hotnews.slice(0, 10) as item (`${item.source}-${item.rank}`)}<li>
-							<span>{item.rank}</span><a
-								href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
-								target="_blank"
-								rel="external noopener noreferrer">{item.title}</a
-							>
-						</li>{/each}
-				</ol>
+				{#if home.dashboard.hotnews.length}<ol class="home-hot-list">
+						{#each home.dashboard.hotnews.slice(0, 10) as item (`${item.source}-${item.rank}`)}<li>
+								<span>{item.rank}</span><a
+									href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
+									target="_blank"
+									rel="external noopener noreferrer">{item.title}</a
+								>
+							</li>{/each}
+					</ol>{:else}<div class="inline-empty">
+						<p>等待热点更新。</p>
+						<a href={resolve('/hotnews')}>查看全部</a>
+					</div>{/if}
 			</section>
 		{:else if module.type === 'links'}<section class="category-module">
 				<div class="module-title">

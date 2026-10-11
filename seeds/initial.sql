@@ -66,7 +66,7 @@ SELECT 'content','常用推荐','{"type":"site","categorySlug":"favorites","limi
 INSERT INTO home_modules(type,title,config_json,sort_order,is_enabled)
 SELECT 'content','开发工具','{"type":"site","categorySlug":"dev-tools","limit":8}',30,1 WHERE NOT EXISTS(SELECT 1 FROM home_modules WHERE type='content' AND title='开发工具');
 INSERT INTO home_modules(type,title,config_json,sort_order,is_enabled)
-SELECT 'ranking','排行榜','{"range":"week","type":"site","limit":10}',15,1 WHERE NOT EXISTS(SELECT 1 FROM home_modules WHERE type='ranking' AND title='排行榜');
+SELECT 'ranking','排行榜','{"range":"week","type":"site","limit":10}',100,1 WHERE NOT EXISTS(SELECT 1 FROM home_modules WHERE type='ranking' AND title='排行榜');
 
 INSERT INTO settings(key,value_json) VALUES
 ('site','{"name":"NaviNest","title":"NaviNest 导航巢","url":"https://nss.whks.de"}'),

@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { render } from 'svelte/server';
+import HomePage from '../routes/+page.svelte';
+import { fallbackHomeData } from '$lib/server/services/home';
+import { SITE_SETTINGS_DEFAULTS } from '$lib/types/site';
 import { describe, expect, it } from 'vitest';
 
 const outboundFiles = [
-	'src/routes/+page.svelte',
 	'src/routes/hotnews/+page.svelte',
 	'src/routes/user/submissions/+page.svelte',
 	'src/routes/admin/submissions/+page.svelte',
@@ -13,6 +16,17 @@ const outboundFiles = [
 ];
 
 describe('outbound link tabs', () => {
+	it('opens rendered homepage visits in isolated tabs after removing duplicate sidebar lists', () => {
+		const { body } = render(HomePage, {
+			props: { data: { ...fallbackHomeData(), site: SITE_SETTINGS_DEFAULTS, user: null } }
+		});
+		const visits = body.match(/<a[^>]*href="[^"]*\/go\?url=[^"]*"[^>]*>/g) ?? [];
+		expect(visits.length).toBeGreaterThan(0);
+		for (const anchor of visits) {
+			expect(anchor).toContain('target="_blank"');
+			expect(anchor).toContain('rel="external noopener noreferrer"');
+		}
+	});
 	it.each(outboundFiles)('opens every safe outbound link in a new isolated tab: %s', (path) => {
 		const source = readFileSync(path, 'utf8'),
 			anchors = source

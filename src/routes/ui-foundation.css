@@ -417,10 +417,10 @@
 	padding: 12px;
 }
 .home-page .popular-grid {
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
 }
 :root[data-theme] .home-page .site-grid {
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
 }
 .home-page .home-canvas {
 	max-width: 1800px;
@@ -528,4 +528,53 @@
 	:root[data-theme] :is(.hero-search-form, .public-search-form) button {
 		padding: 0 12px;
 	}
+}
+
+/* Explain the resource before secondary metadata; keep the existing typography tokens. */
+:root[data-theme] .benchmark-card .site-content > .card-summary {
+	display: block;
+	min-width: 0;
+	margin: 0 0 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+:root[data-theme] .benchmark-card .card-secondary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+	min-width: 0;
+}
+:root[data-theme] .benchmark-card .card-secondary .type-chip {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+}
+:root[data-theme] .benchmark-card .card-secondary .card-metrics {
+	margin-top: 0;
+	flex-wrap: nowrap;
+}
+:root[data-theme] .public-shell .benchmark-card .card-summary {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+:root[data-theme] .home-page .inline-empty {
+	padding: 16px;
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	color: var(--ui-muted);
+	background: var(--ui-surface);
+}
+.home-page .inline-empty p {
+	margin: 0;
+}
+.home-page .inline-empty a {
+	display: inline-flex;
+	align-items: center;
+	min-height: var(--ui-control);
+	color: var(--ui-accent);
 }
