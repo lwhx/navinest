@@ -140,10 +140,6 @@ try {
 			// Also exercise populated categories rather than only sparse fallback sections.
 			// Reuse the rendered cards so the fixture retains the production markup and CSS.
 			await page.evaluate(() => {
-				for (const metrics of document.querySelectorAll('.card-metrics')) {
-					metrics.children[0].textContent = '浏览 247';
-					metrics.children[1].textContent = '收藏 36';
-				}
 				for (const grid of document.querySelectorAll('.site-grid')) {
 					const card = grid.firstElementChild;
 					if (!card) continue;
@@ -160,15 +156,7 @@ try {
 						textWidth: card.querySelector('.site-content')?.getBoundingClientRect().width,
 						overflow: card.scrollWidth - card.clientWidth
 					})),
-					metricsWrap: [...document.querySelectorAll('.card-metrics span')].some((span) => {
-						const range = document.createRange();
-						range.selectNodeContents(span);
-						return range.getClientRects().length > 1;
-					}),
-					metricsRows: [...document.querySelectorAll('.card-metrics')].some((metrics) => {
-						const tops = [...metrics.children].map((span) => span.getBoundingClientRect().top);
-						return tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 1;
-					})
+					metricCount: document.querySelectorAll('.card-metrics').length
 				};
 			});
 			const label = `${width}px ${dark ? 'dark' : 'light'}`;
@@ -182,13 +170,10 @@ try {
 				);
 				assert.ok(card.overflow <= 1, `${label}: ${card.title} overflows by ${card.overflow}px`);
 			}
-			assert.equal(layout.metricsWrap, false, `${label}: card metrics wrap into separate lines`);
-			assert.equal(layout.metricsRows, false, `${label}: card metrics split into multiple rows`);
-			const metricColors = await page.locator('.card-metrics span').evaluateAll((spans) =>
-				spans.map((span) => ({
-					background: getComputedStyle(span.closest('.benchmark-card')).backgroundColor,
-					text: getComputedStyle(span).color
-				}))
+			assert.equal(
+				layout.metricCount,
+				0,
+				`${label}: home cards must not show view/favorite counts`
 			);
 			await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
 			const headerColors = await page.locator('.home-header').evaluate((header) => ({
@@ -213,13 +198,6 @@ try {
 				(colors[0] + 0.05) / (colors[1] + 0.05) >= 4.5,
 				`${label}: fixed header text has insufficient contrast`
 			);
-			for (const sample of metricColors) {
-				const levels = [luminance(sample.background), luminance(sample.text)].sort((a, b) => b - a);
-				assert.ok(
-					(levels[0] + 0.05) / (levels[1] + 0.05) >= 4.5,
-					`${label}: card metrics have insufficient contrast`
-				);
-			}
 		}
 	}
 	await checkHomeExperience(page, baseUrl);
