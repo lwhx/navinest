@@ -165,3 +165,36 @@
 		flex: 0 0 auto;
 	}
 }
+
+:root[data-theme='dark'] .ranking-periods a {
+	background: #1c2220;
+	color: #929995;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme='dark'] .ranking-periods a.active {
+	background: #f1404b;
+	color: #fff;
+	border-color: #f1404b;
+}
+:root[data-theme='dark'] .ranking-list li {
+	background: #1c2220;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+:root[data-theme='dark'] .ranking-title {
+	color: #edf1ef;
+}
+:root[data-theme='dark'] .ranking-title:hover {
+	color: #2ca66f;
+}
+:root[data-theme='dark'] .ranking-metrics strong {
+	color: #edf1ef;
+}
+:root[data-theme='dark'] .hot-source-card {
+	background: #1c2220;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+:root[data-theme='dark'] .hot-source-card li {
+	border-bottom-color: rgba(255, 255, 255, 0.06);
+}

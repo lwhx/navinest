@@ -697,4 +697,23 @@
 			margin-top: 10px;
 		}
 	}
+	:root[data-theme='dark'] .ai-boundary {
+		background: #151918;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+	:root[data-theme='dark'] .ai-boundary p {
+		color: #929995;
+	}
+	:root[data-theme='dark'] .suggestion-list div {
+		border-bottom-color: rgba(255, 255, 255, 0.08);
+	}
+	:root[data-theme='dark'] .suggestion-list dd {
+		color: #cbd0d8;
+	}
+	:root[data-theme='dark'] .icon-actions button,
+	:root[data-theme='dark'] .icon-upload span {
+		background: #252b28;
+		color: #edf1ef;
+		border-color: rgba(255, 255, 255, 0.12);
+	}
 </style>

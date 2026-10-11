@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { invalidateAll } from '$app/navigation';
+	import { showToast } from '$lib/toast';
 	import { filterLinks } from '$lib/navigation-filter';
 	let {
 		navigation
@@ -64,17 +66,17 @@
 			const data = await response.json();
 			if (!response.ok) {
 				message = data.error ?? '导入失败，请重试。';
+				showToast(message, 'error');
 				return;
 			}
-			sessionStorage.setItem(
-				'navinest-import-result',
-				`导入完成：新增 ${data.imported} 条，跳过重复 ${data.duplicates} 条，忽略无效 ${data.skipped} 条${
-					data.limited ? `，超出上限 ${data.limited} 条未导入` : ''
-				}。`
-			);
-			location.reload();
+			message = `导入完成：新增 ${data.imported} 条，跳过重复 ${data.duplicates} 条，忽略无效 ${data.skipped} 条${
+				data.limited ? `，超出上限 ${data.limited} 条未导入` : ''
+			}。`;
+			showToast('书签导入完成。', 'success');
+			await invalidateAll();
 		} catch {
 			message = '导入失败，请重试。';
+			showToast(message, 'error');
 		} finally {
 			importing = false;
 		}
@@ -88,9 +90,12 @@
 		const data = await response.json();
 		if (!response.ok) {
 			message = data.error;
+			showToast(data.error || '操作失败', 'error');
 			return false;
 		}
-		location.reload();
+		message = '';
+		showToast('操作成功。', 'success');
+		await invalidateAll();
 		return true;
 	}
 	function addCategory() {

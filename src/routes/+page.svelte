@@ -4,6 +4,7 @@
 	import HomeModuleFlow from '$lib/components/HomeModuleFlow.svelte';
 	import { appConfig } from '$lib/config';
 	import './home-reference.css';
+	import '$lib/components/public-navigation.css';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	let activeCategory = $state(''),
@@ -49,6 +50,13 @@
 		posts: '✎',
 		bulletins: '!'
 	};
+	const tabLinks = [
+		{ label: '首页', symbol: '⌂', href: resolve('/') },
+		{ label: '搜索', symbol: '⌕', href: resolve('/search') },
+		{ label: '排行', symbol: '榜', href: resolve('/rankings') },
+		{ label: '热点', symbol: '热', href: resolve('/hotnews') },
+		{ label: '我的', symbol: '我', href: resolve('/user') }
+	];
 </script>
 
 <svelte:window onkeydown={closeMenuOnEscape} />
@@ -183,3 +191,11 @@
 		</nav>
 	</footer>
 </main>
+<nav class="mobile-tabbar" aria-label="移动快捷导航">
+	{#each tabLinks as link (link.href)}<a
+			href={link.href}
+			class:active={link.href === resolve('/')}
+			aria-current={link.href === resolve('/') ? 'page' : undefined}
+			><span>{link.symbol}</span>{link.label}</a
+		>{/each}
+</nav>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { invalidateAll } from '$app/navigation';
+	import { showToast } from '$lib/toast';
 	import AccountShell from '$lib/components/AccountShell.svelte';
 	import CustomNavigationManager from '$lib/components/CustomNavigationManager.svelte';
 	import type { PageProps } from './$types';
@@ -24,7 +26,12 @@
 		});
 		const body = await response.json();
 		message = response.ok ? '资料已保存。' : body.error;
-		if (response.ok && reload) location.reload();
+		if (response.ok) {
+			showToast('资料已保存。', 'success');
+			if (reload) await invalidateAll();
+		} else {
+			showToast(body.error ?? '保存失败', 'error');
+		}
 		return response.ok;
 	}
 	async function upload(event: Event, kind: 'avatar' | 'cover') {
@@ -37,6 +44,7 @@
 			body = await response.json();
 		if (!response.ok) {
 			message = body.error;
+			showToast(body.error ?? '上传失败', 'error');
 			return;
 		}
 		const previousId = kind === 'avatar' ? avatarFileId : coverFileId;
@@ -44,7 +52,8 @@
 		else coverFileId = body.data.id;
 		if (await save(false)) {
 			if (previousId) await fetch(`/api/user/files/${previousId}`, { method: 'DELETE' });
-			location.reload();
+			showToast(kind === 'avatar' ? '头像已更新。' : '封面已更新。', 'success');
+			await invalidateAll();
 		}
 	}
 	async function logout() {

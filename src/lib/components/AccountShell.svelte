@@ -8,12 +8,14 @@
 		description,
 		eyebrow = 'ACCOUNT',
 		role,
+		showNav = true,
 		children
 	}: {
 		title: string;
 		description: string;
 		eyebrow?: string;
 		role?: string;
+		showNav?: boolean;
 		children: Snippet;
 	} = $props();
 	const links = [
@@ -34,9 +36,11 @@
 		</div>
 		<div class="account-hero-mark" aria-hidden="true">N</div>
 	</section>
-	<nav class="account-subnav" aria-label="账户导航">
-		{#each links as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
-		{#if role === 'admin'}<a class="admin-entry" href={resolve('/admin')}>管理后台</a>{/if}
-	</nav>
+	{#if showNav}
+		<nav class="account-subnav" aria-label="账户导航">
+			{#each links as link (link.href)}<a href={link.href}>{link.label}</a>{/each}
+			{#if role === 'admin'}<a class="admin-entry" href={resolve('/admin')}>管理后台</a>{/if}
+		</nav>
+	{/if}
 	<div class="account-content">{@render children()}</div>
 </PublicShell>

@@ -381,3 +381,81 @@
 		grid-template-columns: 1fr 1fr;
 	}
 }
+
+:root[data-theme='dark'] .account-subnav {
+	background: #1c2220;
+	border-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme='dark'] .account-subnav a {
+	color: #929995;
+}
+:root[data-theme='dark'] .account-subnav a:hover {
+	color: #ff6b75;
+	background: rgba(241, 64, 75, 0.12);
+}
+:root[data-theme='dark'] .account-card {
+	background: #1c2220;
+	border-color: rgba(255, 255, 255, 0.08);
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+:root[data-theme='dark'] .account-card h2,
+:root[data-theme='dark'] .account-card h3 {
+	color: #edf1ef;
+}
+:root[data-theme='dark'] .account-form > label,
+:root[data-theme='dark'] .account-field {
+	color: #bac2cd;
+}
+:root[data-theme='dark'] .account-form input,
+:root[data-theme='dark'] .account-form select,
+:root[data-theme='dark'] .account-form textarea,
+:root[data-theme='dark'] .account-field input,
+:root[data-theme='dark'] .account-field select {
+	background: #151918;
+	color: #edf1ef;
+	border-color: rgba(255, 255, 255, 0.12);
+}
+:root[data-theme='dark'] .account-button.secondary {
+	background: #252b28;
+	color: #edf1ef;
+	border-color: rgba(255, 255, 255, 0.12);
+}
+:root[data-theme='dark'] .account-button.secondary:hover {
+	background: #2e3632;
+}
+:root[data-theme='dark'] .account-stat {
+	background: #151918;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+}
+:root[data-theme='dark'] .account-stat strong {
+	color: #edf1ef;
+}
+:root[data-theme='dark'] .account-list li {
+	background: #151918;
+	border: 1px solid rgba(255, 255, 255, 0.06);
+}
+:root[data-theme='dark'] .account-list a {
+	color: #edf1ef;
+}
+:root[data-theme='dark'] .account-list a:hover {
+	color: #2ca66f;
+}
+:root[data-theme='dark'] .account-badge {
+	background: rgba(255, 255, 255, 0.08);
+	color: #ff8d95;
+}
+:root[data-theme='dark'] .account-note {
+	background: #332711;
+	color: #f5d179;
+}
+:root[data-theme='dark'] .account-divider {
+	color: #747d79;
+}
+:root[data-theme='dark'] .account-divider:before,
+:root[data-theme='dark'] .account-divider:after {
+	background: rgba(255, 255, 255, 0.1);
+}
+:root[data-theme='dark'] .admin-overview-entry {
+	border-color: rgba(241, 64, 75, 0.25);
+	background: rgba(241, 64, 75, 0.08) !important;
+}

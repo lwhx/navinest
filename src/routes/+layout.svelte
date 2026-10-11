@@ -6,6 +6,7 @@
 	import './quality-hardening.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import { provideSiteSettings } from '$lib/site-context';
 	import { siteDisplayName } from '$lib/types/site';
 	import type { LayoutProps } from './$types';
@@ -66,6 +67,7 @@
 
 <div id="main-content" tabindex="-1">{@render children()}</div>
 <ThemeToggle />
+<ToastContainer />
 
 <style>
 	.site-announcement {
@@ -90,16 +92,32 @@
 	}
 
 	.site-announcement button {
+		display: inline-grid;
+		place-items: center;
+		min-width: 44px;
+		min-height: 44px;
 		border: 0;
+		border-radius: 8px;
 		background: transparent;
 		color: inherit;
-		font-size: 18px;
+		font-size: 20px;
 		line-height: 1;
 		cursor: pointer;
 		opacity: 0.7;
+		transition: opacity 120ms ease, background 120ms ease;
 	}
 
 	.site-announcement button:hover {
 		opacity: 1;
+		background: rgba(0, 0, 0, 0.05);
+	}
+
+	:root[data-theme='dark'] .site-announcement {
+		background: rgba(37, 99, 235, 0.14);
+		border-bottom-color: rgba(255, 255, 255, 0.08);
+	}
+
+	:root[data-theme='dark'] .site-announcement button:hover {
+		background: rgba(255, 255, 255, 0.1);
 	}
 </style>

@@ -17,6 +17,7 @@
 	title="注册 NaviNest"
 	description="创建账号后可以收藏入口、提交投稿，并同步自己的导航与足迹。"
 	eyebrow="CREATE ACCOUNT"
+	showNav={false}
 >
 	<section class="account-card account-login">
 		{#if !data.registrationOpen}

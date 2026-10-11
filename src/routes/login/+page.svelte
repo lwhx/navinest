@@ -10,6 +10,7 @@
 	title="登录 NaviNest"
 	description="进入你的个人空间，同步收藏、足迹、投稿和专属导航。"
 	eyebrow="WELCOME BACK"
+	showNav={false}
 >
 	<section class="account-card account-login">
 		<div class="account-card-header">
