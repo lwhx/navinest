@@ -139,6 +139,10 @@ try {
 			// Also exercise populated categories rather than only sparse fallback sections.
 			// Reuse the rendered cards so the fixture retains the production markup and CSS.
 			await page.evaluate(() => {
+				for (const metrics of document.querySelectorAll('.card-metrics')) {
+					metrics.children[0].textContent = '浏览 247';
+					metrics.children[1].textContent = '收藏 36';
+				}
 				for (const grid of document.querySelectorAll('.site-grid')) {
 					const card = grid.firstElementChild;
 					if (!card) continue;
@@ -172,7 +176,7 @@ try {
 			assert.ok(layout.cards.length > 0, `${label}: no content cards rendered`);
 			for (const card of layout.cards) {
 				assert.ok(
-					card.textWidth >= 44,
+					card.textWidth >= 120,
 					`${label}: ${card.title} has only ${card.textWidth}px of text space`
 				);
 				assert.ok(card.overflow <= 1, `${label}: ${card.title} overflows by ${card.overflow}px`);
