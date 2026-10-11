@@ -24,7 +24,6 @@
 	let typeLabel = $derived(
 		{ site: '网址', post: '文章', app: '软件', book: '书籍', bulletin: '公告' }[item.type]
 	);
-	let symbol = $derived({ site: '◎', post: '文', app: '▦', book: '书', bulletin: '告' }[item.type]);
 	let mediaId = $derived(
 		item.type === 'post' || item.type === 'book'
 			? item.coverFileId
@@ -49,7 +48,77 @@
 				height="48"
 				loading="lazy"
 				decoding="async"
-			/>{:else}<span>{#if item.type === 'site'}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20M2 12h20"/></svg>{:else if item.type === 'post'}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>{:else if item.type === 'app'}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>{:else if item.type === 'book'}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>{:else}<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>{/if}</span>{/if}
+			/>{:else}<span
+				>{#if item.type === 'site'}<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20M2 12h20" /></svg
+					>{:else if item.type === 'post'}<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline
+							points="14 2 14 8 20 8"
+						/><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg
+					>{:else if item.type === 'app'}<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><rect x="3" y="3" width="7" height="7" rx="1" /><rect
+							x="14"
+							y="3"
+							width="7"
+							height="7"
+							rx="1"
+						/><rect x="14" y="14" width="7" height="7" rx="1" /><rect
+							x="3"
+							y="14"
+							width="7"
+							height="7"
+							rx="1"
+						/></svg
+					>{:else if item.type === 'book'}<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path
+							d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+						/></svg
+					>{:else}<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path
+							d="M13.73 21a2 2 0 0 1-3.46 0"
+						/></svg
+					>{/if}</span
+			>{/if}
 	</div>
 	<div class="site-content">
 		<div class="site-title-row">

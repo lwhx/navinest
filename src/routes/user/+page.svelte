@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { invalidateAll } from '$app/navigation';
-	import { showToast } from '$lib/toast';
+	import { showToast } from '$lib/toast.svelte';
 	import AccountShell from '$lib/components/AccountShell.svelte';
 	import CustomNavigationManager from '$lib/components/CustomNavigationManager.svelte';
 	import type { PageProps } from './$types';

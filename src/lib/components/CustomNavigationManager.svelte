@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { invalidateAll } from '$app/navigation';
-	import { showToast } from '$lib/toast';
+	import { showToast } from '$lib/toast.svelte';
 	import { filterLinks } from '$lib/navigation-filter';
 	let {
 		navigation

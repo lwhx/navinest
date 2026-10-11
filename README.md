@@ -22,6 +22,8 @@ npm run dev
 npm run lint
 npm run check
 npm run test
+npx playwright install chromium
+npm run test:home-layout
 npm run build
 ```
 
