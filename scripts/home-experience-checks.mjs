@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { checkHomeDensity } from './home-density-checks.mjs';
 
 export async function checkHomeExperience(page, baseUrl) {
 	await page.setViewportSize({ width: 1366, height: 900 });
@@ -24,7 +25,7 @@ export async function checkHomeExperience(page, baseUrl) {
 	const rankCards = await page.locator('.popular-sites .benchmark-card').evaluateAll((cards) =>
 		cards.map((card) => ({
 			href: card.querySelector('.card-title-link').getAttribute('href'),
-			title: card.querySelector('.card-title-link').textContent,
+			title: card.querySelector('h3').textContent,
 			type: card.querySelector('.type-chip').textContent
 		}))
 	);
@@ -142,19 +143,18 @@ export async function checkHomeExperience(page, baseUrl) {
 				const card = document.querySelector('#favorites .benchmark-card');
 				const grid = card.parentElement;
 				const original = card.cloneNode(true);
-				card.querySelector('.card-title-link').textContent =
+				card.querySelector('h3').textContent =
 					'中文长标题与用途说明：用于整理团队知识、设计素材和开发资源';
 				card.querySelector('.card-summary').textContent =
 					'用途简介可以直接阅读，这是一段很长的中文简介，用于检查截断与布局稳定性。';
 				const english = original.cloneNode(true);
-				english.querySelector('.card-title-link').textContent =
-					'SuperLongUnbrokenEnglishResourceName'.repeat(5);
+				english.querySelector('h3').textContent = 'SuperLongUnbrokenEnglishResourceName'.repeat(5);
 				english.querySelector('.card-summary').textContent = 'UnbrokenPurposeDescription'.repeat(
 					10
 				);
 				grid.appendChild(english);
 				const empty = original.cloneNode(true);
-				empty.querySelector('.card-title-link').textContent = '无简介、无自定义图标';
+				empty.querySelector('h3').textContent = '无简介、无自定义图标';
 				empty.querySelector('.card-summary').remove();
 				empty.querySelector('img')?.remove();
 				grid.appendChild(empty);
@@ -172,6 +172,7 @@ export async function checkHomeExperience(page, baseUrl) {
 					const content = card.querySelector('.site-content');
 					const summary = card.querySelector('.card-summary');
 					const title = card.querySelector('.card-title-link');
+					const heading = card.querySelector('h3');
 					const type = card.querySelector('.type-chip');
 					const metrics = card.querySelector('.card-metrics');
 					return {
@@ -190,7 +191,7 @@ export async function checkHomeExperience(page, baseUrl) {
 							getComputedStyle(type).display !== 'none' && type.getBoundingClientRect().height > 0,
 						order:
 							!summary ||
-							title.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top + 1,
+							heading.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top + 1,
 						metricsOrder:
 							!summary ||
 							!metrics ||
@@ -232,6 +233,7 @@ export async function checkHomeExperience(page, baseUrl) {
 			}
 		}
 	}
+	await checkHomeDensity(page, baseUrl, screenshots);
 	// Public component consumers must retain summaries and independent actions after navigating from home.
 	for (const path of ['/search?q=GitHub', '/categories/dev-tools', '/tags/code', '/sites/github']) {
 		for (const width of [320, 1366]) {

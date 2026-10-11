@@ -11,6 +11,17 @@ import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
 
 describe('homepage content rendering', () => {
+	it('makes the dense title and purpose one native detail target without nesting the visit link', () => {
+		const item = navigationItems[0];
+		const { body } = render(NavigationCard, { props: { item, dense: true, compact: true } });
+		const detailTarget = body.match(/<a class="card-title-link card-body-link"[\s\S]*?<\/a>/)?.[0];
+		expect(detailTarget).toContain(`href="/sites/${item.slug}"`);
+		expect(detailTarget).toContain(`<h3>${item.title}</h3>`);
+		expect(detailTarget).toContain('class="card-summary"');
+		expect(detailTarget).not.toContain('/go?url=');
+		expect(body).toContain('class="direct-link"');
+		expect(body).toContain('rel="external noopener noreferrer"');
+	});
 	it('renders all five types on the independent ranking page through shared detail routes', () => {
 		const home = fallbackHomeData();
 		const { body } = render(RankingsPage, {
