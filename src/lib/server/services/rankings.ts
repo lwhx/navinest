@@ -1,3 +1,4 @@
+import type { ContentType } from '$lib/types/content';
 import type { Database, DatabaseValue } from '$lib/server/db';
 
 export type RankingPeriod = 'day' | 'week' | 'month' | 'total';
@@ -51,7 +52,7 @@ function start(period: RankingPeriod, now: Date) {
 }
 type Row = {
 	id: number;
-	type: string;
+	type: ContentType;
 	title: string;
 	slug: string;
 	views: number;

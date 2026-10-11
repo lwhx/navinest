@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { contentDetailRoute, contentTypeLabels } from '$lib/content-routing';
 	import type { NavigationItem } from '$lib/data/navigation';
 	const id = $props.id();
 	const hintId = `${id}-description`;
@@ -12,20 +13,12 @@
 		compact?: boolean;
 		metrics?: { views: number; favorites: number };
 	} = $props();
-	let detail = $derived.by(() =>
-		item.type === 'site'
-			? resolve('/sites/[slug]', { slug: item.slug })
-			: item.type === 'post'
-				? resolve('/posts/[slug]', { slug: item.slug })
-				: item.type === 'app'
-					? resolve('/apps/[slug]', { slug: item.slug })
-					: item.type === 'book'
-						? resolve('/books/[slug]', { slug: item.slug })
-						: resolve('/bulletins/[slug]', { slug: item.slug })
-	);
-	let typeLabel = $derived(
-		{ site: '网址', post: '文章', app: '软件', book: '书籍', bulletin: '公告' }[item.type]
-	);
+	let detail = $derived(resolve(contentDetailRoute(item.type), { slug: item.slug }));
+	const countFormatter = new Intl.NumberFormat('zh-CN', {
+		notation: 'compact',
+		maximumFractionDigits: 1
+	});
+	let typeLabel = $derived(contentTypeLabels[item.type]);
 	let mediaId = $derived(
 		item.type === 'post' || item.type === 'book'
 			? item.coverFileId
@@ -125,19 +118,24 @@
 	<div class="site-content">
 		<div class="site-title-row">
 			<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
-			<span class="type-chip">{typeLabel}</span>
 		</div>
-		<p>{item.summary}</p>
-		{#if metrics}<div class="card-metrics">
-				<span>浏览 {metrics.views}</span><span>收藏 {metrics.favorites}</span>
-			</div>{/if}{#if !compact && item.tags.length}<div class="tag-row">
+		{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}
+		<div class="card-secondary">
+			<span class="type-chip">{typeLabel}</span>{#if metrics}<div class="card-metrics">
+					<span title={`浏览 ${metrics.views}`}>浏览 {countFormatter.format(metrics.views)}</span
+					><span title={`收藏 ${metrics.favorites}`}
+						>收藏 {countFormatter.format(metrics.favorites)}</span
+					>
+				</div>{/if}
+		</div>
+		{#if !compact && item.tags.length}<div class="tag-row">
 				{#each item.tags.slice(0, 3) as tag (tag.slug)}<a
 						href={resolve('/tags/[slug]', { slug: tag.slug })}>#{tag.name}</a
 					>{/each}
 			</div>{/if}
 	</div>
 	<span class="card-tooltip" id={hintId} role="tooltip"
-		><strong>{item.title}</strong><span>{item.summary}</span><small
+		><strong>{item.title}</strong>{#if item.summary.trim()}<span>{item.summary}</span>{/if}<small
 			>点击标题查看详情；访问箭头在新标签页打开。</small
 		></span
 	>

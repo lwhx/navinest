@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { contentDetailRoute, contentTypeLabels } from '$lib/content-routing';
 	import { resolve } from '$app/paths';
 	import PublicShell from '$lib/components/PublicShell.svelte';
 	import { appConfig } from '$lib/config';
@@ -10,16 +11,6 @@
 		['month', '月榜'],
 		['total', '总榜']
 	] as const;
-	function path(type: string, slug: string) {
-		const prefix: Record<string, string> = {
-			site: 'sites',
-			post: 'posts',
-			app: 'apps',
-			book: 'books',
-			bulletin: 'bulletins'
-		};
-		return `/${prefix[type]}/${encodeURIComponent(slug)}`;
-	}
 </script>
 
 <svelte:head
@@ -53,9 +44,10 @@
 			{#each data.items as item, index (item.id)}<li>
 					<span class="ranking-number">{index + 1}</span>
 					<div>
-						<a class="ranking-title" href={resolve(path(item.type, item.slug) as '/')}
-							>{item.title}</a
-						><small>{item.type}</small>
+						<a
+							class="ranking-title"
+							href={resolve(contentDetailRoute(item.type), { slug: item.slug })}>{item.title}</a
+						><small>{contentTypeLabels[item.type]}</small>
 					</div>
 					<div class="ranking-metrics">
 						<span><strong>{item.score}</strong>综合分</span><span

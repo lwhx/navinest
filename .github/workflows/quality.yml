@@ -34,8 +34,20 @@ jobs:
         run: npm run test
       - name: Install browser for homepage checks
         run: npx playwright install --with-deps chromium
+      - name: Install Chinese fonts for layout checks
+        run: sudo apt-get install -y fonts-noto-cjk
       - name: Homepage SSR and responsive layouts
+        env:
+          NAVINEST_REQUIRE_CJK: '1'
+          NAVINEST_SCREENSHOT_DIR: ${{ runner.temp }}/navinest-layout
         run: npm run test:home-layout
+      - name: Upload homepage layout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: homepage-layout
+          path: ${{ runner.temp }}/navinest-layout
+          if-no-files-found: ignore
       - name: Build without rewriting the Worker entrypoint
         shell: bash
         run: |

@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
+import { buildHomeModulePlan } from '$lib/server/services/home-module-plan';
 import { loadHomeDashboard } from '$lib/server/services/home-dashboard';
 const connections: DatabaseSync[] = [];
 function fixture() {
@@ -44,5 +45,39 @@ describe('home dashboard', () => {
 			score: 11
 		});
 		expect(result.hotnews[0]).toMatchObject({ source: 'News', rank: 1, title: 'Headline' });
+	});
+});
+
+describe('disabled homepage category configuration', () => {
+	it('reads disabled category slugs without re-enabling modules or changing rankings', async () => {
+		const db = fixture();
+		await db
+			.prepare(
+				`INSERT INTO home_modules VALUES(4,'content','隐藏分类','{"categorySlug":"design"}',40,0,'','')`
+			)
+			.all();
+		const dashboard = await loadHomeDashboard(db);
+		expect(dashboard.disabledCategorySlugs).toEqual(['design']);
+		expect(dashboard.modules.map((entry) => entry.type)).toEqual(['search', 'ranking']);
+		expect(
+			buildHomeModulePlan(
+				dashboard.modules,
+				[{ slug: 'design', name: '设计' }],
+				dashboard.disabledCategorySlugs
+			).some((entry) => entry.type === 'content')
+		).toBe(false);
+		expect(dashboard.popular[0].score).toBe(11);
+	});
+	it('ignores malformed disabled configuration instead of falling back to default modules', async () => {
+		const db = fixture();
+		for (const [index, config] of ['invalid', 'null', '{}'].entries()) {
+			await db
+				.prepare("INSERT INTO home_modules VALUES(?,'content','隐藏',?,40,0,'','')")
+				.bind(index + 4, config)
+				.all();
+		}
+		const dashboard = await loadHomeDashboard(db);
+		expect(dashboard.disabledCategorySlugs).toEqual([]);
+		expect(dashboard.modules.map((entry) => entry.type)).toEqual(['search', 'ranking']);
 	});
 });

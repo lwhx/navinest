@@ -149,33 +149,6 @@
 							<div><strong>{data.dashboard.stats.users}</strong><span>用户</span></div>
 						</div>
 					</section>
-					<section class="rail-card">
-						<div class="rail-title">
-							<h2>今日热榜</h2>
-							<a href={resolve('/hotnews')}>更多</a>
-						</div>
-						{#if data.dashboard.hotnews.length}<ol class="rail-list">
-								{#each data.dashboard.hotnews.slice(0, 5) as item (`${item.source}-${item.rank}`)}<li
-									>
-										<span>{item.rank}</span><a
-											href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
-											target="_blank"
-											rel="external noopener noreferrer">{item.title}</a
-										>
-									</li>{/each}
-							</ol>{:else}<p class="rail-empty">等待热榜刷新</p>{/if}
-					</section>
-					<section class="rail-card">
-						<div class="rail-title">
-							<h2>排行榜</h2>
-							<a href={resolve('/rankings')}>更多</a>
-						</div>
-						<ol class="rail-list">
-							{#each data.dashboard.popular.slice(0, 5) as item (`${item.type}-${item.slug}`)}<li>
-									<span>{item.score}</span><a href={resolve('/rankings')}>{item.title}</a>
-								</li>{/each}
-						</ol>
-					</section>
 				</aside>
 			</div>
 		</div>

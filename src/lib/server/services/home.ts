@@ -69,10 +69,11 @@ export function fallbackHomeData(): HomeData {
 				config: { categorySlug: 'dev-tools' },
 				sortOrder: 30
 			},
-			{ id: 4, type: 'ranking', title: '排行榜', config: {}, sortOrder: 15 }
+			{ id: 4, type: 'ranking', title: '排行榜', config: {}, sortOrder: 100 }
 		];
 	const dashboard = {
 		modules,
+		disabledCategorySlugs: [],
 		stats: { items: fallbackItems.length, categories: fallbackCategories.length, users: 0 },
 		popular: fallbackItems.slice(0, 12).map((item, index) => ({
 			id: index + 1,
@@ -118,7 +119,7 @@ export async function loadHomeData(database: Database): Promise<HomeData> {
 			urlTemplate: engine.urlTemplate
 		})),
 		dashboard,
-		modulePlan: buildHomeModulePlan(dashboard.modules, sections),
+		modulePlan: buildHomeModulePlan(dashboard.modules, sections, dashboard.disabledCategorySlugs),
 		source: 'database'
 	};
 }
