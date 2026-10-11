@@ -1,3 +1,5 @@
+import { searchRecommendations } from '$lib/search';
+
 type Module = {
 	id: number;
 	type: string;
@@ -13,6 +15,7 @@ export type HomePlanItem = {
 	title: string;
 	categorySlug?: string;
 	links?: Link[];
+	recommendedSearches?: string[];
 };
 function safeUrl(value: unknown) {
 	if (typeof value !== 'string') return null;
@@ -62,7 +65,14 @@ export function buildHomeModulePlan(
 				if (auxiliary.has(module.type)) continue;
 				auxiliary.add(module.type);
 			}
-			plan.push({ key: `${module.type}:${module.id}`, type: module.type, title: module.title });
+			plan.push({
+				key: `${module.type}:${module.id}`,
+				type: module.type,
+				title: module.title,
+				...(module.type === 'search'
+					? { recommendedSearches: searchRecommendations(module.config.recommendedSearches) }
+					: {})
+			});
 		} else if (module.type === 'links') {
 			const safe = links(module.config);
 			if (safe.length)

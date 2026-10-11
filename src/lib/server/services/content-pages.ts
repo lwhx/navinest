@@ -5,7 +5,8 @@ import {
 } from '$lib/data/navigation';
 import type { Database } from '$lib/server/db';
 import { listCategories } from '$lib/server/services/categories';
-import { listItems } from '$lib/server/services/items';
+import { countItems, listItems } from '$lib/server/services/items';
+import { normalizeSearchQuery, searchPagination, searchRank } from '$lib/search';
 import { toNavigationItem } from '$lib/server/services/navigation';
 import { listTags } from '$lib/server/services/tags';
 
@@ -17,32 +18,49 @@ export type ContentPageData = {
 	source: 'database' | 'fallback';
 };
 
-function includesQuery(item: NavigationItem, query: string): boolean {
-	const haystack = [item.title, item.summary, item.category, ...item.tags.map((tag) => tag.name)]
-		.join(' ')
-		.toLowerCase();
-	return haystack.includes(query.toLowerCase());
-}
-
-export async function searchContent(database: Database, query: string): Promise<ContentPageData> {
-	const items = query ? await listItems(database, { search: query }) : [];
+export async function searchContent(database: Database, input: string, requestedPage = 1) {
+	const query = normalizeSearchQuery(input);
+	const total = query ? await countItems(database, { search: query }) : 0;
+	const pagination = searchPagination(total, requestedPage);
+	const items = total
+		? await listItems(database, {
+				search: query,
+				order: 'relevance',
+				limit: pagination.pageSize,
+				offset: (pagination.page - 1) * pagination.pageSize
+			})
+		: [];
 	return {
+		query,
+		...pagination,
 		title: query ? `“${query}”的搜索结果` : '站内搜索',
-		description: query ? `找到 ${items.length} 条相关内容` : '输入关键词搜索站内收藏。',
+		description: query ? `找到 ${total} 条相关内容` : '输入关键词搜索站内收藏。',
 		items: items.map(toNavigationItem),
 		children: [],
-		source: 'database'
+		source: 'database' as const
 	};
 }
 
-export function searchFallback(query: string): ContentPageData {
-	const items = query ? fallbackItems.filter((item) => includesQuery(item, query)) : [];
+export function searchFallback(input: string, requestedPage = 1) {
+	const query = normalizeSearchQuery(input);
+	const matches = query
+		? fallbackItems
+				.map((item, index) => ({ item, index, rank: searchRank(item, query) }))
+				.filter((entry) => entry.rank !== null)
+				.sort((a, b) => a.rank! - b.rank! || a.index - b.index)
+				.map((entry) => entry.item)
+		: [];
+	const pagination = searchPagination(matches.length, requestedPage);
+	const start = (pagination.page - 1) * pagination.pageSize;
+	const items = matches.slice(start, start + pagination.pageSize);
 	return {
+		query,
+		...pagination,
 		title: query ? `“${query}”的搜索结果` : '站内搜索',
-		description: query ? `找到 ${items.length} 条相关内容` : '输入关键词搜索站内收藏。',
+		description: query ? `找到 ${pagination.total} 条相关内容` : '输入关键词搜索站内收藏。',
 		items,
 		children: [],
-		source: 'fallback'
+		source: 'fallback' as const
 	};
 }
 

@@ -1,5 +1,10 @@
 import { validateExternalTarget } from '$lib/server/safe-target';
 import type { ContentType } from '$lib/types/content';
+import {
+	searchRecommendations,
+	SEARCH_RECOMMENDATION_LIMIT,
+	SEARCH_RECOMMENDATION_LENGTH
+} from '$lib/search';
 
 const CONTENT_TYPES = new Set<ContentType>(['site', 'post', 'app', 'book', 'bulletin']);
 const ITEM_STATUSES = new Set(['draft', 'published']);
@@ -287,6 +292,32 @@ export function validateHomeModuleInput(input: InputRecord): ValidationResult<Ho
 	} catch {
 		errors.configJson = '配置必须是有效的 JSON 对象。';
 	}
+	if (type === 'search') {
+		const field =
+			typeof input.recommendedSearchesText === 'string' ? 'recommendedSearchesText' : 'configJson';
+		const words =
+			field === 'recommendedSearchesText'
+				? (input.recommendedSearchesText as string)
+						.split(/\r?\n/)
+						.map((word) => word.trim())
+						.filter(Boolean)
+				: config.recommendedSearches;
+		if (words !== undefined) {
+			if (
+				!Array.isArray(words) ||
+				words.length > SEARCH_RECOMMENDATION_LIMIT ||
+				words.some(
+					(word) =>
+						typeof word !== 'string' ||
+						!word.trim() ||
+						word.trim().length > SEARCH_RECOMMENDATION_LENGTH
+				)
+			)
+				errors[field] =
+					`推荐搜索词最多 ${SEARCH_RECOMMENDATION_LIMIT} 个，每个不超过 ${SEARCH_RECOMMENDATION_LENGTH} 个字符。`;
+			else config = { ...config, recommendedSearches: searchRecommendations(words) };
+		}
+	}
 	const data: HomeModuleInput = {
 		type: type as HomeModuleInput['type'],
 		title: text(input, 'title', errors, { required: true, maximum: 100 }) ?? '',
@@ -306,8 +337,12 @@ export function validateSearchEngineInput(input: InputRecord): ValidationResult<
 	const urlTemplate = text(input, 'urlTemplate', errors, { required: true, maximum: 2_000 }) ?? '';
 	if (urlTemplate) {
 		const target = validateExternalTarget(urlTemplate.replace('{query}', 'test'));
-		if (!urlTemplate.includes('{query}') || !target.valid) {
-			errors.urlTemplate = '请输入包含 {query} 的有效公网 HTTP/HTTPS 地址。';
+		if (
+			urlTemplate !== '/search?q={query}' &&
+			(!urlTemplate.includes('{query}') || !target.valid)
+		) {
+			errors.urlTemplate =
+				'请输入站内 /search?q={query} 或包含 {query} 的有效公网 HTTP/HTTPS 地址。';
 		}
 	}
 	const data: SearchEngineInput = {

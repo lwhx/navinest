@@ -18,7 +18,7 @@
 
 {#if items.length > 0}
 	<div class="cards results-cards">
-		{#each items as item (`${item.category}-${item.title}`)}
+		{#each items as item (`${item.type}-${item.slug}`)}
 			<NavigationCard {item} />
 		{/each}
 	</div>

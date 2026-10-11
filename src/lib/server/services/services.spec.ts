@@ -110,6 +110,8 @@ describe('content query services', () => {
 			'dev',
 			'%Git\\_100\\%%',
 			'%Git\\_100\\%%',
+			'%Git\\_100\\%%',
+			'%Git\\_100\\%%',
 			100,
 			0
 		]);

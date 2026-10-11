@@ -1,5 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
+	import { normalizeSearchQuery } from '$lib/search';
+	import {
+		readSearchEnginePreference,
+		saveSearchEnginePreference
+	} from '$lib/search-engine-preference';
 	import NavigationCard from './NavigationCard.svelte';
 	import SearchForm from './SearchForm.svelte';
 	import type { NavigationItem } from '$lib/data/navigation';
@@ -9,8 +15,12 @@
 		engineKey = $state<string | null>(null),
 		activeSubcategories = $state<Record<string, string>>({});
 	let engine = $derived(
-		home.searchEngines.find((x) => x.key === engineKey) ?? home.searchEngines[0]
+		home.searchEngines.find((x) => x.key === engineKey) ??
+			home.searchEngines[0] ?? { name: '站内', key: 'site', urlTemplate: '/search?q={query}' }
 	);
+	onMount(() => {
+		engineKey = readSearchEnginePreference(home.searchEngines.map((item) => item.key));
+	});
 	let all = $derived(home.sections.flatMap((x) => x.items));
 	let popular = $derived(
 		home.dashboard.popular.map((metrics) => ({
@@ -34,11 +44,16 @@
 			? home.modulePlan.filter((module) => module.type === 'search')
 			: home.modulePlan.filter((module) => module.type !== 'search')
 	);
-	const words = ['AI 工具', '设计资源', '开发工具', '效率软件'];
+	function chooseEngine(key: string) {
+		engineKey = key;
+		saveSearchEnginePreference(key);
+	}
 	function search() {
-		const value = query.trim();
-		if (value && engine)
-			location.href = engine.urlTemplate.replace('{query}', encodeURIComponent(value));
+		const value = normalizeSearchQuery(query);
+		if (value) {
+			const target = engine.urlTemplate.replace('{query}', encodeURIComponent(value));
+			location.href = target.startsWith('/') ? resolve(target as '/search') : target;
+		}
 	}
 	function selectSubcategory(sectionSlug: string, childSlug: string) {
 		activeSubcategories = { ...activeSubcategories, [sectionSlug]: childSlug };
@@ -60,7 +75,7 @@
 								type="button"
 								class:active={item.key === engine.key}
 								aria-pressed={item.key === engine.key}
-								onclick={() => (engineKey = item.key)}>{item.name}</button
+								onclick={() => chooseEngine(item.key)}>{item.name}</button
 							>{/each}
 					</div>
 					<SearchForm
@@ -70,15 +85,19 @@
 						placeholder={`使用 ${engine?.name ?? '站内'} 搜索`}
 						onSearch={search}
 					/>
-					<div class="search-hotwords">
-						<span>热门：</span>{#each words as word (word)}<button
-								type="button"
-								onclick={() => {
-									query = word;
-									search();
-								}}>{word}</button
-							>{/each}
-					</div>
+					{#if module.recommendedSearches?.length}<div class="search-hotwords">
+							<span>推荐搜索：</span>
+							<div class="search-recommendations" role="group" aria-label="推荐搜索词">
+								{#each module.recommendedSearches as word (word)}<button
+										type="button"
+										title={word}
+										onclick={() => {
+											query = word;
+											search();
+										}}>{word}</button
+									>{/each}
+							</div>
+						</div>{/if}
 				</div>
 				<div class="hero-links">
 					<strong>快捷入口</strong><a href={resolve('/rankings')}>本周排行榜</a><a
