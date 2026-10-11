@@ -6,6 +6,7 @@
 	color: var(--ui-text);
 	background: var(--ui-bg);
 	font-size: var(--ui-font-body);
+	font-weight: var(--ui-weight-body);
 	line-height: 1.6;
 }
 :root[data-theme] :is(.home-header, .public-header, .home-sidebar, .theme-toggle) {
@@ -40,6 +41,92 @@
 :root[data-theme] .home-sidebar nav a {
 	min-height: var(--ui-control);
 }
+/* Typography roles override the older compact component sizes. */
+:root[data-theme] .benchmark-card .site-title-row h3,
+:root[data-theme] .benchmark-card .site-title-row .card-title-link {
+	font-size: var(--ui-font-title);
+	font-weight: var(--ui-weight-title);
+	line-height: 1.5;
+	color: var(--ui-heading);
+}
+:root[data-theme] .benchmark-card .site-content > p {
+	font-size: var(--ui-font-body);
+	font-weight: var(--ui-weight-body);
+	line-height: 1.6;
+}
+:root[data-theme] .benchmark-card .card-metrics {
+	margin-top: 6px;
+	gap: 4px 8px;
+	font-size: var(--ui-font-small);
+	font-weight: var(--ui-weight-body);
+	line-height: 1.5;
+	font-variant-numeric: tabular-nums;
+}
+:root[data-theme] .benchmark-card :is(.type-chip, .tag-row a, .detail-link) {
+	font-size: var(--ui-font-small);
+	font-weight: var(--ui-weight-body);
+}
+:root[data-theme] :is(.home-sidebar, .mobile-drawer, .public-mobile-drawer) nav a {
+	font-size: var(--ui-font-title);
+	font-weight: var(--ui-weight-nav);
+	color: var(--ui-heading);
+}
+:root[data-theme]
+	:is(.home-sidebar, .mobile-drawer, .public-mobile-drawer)
+	nav
+	a:is(.active, [aria-current]) {
+	font-weight: var(--ui-weight-title);
+}
+:root[data-theme] :is(.home-header nav a, .public-header nav a, .public-user-link, .user-pill) {
+	font-size: var(--ui-font-body);
+	font-weight: var(--ui-weight-nav);
+}
+:root[data-theme] :is(.home-header, .public-header) nav a:is(.active, [aria-current]) {
+	font-weight: var(--ui-weight-title);
+}
+:root[data-theme] .home-page .subcategory-tabs button {
+	font-size: 14px;
+	font-weight: var(--ui-weight-nav);
+}
+:root[data-theme] .home-page .subcategory-tabs button.active {
+	font-weight: var(--ui-weight-title);
+}
+:root[data-theme] :is(.rail-card h2, .public-footer h2) {
+	font-size: 18px;
+	font-weight: var(--ui-weight-heading);
+	color: var(--ui-heading);
+}
+:root[data-theme] :is(.rail-list a, .home-hot-list a, .home-links-grid a) {
+	font-size: 14px;
+	font-weight: var(--ui-weight-body);
+	line-height: 1.6;
+	color: var(--ui-text);
+}
+:root[data-theme] :is(.sidebar-brand strong, .footer-brand strong) {
+	font-size: var(--ui-font-title);
+	font-weight: var(--ui-weight-heading);
+	color: var(--ui-heading);
+}
+:root[data-theme]
+	:is(.sidebar-brand small, .module-title > a, .rail-title > a, .rail-card > p, .site-stats span) {
+	font-size: var(--ui-font-small);
+	font-weight: var(--ui-weight-body);
+	line-height: 1.5;
+}
+:root[data-theme] .sidebar-shortcuts a {
+	font-size: 14px;
+	font-weight: var(--ui-weight-body);
+}
+:root[data-theme] .site-stats strong {
+	font-size: var(--ui-font-section);
+	font-weight: var(--ui-weight-heading);
+	color: var(--ui-heading);
+}
+:root[data-theme]
+	:is(.listing-hero h1, .product-detail-hero h1, .detail-content h2, .detail-side h2) {
+	font-weight: var(--ui-weight-heading);
+	color: var(--ui-heading);
+}
 :root[data-theme] :is(.nav-symbol, .module-icon, .type-chip, .tag-row a) {
 	background: var(--ui-soft);
 }
@@ -64,7 +151,7 @@
 :root[data-theme] .home-page .search-hero {
 	min-height: 380px;
 	padding-top: 96px;
-	padding-bottom: 24px;
+	padding-bottom: 16px;
 	color: var(--ui-text);
 	background:
 		radial-gradient(ellipse at 50% 0%, var(--ui-accent-soft), transparent 70%), var(--ui-bg);
@@ -119,6 +206,8 @@
 	padding: 0 4px;
 	color: var(--ui-text);
 	background: transparent;
+	font-size: var(--ui-font-title);
+	font-weight: var(--ui-weight-body);
 }
 :root[data-theme] :is(.hero-search-form, .public-search-form) input::placeholder {
 	color: var(--ui-muted);
@@ -175,10 +264,20 @@
 :root[data-theme] .home-page .hero-links a {
 	color: var(--ui-text);
 	background: var(--ui-soft);
+	font-size: 14px;
+	font-weight: var(--ui-weight-nav);
+}
+:root[data-theme] .home-page .hero-links strong {
+	font-size: var(--ui-font-small);
+	font-weight: var(--ui-weight-title);
+}
+:root[data-theme] .home-page .search-hotwords {
+	font-size: var(--ui-font-small);
 }
 :root[data-theme] .home-page .search-hotwords button {
 	min-height: 32px;
 	color: var(--ui-accent);
+	font-size: var(--ui-font-small);
 }
 :root[data-theme]
 	:is(
@@ -296,6 +395,7 @@
 	border-radius: var(--ui-radius-small);
 	color: var(--ui-accent);
 	background: var(--ui-accent-soft);
+	font-size: 18px;
 }
 :root[data-theme] .benchmark-card .detail-link {
 	min-width: var(--ui-control);
@@ -313,11 +413,17 @@
 }
 :root[data-theme] .home-page .benchmark-card {
 	grid-template-columns: 36px minmax(0, 1fr) auto;
-	gap: 8px;
-	padding: 8px;
+	gap: 12px;
+	padding: 12px;
 }
 .home-page .popular-grid {
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+:root[data-theme] .home-page .site-grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+.home-page .home-canvas {
+	max-width: 1800px;
 }
 :root[data-theme] .home-page .benchmark-card .site-icon,
 :root[data-theme] .home-page .benchmark-card .site-icon img {
@@ -329,9 +435,11 @@
 	align-items: center;
 	min-height: var(--ui-control);
 }
-.home-page .module-title h2 {
+:root[data-theme] .home-page .module-title h2 {
 	margin: 0;
-	font-size: 18px;
+	font-size: var(--ui-font-section);
+	font-weight: var(--ui-weight-heading);
+	color: var(--ui-heading);
 	line-height: 1.4;
 }
 .public-shell .results-cards .benchmark-card {
@@ -359,11 +467,13 @@
 }
 :root[data-theme] .mobile-tabbar a {
 	color: var(--ui-muted);
-	font-size: 12px;
+	font-size: var(--ui-font-small);
+	font-weight: var(--ui-weight-nav);
 }
 :root[data-theme] .mobile-tabbar a:is(:hover, .active) {
 	color: var(--ui-accent);
 	background: var(--ui-accent-soft);
+	font-weight: var(--ui-weight-title);
 }
 :root[data-theme] :is(.mobile-drawer-backdrop, .public-drawer-backdrop) {
 	z-index: var(--ui-layer-backdrop);

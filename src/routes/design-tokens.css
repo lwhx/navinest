@@ -4,6 +4,7 @@
 	--ui-surface: #ffffff;
 	--ui-soft: #edf0f4;
 	--ui-text: #242830;
+	--ui-heading: #171b23;
 	--ui-muted: #606873;
 	--ui-line: #dfe3e8;
 	--ui-accent: #b32632;
@@ -22,9 +23,14 @@
 	--ui-space-4: 16px;
 	--ui-space-6: 24px;
 	--ui-space-8: 32px;
-	--ui-font-small: 12px;
-	--ui-font-body: 14px;
-	--ui-font-section: 20px;
+	--ui-font-small: 13px;
+	--ui-font-body: 15px;
+	--ui-font-title: 16px;
+	--ui-font-section: 22px;
+	--ui-weight-body: 400;
+	--ui-weight-nav: 500;
+	--ui-weight-title: 600;
+	--ui-weight-heading: 700;
 	--ui-font-page: 32px;
 	--ui-control: 44px;
 	--ui-motion-fast: 150ms;
@@ -46,6 +52,7 @@
 	--ui-surface: #22262e;
 	--ui-soft: #2a3039;
 	--ui-text: #f1f4f8;
+	--ui-heading: #f6f8fb;
 	--ui-muted: #bac3cf;
 	--ui-line: #3d4652;
 	--ui-accent: #ff99a1;
