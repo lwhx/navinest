@@ -72,12 +72,24 @@ export async function checkPublicUI(page, baseUrl) {
 						});
 					return {
 						overflow: document.documentElement.scrollWidth - innerWidth,
+						visitTargets: [...document.querySelectorAll('.benchmark-card .direct-link')].map(
+							(link) => {
+								const { width, height } = link.getBoundingClientRect();
+								return { width, height };
+							}
+						),
 						surface: root.getPropertyValue('--ui-surface').trim(),
 						text: root.getPropertyValue('--ui-text').trim(),
 						contrast
 					};
 				});
 				assert.ok(sample.surface && sample.text, 'Public UI must use shared theme tokens');
+				for (const target of sample.visitTargets) {
+					assert.ok(
+						target.width >= 44 && target.height >= 44,
+						`${path} ${width}px: visit target must remain visible and at least 44px`
+					);
+				}
 				assert.ok(
 					sample.overflow <= 1,
 					`${path} ${width}px: horizontal overflow ${sample.overflow}px`
