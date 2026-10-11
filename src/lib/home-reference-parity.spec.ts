@@ -19,7 +19,6 @@ describe('home reference parity', () => {
 	it('keeps compact navigation cards free of article chrome', () => {
 		expect(card).toContain('class:compact');
 		expect(css).toContain('.benchmark-card.compact .site-content > p');
-		expect(css).toContain('.benchmark-card.compact .type-chip');
 		expect(css).toContain('.benchmark-card.compact .card-actions');
 	});
 	it('keeps the responsive card and category navigation rules', () => {

@@ -35,6 +35,11 @@ export async function checkPublicUI(page, baseUrl) {
 				await page.goto(new URL(path, baseUrl).href, { waitUntil: 'networkidle' });
 				if ((await page.getByLabel('切换深色模式').isChecked()) !== dark)
 					await page.locator('.theme-toggle').click();
+				assert.equal(
+					await page.locator('.type-chip').count(),
+					0,
+					'Public cards have no type badges'
+				);
 				const sample = await page.evaluate(() => {
 					const root = getComputedStyle(document.documentElement);
 					const luminance = (color) => {

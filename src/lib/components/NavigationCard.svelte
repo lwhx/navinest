@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { contentDetailRoute, contentTypeLabels } from '$lib/content-routing';
+	import { contentDetailRoute } from '$lib/content-routing';
 	import type { NavigationItem } from '$lib/data/navigation';
 	const id = $props.id();
 	const hintId = `${id}-description`;
@@ -20,7 +20,6 @@
 		notation: 'compact',
 		maximumFractionDigits: 1
 	});
-	let typeLabel = $derived(contentTypeLabels[item.type]);
 	let mediaId = $derived(
 		item.type === 'post' || item.type === 'book'
 			? item.coverFileId
@@ -126,14 +125,14 @@
 				<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
 			</div>
 			{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}{/if}
-		<div class="card-secondary">
-			<span class="type-chip">{typeLabel}</span>{#if metrics}<div class="card-metrics">
+		{#if metrics}<div class="card-secondary">
+				<div class="card-metrics">
 					<span title={`浏览 ${metrics.views}`}>浏览 {countFormatter.format(metrics.views)}</span
 					><span title={`收藏 ${metrics.favorites}`}
 						>收藏 {countFormatter.format(metrics.favorites)}</span
 					>
-				</div>{/if}
-		</div>
+				</div>
+			</div>{/if}
 		{#if !compact && item.tags.length}<div class="tag-row">
 				{#each item.tags.slice(0, 3) as tag (tag.slug)}<a
 						href={resolve('/tags/[slug]', { slug: tag.slug })}>#{tag.name}</a

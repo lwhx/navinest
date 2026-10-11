@@ -52,22 +52,6 @@
 	height: 100%;
 	border-radius: 8px;
 }
-.card-app .type-chip {
-	color: #2f6fed;
-	background: rgba(47, 111, 237, 0.09);
-}
-.card-post .type-chip {
-	color: #397a9b;
-	background: rgba(57, 122, 155, 0.09);
-}
-.card-book .type-chip {
-	color: #9a672f;
-	background: rgba(178, 118, 53, 0.1);
-}
-.card-bulletin .type-chip {
-	color: #f1404b;
-	background: rgba(241, 64, 75, 0.09);
-}
 @media (max-width: 900px) {
 	.mobile-menu-button {
 		display: grid;

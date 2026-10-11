@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { contentDetailRoute, contentTypeLabels } from '$lib/content-routing';
+	import { contentDetailRoute } from '$lib/content-routing';
 	import { resolve } from '$app/paths';
 	import PublicShell from '$lib/components/PublicShell.svelte';
 	import { appConfig } from '$lib/config';
@@ -47,7 +47,7 @@
 						<a
 							class="ranking-title"
 							href={resolve(contentDetailRoute(item.type), { slug: item.slug })}>{item.title}</a
-						><small>{contentTypeLabels[item.type]}</small>
+						>
 					</div>
 					<div class="ranking-metrics">
 						<span><strong>{item.score}</strong>综合分</span><span

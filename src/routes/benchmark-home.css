@@ -379,14 +379,6 @@
 	outline: 3px solid rgba(241, 64, 75, 0.3);
 	outline-offset: 3px;
 }
-.type-chip {
-	flex: 0 0 auto;
-	border-radius: 5px;
-	padding: 2px 5px;
-	color: var(--nav-muted);
-	background: #f1f2f4;
-	font-size: 9px;
-}
 .site-content p {
 	display: -webkit-box;
 	margin: 6px 0 0;
@@ -446,7 +438,6 @@
 	background: #2d2e2f;
 }
 :root[data-theme='dark'] .nav-symbol,
-:root[data-theme='dark'] .type-chip,
 :root[data-theme='dark'] .card-actions a {
 	background: #24262a;
 }

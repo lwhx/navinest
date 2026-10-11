@@ -18,7 +18,6 @@ describe('production quality hardening', () => {
 		for (const selector of [
 			'.hero-search-form button',
 			'.site-content > p',
-			'.type-chip',
 			'.tag-row a',
 			'.detail-link',
 			'.subcategory-tabs a'
