@@ -7,7 +7,11 @@
 		const theme = isDark ? 'dark' : 'light';
 		document.documentElement.dataset.theme = theme;
 		document.documentElement.style.colorScheme = theme;
-		localStorage.setItem('navinest-theme', theme);
+		try {
+			localStorage.setItem('navinest-theme', theme);
+		} catch {
+			/* The current theme remains usable when storage is unavailable. */
+		}
 	}
 
 	onMount(() => {

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { useSiteSettings } from '$lib/site-context';
+	import { modalDrawer } from '$lib/ui-actions';
 	import './public-shell.css';
 	import './public-content.css';
 	import './public-detail.css';
@@ -81,6 +82,7 @@
 </header>
 {#if menuOpen}<button
 		class="public-drawer-backdrop"
+		data-drawer-backdrop
 		type="button"
 		aria-label="关闭辅助菜单"
 		onclick={() => (menuOpen = false)}
@@ -91,6 +93,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="辅助菜单"
+		use:modalDrawer={() => (menuOpen = false)}
 	>
 		<div>
 			<strong>更多功能</strong><button

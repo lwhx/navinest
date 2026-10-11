@@ -1,0 +1,419 @@
+/* Public UI rules. Keep existing layout breakpoints and content-specific grids. */
+:root {
+	font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+:root[data-theme] :is(.home-page, .public-shell) {
+	color: var(--ui-text);
+	background: var(--ui-bg);
+	font-size: var(--ui-font-body);
+	line-height: 1.6;
+}
+:root[data-theme] :is(.home-header, .public-header, .home-sidebar, .theme-toggle) {
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	border-color: var(--ui-line);
+}
+:root[data-theme] :is(.home-header, .public-header) {
+	z-index: var(--ui-layer-header);
+	box-shadow: var(--ui-shadow-card);
+}
+:root[data-theme]
+	:is(.home-logo > span, .sidebar-brand > span, .public-logo span, .footer-brand span) {
+	color: #fff;
+	background: var(--ui-brand);
+	box-shadow: none;
+	border-radius: var(--ui-radius-card);
+}
+:root[data-theme] :is(.home-header nav a, .public-header nav a, .public-user-link, .user-pill) {
+	min-height: var(--ui-control);
+	color: var(--ui-text);
+	border-color: var(--ui-line);
+	background: transparent;
+}
+:root[data-theme]
+	:is(.home-header, .public-header, .home-sidebar)
+	nav
+	a:is(:hover, .active, [aria-current]) {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+:root[data-theme] .home-sidebar nav a {
+	min-height: var(--ui-control);
+}
+:root[data-theme] :is(.nav-symbol, .module-icon, .type-chip, .tag-row a) {
+	background: var(--ui-soft);
+}
+:root[data-theme] .home-sidebar nav a.active .nav-symbol {
+	color: var(--ui-on-accent);
+	background: var(--ui-accent);
+}
+:root[data-theme]
+	:is(.home-page, .public-shell)
+	:is(a, button, input, select, textarea):focus-visible {
+	outline: 2px solid var(--ui-accent);
+	outline-offset: 3px;
+}
+:root[data-theme] .theme-toggle:has(input:focus-visible) {
+	outline: 2px solid var(--ui-accent);
+	outline-offset: 3px;
+}
+:root[data-theme] :is(.home-page, .public-shell) button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+:root[data-theme] .home-page .search-hero {
+	min-height: 380px;
+	padding-top: 96px;
+	padding-bottom: 24px;
+	color: var(--ui-text);
+	background:
+		radial-gradient(ellipse at 50% 0%, var(--ui-accent-soft), transparent 70%), var(--ui-bg);
+	background-size: auto;
+}
+.home-page .search-hero::before,
+.home-page .search-hero::after {
+	display: none;
+}
+.home-page .search-hero h1 {
+	margin: 8px 0 12px;
+	font-size: clamp(28px, 3vw, 36px);
+	line-height: 1.2;
+}
+:root[data-theme] .home-page .search-hero :is(.search-kicker, .search-hotwords) {
+	color: var(--ui-muted);
+	opacity: 1;
+}
+:root[data-theme] .home-page .search-hero .engine-tabs button {
+	min-height: 40px;
+	border: 0;
+	border-radius: var(--ui-radius-small);
+	padding: 4px 12px;
+	color: var(--ui-muted);
+	background: transparent;
+}
+:root[data-theme] .home-page .search-hero .engine-tabs button:is(:hover, .active) {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) {
+	display: flex;
+	align-items: center;
+	gap: var(--ui-space-2);
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	padding: 4px;
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	box-shadow: var(--ui-shadow-card);
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form):focus-within {
+	border-color: var(--ui-accent);
+	box-shadow: 0 0 0 3px var(--ui-accent-soft);
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) input {
+	flex: 1;
+	width: 0;
+	min-width: 0;
+	height: var(--ui-control);
+	border: 0;
+	padding: 0 4px;
+	color: var(--ui-text);
+	background: transparent;
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) input::placeholder {
+	color: var(--ui-muted);
+	opacity: 1;
+}
+.search-symbol {
+	flex: 0 0 24px;
+	margin-left: 8px;
+	color: var(--ui-muted);
+	text-align: center;
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) button {
+	flex: 0 0 auto;
+	min-width: var(--ui-control);
+	height: var(--ui-control);
+	border: 0;
+	border-radius: var(--ui-radius-small);
+	padding: 0 16px;
+	font-size: var(--ui-font-body);
+	font-weight: 600;
+	cursor: pointer;
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) .search-clear {
+	padding: 0;
+	color: var(--ui-muted);
+	background: var(--ui-soft) !important;
+}
+:root[data-theme] :is(.hero-search-form, .public-search-form) .search-submit,
+:root[data-theme] .empty-state .empty-state-action {
+	color: var(--ui-on-accent);
+	background: var(--ui-accent) !important;
+}
+.search-hint {
+	margin: 8px 0 0;
+	color: var(--ui-muted);
+	font-size: var(--ui-font-small);
+}
+.search-hint kbd {
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+}
+.public-shell .search-hint {
+	grid-column: 1 / -1;
+}
+.home-page .hero-links {
+	margin-top: 12px;
+	padding: 8px;
+	gap: 8px;
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	background: var(--ui-surface);
+	box-shadow: none;
+}
+:root[data-theme] .home-page .hero-links a {
+	color: var(--ui-text);
+	background: var(--ui-soft);
+}
+:root[data-theme] .home-page .search-hotwords button {
+	min-height: 32px;
+	color: var(--ui-accent);
+}
+:root[data-theme]
+	:is(
+		.listing-hero,
+		.product-detail-hero,
+		.detail-content,
+		.detail-side,
+		.rail-card,
+		.empty-state,
+		.public-footer
+	) {
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	box-shadow: var(--ui-shadow-card);
+}
+:root[data-theme] :is(.listing-hero, .product-detail-hero) :is(p, span, small),
+:root[data-theme]
+	:is(
+		.detail-content p,
+		.detail-side dt,
+		.empty-state p,
+		.public-breadcrumb,
+		.public-footer p,
+		.public-footer small,
+		.public-footer nav a
+	) {
+	color: var(--ui-muted);
+	opacity: 1;
+}
+:root[data-theme] :is(.public-footer h2, .public-footer strong) {
+	color: var(--ui-text);
+}
+.listing-hero h1,
+.product-detail-hero h1 {
+	font-size: var(--ui-font-page);
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+:root[data-theme]
+	:is(.detail-type-symbol, .detail-taxonomy a, .site-stats div, .category-child-tabs a) {
+	color: var(--ui-text);
+	background: var(--ui-soft);
+}
+:root[data-theme] .detail-actions :is(a, button) {
+	min-height: var(--ui-control);
+	color: var(--ui-on-accent);
+	background: var(--ui-accent);
+}
+.empty-state-action {
+	display: inline-flex;
+	align-items: center;
+	min-height: var(--ui-control);
+	margin-top: 8px;
+	border-radius: var(--ui-radius-small);
+	padding: 8px 16px;
+	font-weight: 600;
+}
+:root[data-theme] .benchmark-card {
+	position: relative;
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	box-shadow: var(--ui-shadow-card);
+	transition:
+		border-color var(--ui-motion-fast),
+		box-shadow var(--ui-motion-fast);
+}
+:root[data-theme] .benchmark-card:is(:hover, :focus-within) {
+	z-index: var(--ui-layer-raised);
+	border-color: var(--ui-accent);
+}
+.card-tooltip {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 0;
+	z-index: var(--ui-layer-raised);
+	display: grid;
+	gap: 4px;
+	width: 100%;
+	border: 1px solid var(--ui-line);
+	border-radius: var(--ui-radius-card);
+	padding: 12px;
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	box-shadow: var(--ui-shadow-overlay);
+	font-size: 13px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+	visibility: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+.card-tooltip small {
+	color: var(--ui-muted);
+	font-size: var(--ui-font-small);
+}
+.benchmark-card:has(.card-title-link:focus-visible) .card-tooltip {
+	visibility: visible;
+	opacity: 1;
+}
+@media (hover: hover) {
+	.benchmark-card:hover .card-tooltip {
+		visibility: visible;
+		opacity: 1;
+	}
+}
+:root[data-theme] .benchmark-card .direct-link {
+	display: grid;
+	min-width: var(--ui-control);
+	height: var(--ui-control);
+	place-items: center;
+	border-radius: var(--ui-radius-small);
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+:root[data-theme] .benchmark-card .detail-link {
+	min-width: var(--ui-control);
+	min-height: var(--ui-control);
+	background: var(--ui-soft);
+}
+:root[data-theme] .theme-toggle input:checked + i {
+	background: var(--ui-brand);
+}
+.home-page .benchmark-card .card-actions,
+.home-page .benchmark-card.compact .card-actions {
+	display: flex;
+}
+.home-page .benchmark-card .detail-link {
+	display: none;
+}
+:root[data-theme] .home-page .benchmark-card {
+	grid-template-columns: 36px minmax(0, 1fr) auto;
+	gap: 8px;
+	padding: 8px;
+}
+.home-page .benchmark-card .site-icon,
+.home-page .benchmark-card .site-icon img {
+	width: 36px;
+	height: 36px;
+}
+.home-page .card-title-link {
+	display: flex;
+	align-items: center;
+	min-height: var(--ui-control);
+}
+.home-page .module-title h2 {
+	margin: 0;
+	font-size: 18px;
+	line-height: 1.4;
+}
+.public-shell .results-cards .benchmark-card {
+	grid-template-columns: 44px minmax(0, 1fr);
+	gap: 12px;
+	padding: 16px;
+}
+.public-shell .results-cards .card-actions {
+	grid-column: 2;
+	justify-self: start;
+}
+.public-shell .results-cards .site-icon {
+	width: 44px;
+	height: 44px;
+}
+.public-shell .results-cards .site-title-row {
+	align-items: start;
+	gap: 8px;
+}
+:root[data-theme] .mobile-tabbar {
+	z-index: var(--ui-layer-tabbar);
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	border-color: var(--ui-line);
+}
+:root[data-theme] .mobile-tabbar a {
+	color: var(--ui-muted);
+	font-size: 12px;
+}
+:root[data-theme] .mobile-tabbar a:is(:hover, .active) {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+:root[data-theme] :is(.mobile-drawer-backdrop, .public-drawer-backdrop) {
+	z-index: var(--ui-layer-backdrop);
+}
+:root[data-theme] :is(.mobile-drawer, .public-mobile-drawer) {
+	z-index: var(--ui-layer-drawer);
+	color: var(--ui-text);
+	background: var(--ui-surface);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+:root[data-theme] :is(.mobile-drawer, .public-mobile-drawer) :is(button, nav a) {
+	color: var(--ui-text);
+	background: var(--ui-soft);
+}
+:root[data-theme] :is(.mobile-drawer, .public-mobile-drawer) nav a.active {
+	color: var(--ui-accent);
+	background: var(--ui-accent-soft);
+}
+.theme-toggle {
+	min-height: var(--ui-control);
+}
+.navigation-progress {
+	z-index: var(--ui-layer-skip);
+	background: var(--ui-accent);
+}
+.skip-link {
+	z-index: var(--ui-layer-skip);
+	background: var(--ui-brand);
+}
+@media (max-width: 900px) {
+	:root[data-theme] .home-page .search-hero {
+		padding-top: 96px;
+	}
+	.search-hint {
+		display: none;
+	}
+	.home-page .search-hero .engine-tabs {
+		gap: 8px;
+	}
+	:root[data-theme] .home-page .search-hero .engine-tabs button,
+	:root[data-theme] .home-page .search-hotwords button,
+	:root[data-theme] .home-page .hero-links a {
+		min-height: var(--ui-control);
+	}
+	.home-page .search-hotwords {
+		gap: 8px;
+	}
+	:root[data-theme] :is(.hero-search-form, .public-search-form) {
+		gap: 4px;
+	}
+	:root[data-theme] :is(.hero-search-form, .public-search-form) button {
+		padding: 0 12px;
+	}
+}

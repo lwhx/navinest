@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import PublicShell from '$lib/components/PublicShell.svelte';
 	import ContentResults from '$lib/components/ContentResults.svelte';
+	import SearchForm from '$lib/components/SearchForm.svelte';
 	import { appConfig } from '$lib/config';
 	import type { PageProps } from './$types';
 	let { data }: PageProps = $props();
+	let query = $derived(data.query);
 </script>
 
 <svelte:head
@@ -19,17 +20,12 @@
 			<p>{data.description}</p>
 		</div>
 		<strong>{data.items.length}<small>条结果</small></strong>
-		<form class="public-search-form" action={resolve('/search')} method="GET">
-			<input
-				name="q"
-				value={data.query}
-				placeholder="搜索标题、简介或标签"
-				aria-label="搜索关键词"
-			/><button type="submit">搜索</button>
-		</form>
+		<SearchForm bind:value={query} />
 	</header>
 	<ContentResults
 		items={data.items}
 		emptyMessage={data.query ? '尝试更换关键词。' : '输入关键词开始搜索。'}
+		actionHref="/"
+		actionLabel="浏览分类"
 	/></PublicShell
 >

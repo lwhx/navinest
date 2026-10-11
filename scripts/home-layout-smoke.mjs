@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { checkPublicUI } from './public-ui-checks.mjs';
 
 // Exercise the real homepage with fallback content, including all five card types.
 const baseUrl = process.env.NAVINEST_LAYOUT_URL ?? 'http://127.0.0.1:5175';
@@ -39,6 +40,7 @@ try {
 	const page = await browser.newPage();
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
+	await checkPublicUI(page, baseUrl);
 	// Sparse categories near the bottom must still align with the clicked menu entry.
 	for (const width of [1100, 1920, 375]) {
 		await page.setViewportSize({ width, height: 842 });

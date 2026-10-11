@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { NavigationItem } from '$lib/data/navigation';
+	const id = $props.id();
+	const hintId = `${id}-description`;
 	let {
 		item,
 		compact = false,
@@ -122,7 +124,7 @@
 	</div>
 	<div class="site-content">
 		<div class="site-title-row">
-			<h3><a class="card-title-link" href={detail}>{item.title}</a></h3>
+			<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
 			<span class="type-chip">{typeLabel}</span>
 		</div>
 		<p>{item.summary}</p>
@@ -134,6 +136,11 @@
 					>{/each}
 			</div>{/if}
 	</div>
+	<span class="card-tooltip" id={hintId} role="tooltip"
+		><strong>{item.title}</strong><span>{item.summary}</span><small
+			>点击标题查看详情；访问箭头在新标签页打开。</small
+		></span
+	>
 	<div class="card-actions">
 		<a class="detail-link" href={detail} aria-label={`查看 ${item.title} 详情`}>详情</a
 		>{#if item.url}<a
@@ -141,7 +148,8 @@
 				href={resolve(`/go?url=${encodeURIComponent(item.url)}` as '/go')}
 				target="_blank"
 				rel="external noopener noreferrer"
-				aria-label={`安全访问 ${item.title}`}>↗</a
+				aria-label={`安全访问 ${item.title}（新标签页）`}
+				title={`安全访问 ${item.title}（新标签页）`}>↗</a
 			>{/if}
 	</div>
 </article>
