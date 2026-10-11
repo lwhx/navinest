@@ -7,10 +7,12 @@
 	let {
 		item,
 		compact = false,
+		dense = false,
 		metrics
 	}: {
 		item: NavigationItem;
 		compact?: boolean;
+		dense?: boolean;
 		metrics?: { views: number; favorites: number };
 	} = $props();
 	let detail = $derived(resolve(contentDetailRoute(item.type), { slug: item.slug }));
@@ -28,6 +30,7 @@
 
 <article
 	class:compact
+	class:dense
 	class:card-site={item.type === 'site'}
 	class:card-post={item.type === 'post'}
 	class:card-app={item.type === 'app'}
@@ -116,10 +119,13 @@
 			>{/if}
 	</div>
 	<div class="site-content">
-		<div class="site-title-row">
-			<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
-		</div>
-		{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}
+		{#if dense}<a class="card-title-link card-body-link" href={detail} aria-describedby={hintId}>
+				<div class="site-title-row"><h3>{item.title}</h3></div>
+				{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}
+			</a>{:else}<div class="site-title-row">
+				<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
+			</div>
+			{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}{/if}
 		<div class="card-secondary">
 			<span class="type-chip">{typeLabel}</span>{#if metrics}<div class="card-metrics">
 					<span title={`浏览 ${metrics.views}`}>浏览 {countFormatter.format(metrics.views)}</span

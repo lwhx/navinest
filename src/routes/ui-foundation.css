@@ -43,13 +43,15 @@
 }
 /* Typography roles override the older compact component sizes. */
 :root[data-theme] .benchmark-card .site-title-row h3,
+:root[data-theme] .benchmark-card .card-body-link,
 :root[data-theme] .benchmark-card .site-title-row .card-title-link {
 	font-size: var(--ui-font-title);
 	font-weight: var(--ui-weight-title);
 	line-height: 1.5;
 	color: var(--ui-heading);
 }
-:root[data-theme] .benchmark-card .site-content > p {
+:root[data-theme] .benchmark-card .site-content > p,
+:root[data-theme] .benchmark-card .card-body-link > p {
 	font-size: var(--ui-font-body);
 	font-weight: var(--ui-weight-body);
 	line-height: 1.6;
@@ -531,7 +533,8 @@
 }
 
 /* Explain the resource before secondary metadata; keep the existing typography tokens. */
-:root[data-theme] .benchmark-card .site-content > .card-summary {
+:root[data-theme] .benchmark-card .site-content > .card-summary,
+:root[data-theme] .benchmark-card .card-body-link > .card-summary {
 	display: block;
 	min-width: 0;
 	margin: 0 0 6px;
@@ -577,4 +580,84 @@
 	align-items: center;
 	min-height: var(--ui-control);
 	color: var(--ui-accent);
+}
+
+/* Home cards share a two-line detail target instead of a separate tall title row. */
+:root[data-theme] .home-page .benchmark-card.dense {
+	min-height: 80px;
+	gap: 8px;
+	padding: 8px 10px;
+}
+:root[data-theme] .home-page .dense .site-content {
+	display: block;
+}
+:root[data-theme] .home-page .dense .card-body-link {
+	display: block;
+	min-width: 0;
+	min-height: var(--ui-control);
+	overflow: visible;
+	white-space: normal;
+}
+:root[data-theme] .home-page .dense .card-body-link .card-summary {
+	margin: 0;
+	line-height: 1.4;
+}
+:root[data-theme] .home-page .dense .card-secondary {
+	margin-top: 4px;
+	gap: 4px 8px;
+}
+:root[data-theme] .home-page .dense .type-chip {
+	padding: 0 4px;
+	line-height: 1.5;
+}
+:root[data-theme] .home-page :is(.site-grid, .popular-grid) {
+	row-gap: 8px;
+}
+.home-page .home-module-flow > :is(.popular-sites, .category-module) {
+	margin-top: 16px;
+}
+.home-page .home-module-flow .module-title {
+	margin-bottom: 8px;
+}
+.home-page .home-module-flow .module-title > div {
+	flex: 1;
+	min-width: 0;
+}
+.home-page .home-module-flow .module-title > a {
+	flex: 0 0 auto;
+	margin-left: 12px;
+}
+.home-page .home-module-flow .module-icon {
+	flex: 0 0 auto;
+}
+.home-page .home-module-flow .module-title h2 {
+	flex: 0 0 auto;
+}
+.home-page .home-module-flow .subcategory-tabs {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+.home-page .home-module-flow .subcategory-tabs button {
+	flex: 0 0 auto;
+}
+@media (max-width: 900px) {
+	:root[data-theme] .home-page .subcategory-tabs button {
+		min-height: var(--ui-control);
+	}
+}
+@media (max-width: 620px) {
+	.home-page .home-module-flow .module-title {
+		align-items: flex-start;
+	}
+	.home-page .home-module-flow .module-title > div {
+		flex-wrap: wrap;
+	}
+	.home-page .home-module-flow .subcategory-tabs {
+		flex: 0 0 100%;
+	}
+	.home-page .home-module-flow .module-title > a {
+		margin-top: 6px;
+	}
 }

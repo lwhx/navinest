@@ -101,6 +101,7 @@
 						{#each popular as entry (`${entry.metrics.type}-${entry.metrics.slug}`)}<NavigationCard
 								item={entry.item}
 								compact
+								dense
 								metrics={{ views: entry.metrics.views, favorites: entry.metrics.favorites }}
 							/>{/each}
 					</div>{:else}<div class="inline-empty">
@@ -150,7 +151,7 @@
 						<a href={resolve('/categories/[slug]', { slug: section.slug })}>更多</a>
 					</div>
 					{#if visibleItems.length}<div class="site-grid" aria-live="polite">
-							{#each visibleItems as item (item.slug)}<NavigationCard {item} />{/each}
+							{#each visibleItems as item (item.slug)}<NavigationCard {item} compact dense />{/each}
 						</div>{:else}<div class="inline-empty" aria-live="polite">
 							<p>此分类暂时没有内容。</p>
 							<a href={resolve('/search')}>搜索其他资源</a>
