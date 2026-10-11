@@ -2,6 +2,7 @@
 	import { navigating } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { searchShortcut } from '$lib/ui-actions';
+	import { SEARCH_QUERY_LIMIT } from '$lib/search';
 	let {
 		value = $bindable(''),
 		label = '搜索关键词',
@@ -41,6 +42,7 @@
 		bind:this={input}
 		bind:value
 		type="search"
+		maxlength={SEARCH_QUERY_LIMIT}
 		name="q"
 		aria-label={label}
 		aria-describedby={`${id}-hint`}

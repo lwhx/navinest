@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { checkPublicUI } from './public-ui-checks.mjs';
 import { checkHomeExperience } from './home-experience-checks.mjs';
+import { checkSearchDiscovery } from './search-discovery-checks.mjs';
 
 // Exercise the real homepage with fallback content, including all five card types.
 const baseUrl = process.env.NAVINEST_LAYOUT_URL ?? 'http://127.0.0.1:5175';
@@ -42,6 +43,7 @@ try {
 	const errors = [];
 	page.on('pageerror', (error) => errors.push(error.message));
 	await checkPublicUI(page, baseUrl);
+	await checkSearchDiscovery(page, baseUrl, process.env.NAVINEST_SCREENSHOT_DIR);
 	// Sparse categories near the bottom must still align with the clicked menu entry.
 	for (const width of [1100, 1920, 375]) {
 		await page.setViewportSize({ width, height: 842 });

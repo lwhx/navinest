@@ -34,6 +34,7 @@ export type ItemQuery = {
 	categorySlug?: string;
 	tagSlug?: string;
 	search?: string;
+	order?: 'relevance';
 	status?: string | null;
 	visibility?: string | null;
 	limit?: number;
@@ -67,7 +68,7 @@ function parseTags(entries: string | null): Array<{ name: string; slug: string }
 	});
 }
 
-export async function listItems(database: Database, query: ItemQuery = {}): Promise<Item[]> {
+function itemFilters(query: ItemQuery) {
 	const conditions: string[] = [];
 	const values: DatabaseValue[] = [];
 
@@ -104,15 +105,41 @@ export async function listItems(database: Database, query: ItemQuery = {}): Prom
 	}
 
 	if (query.search?.trim()) {
-		conditions.push("(i.title LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\')");
+		conditions.push(
+			"(i.title LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM item_tags search_it JOIN tags search_tag ON search_tag.id = search_it.tag_id WHERE search_it.item_id = i.id AND search_tag.name LIKE ? ESCAPE '\\'))"
+		);
 		const escaped = query.search.trim().replace(/[\\%_]/g, '\\$&');
-		values.push(`%${escaped}%`, `%${escaped}%`);
+		values.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+	}
+	return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
+}
+
+export async function countItems(database: Database, query: ItemQuery = {}): Promise<number> {
+	const { where, values } = itemFilters(query);
+	const { results } = await database
+		.prepare(
+			`SELECT COUNT(*) AS total FROM items i LEFT JOIN categories c ON c.id = i.category_id ${where}`
+		)
+		.bind(...values)
+		.all<{ total: number }>();
+	return results[0]?.total ?? 0;
+}
+
+export async function listItems(database: Database, query: ItemQuery = {}): Promise<Item[]> {
+	const { where, values } = itemFilters(query);
+	let order = 'i.sort_order ASC, i.is_featured DESC, i.title ASC, i.id ASC';
+	if (query.order === 'relevance' && query.search?.trim()) {
+		const term = query.search.trim();
+		const escaped = term.replace(/[\\%_]/g, '\\$&');
+		order =
+			"CASE WHEN i.title = ? COLLATE NOCASE THEN 0 WHEN i.title LIKE ? ESCAPE '\\' THEN 1 WHEN i.title LIKE ? ESCAPE '\\' THEN 2 WHEN i.summary LIKE ? ESCAPE '\\' THEN 3 ELSE 4 END, " +
+			order;
+		values.push(term, `${escaped}%`, `%${escaped}%`, `%${escaped}%`);
 	}
 
 	const limit = clampInteger(query.limit, 50, 100);
-	const offset = clampInteger(query.offset, 0, 100_000);
+	const offset = clampInteger(query.offset, 0, Number.MAX_SAFE_INTEGER);
 	values.push(limit, offset);
-	const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
 	const statement = database
 		.prepare(
@@ -128,7 +155,7 @@ export async function listItems(database: Database, query: ItemQuery = {}): Prom
 			 FROM items i
 			 LEFT JOIN categories c ON c.id = i.category_id
 			 ${where}
-			 ORDER BY i.sort_order ASC, i.is_featured DESC, i.title ASC
+			 ORDER BY ${order}
 			 LIMIT ? OFFSET ?`
 		)
 		.bind(...values);
