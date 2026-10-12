@@ -16,6 +16,7 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"test:home-layout": "node scripts/home-layout-smoke.mjs",
+		"test:admin-workspace": "node scripts/admin-workspace-smoke.mjs",
 		"smoke:production": "node scripts/production-smoke.mjs"
 	},
 	"devDependencies": {

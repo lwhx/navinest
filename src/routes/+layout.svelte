@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { navigating } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { resolve } from '$app/paths';
 
 	import './layout.css';
@@ -48,7 +48,11 @@
 	<meta name="twitter:card" content="summary" />
 </svelte:head>
 
-<a class="skip-link" href="#main-content">跳到主要内容</a>
+{#if page.url.pathname === '/admin' || page.url.pathname.startsWith('/admin/')}
+	<a class="skip-link" href="#admin-main">跳到主要内容</a>
+{:else}
+	<a class="skip-link" href="#main-content">跳到主要内容</a>
+{/if}
 
 {#if navigating.to}
 	<div class="navigation-progress" role="progressbar" aria-label="页面加载中"></div>
@@ -68,7 +72,7 @@
 {/if}
 
 <div id="main-content" tabindex="-1">{@render children()}</div>
-<ThemeToggle />
+{#if page.url.pathname !== '/admin' && !page.url.pathname.startsWith('/admin/')}<ThemeToggle />{/if}
 <ToastContainer />
 
 <style>

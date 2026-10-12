@@ -70,7 +70,8 @@ function adminFixture() {
 				source: 'database' as const,
 				mode: 'edit',
 				editing,
-				modules: [editing]
+				modules: [editing],
+				categories: []
 			}
 		}
 	}).body;
@@ -167,11 +168,12 @@ describe('search experience rendering', () => {
 			recommendations: render(HomeModuleFlow, { props: { home, mode: 'hero' } }).body,
 			admin: adminFixture(),
 			adminStyles: [
+				'admin-base.css',
 				'admin-productization.css',
 				'admin-content-workbench.css',
 				'admin-content-ordering.css',
 				'admin-content-modal.css',
-				'admin-modern-content.css'
+				'admin-workspace.css'
 			]
 				.map((name) => readFileSync('src/routes/' + name, 'utf8'))
 				.join('\n')

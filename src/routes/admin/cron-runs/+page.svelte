@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { scrollableTable } from '$lib/admin-actions';
 	import type { PageProps } from './$types';
 	let { data }: PageProps = $props();
 	const labels: Record<string, string> = {
@@ -16,7 +17,12 @@
 		<p>{data.timezone}（UTC 01:15）· <code>{data.cron}</code></p>
 	</div>
 </header>
-{#if data.runs.length}<div class="admin-table-wrap">
+{#if data.runs.length}<div
+		class="admin-table-wrap"
+		use:scrollableTable
+		role="region"
+		aria-label="管理数据列表，可横向滚动"
+	>
 		<table class="admin-table">
 			<thead
 				><tr><th>计划时间</th><th>状态</th><th>开始 / 完成</th><th>来源结果</th><th>错误</th></tr

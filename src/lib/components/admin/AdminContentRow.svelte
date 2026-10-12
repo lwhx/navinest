@@ -8,6 +8,8 @@
 		first = false,
 		last = false,
 		selected = false,
+		selectable = true,
+		busy = false,
 		onSelect,
 		onDragStart,
 		onDragOver,
@@ -21,6 +23,8 @@
 		first?: boolean;
 		last?: boolean;
 		selected?: boolean;
+		selectable?: boolean;
+		busy?: boolean;
 		onSelect?: (id: number, selected: boolean) => void;
 		onDragStart?: (id: number) => void;
 		onDragOver?: (event: DragEvent) => void;
@@ -56,14 +60,15 @@
 	ondragover={(event) => onDragOver?.(event)}
 	ondrop={() => onDrop?.(item.id)}
 >
-	<label class="content-row-select">
-		<span class="sr-only">选择 {item.title}</span>
-		<input
-			type="checkbox"
-			checked={selected}
-			onchange={(event) => onSelect?.(item.id, event.currentTarget.checked)}
-		/>
-	</label>
+	{#if selectable}<label class="content-row-select">
+			<span class="sr-only">选择 {item.title}</span>
+			<input
+				type="checkbox"
+				checked={selected}
+				disabled={busy}
+				onchange={(event) => onSelect?.(item.id, event.currentTarget.checked)}
+			/>
+		</label>{:else}<span class="content-row-select"></span>{/if}
 	{#if sortable}<div class="content-drag-controls">
 			<button
 				class="content-drag-handle"
@@ -112,13 +117,16 @@
 	{#if database}<div class="content-row-actions">
 			<button
 				class="content-edit-button"
+				disabled={busy}
 				type="button"
 				onclick={(event) => onEdit?.(item, event.currentTarget)}>编辑</button
 			>
 			<details class="content-row-menu">
 				<summary aria-label={`${item.title}更多操作`}>•••</summary>
 				<div>
-					<a href={resolve(previewPath as '/')}>前台预览</a>
+					<a href={resolve(previewPath as '/')} target="_blank" rel="noopener noreferrer"
+						>前台预览</a
+					>
 					<form
 						method="POST"
 						action="?/delete"
@@ -134,6 +142,7 @@
 						<input type="hidden" name="id" value={item.id} /><button
 							class="danger"
 							type="submit"
+							disabled={busy}
 							title="删除后会清理关联标签、元数据、收藏、足迹和统计记录">删除内容</button
 						>
 					</form>

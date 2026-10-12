@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { adminNavigation } from '$lib/admin-navigation';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
@@ -52,6 +53,9 @@ describe('site settings productization', () => {
 		const api = read('src/routes/api/admin/settings/+server.ts');
 		expect(api).toContain('export const GET');
 		expect(api).toContain('export const PUT');
-		expect(read('src/routes/admin/+layout.svelte')).toContain("resolve('/admin/settings')");
+		expect(
+			adminNavigation.some((group) => group.items.some((item) => item.href === '/admin/settings'))
+		).toBe(true);
+		expect(read('src/routes/admin/+layout.svelte')).toContain('adminNavigation');
 	});
 });
