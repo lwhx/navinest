@@ -5,6 +5,16 @@ NaviNest 使用两层后台访问控制：
 1. Cloudflare Access 在边缘完成身份认证，并注入用户邮箱与 JWT assertion。
 2. NaviNest 使用 Access 邮箱查询 D1，只允许 `users.role = 'admin'` 且 `users.status = 'active'` 的用户访问。
 
+## 当前后台登录入口
+
+入口：<https://nss.whks.de/admin>。2026-10-12 匿名实测 `/admin` 与 `/api/admin/users` 均重定向至 Access；后台登录页显示 “Log in to NaviNest Admin”，当前提供邮箱验证码登录。
+
+1. 打开后台地址，在 Email 中填写 Access 策略允许的管理员邮箱。
+2. 选择 “Send login code”，在邮件中接收验证码并完成验证。
+3. Access 验证后，应用仍要求该邮箱对应 D1 用户的角色为 `admin`、状态为 `active`。
+
+前台 `/login` 的 GitHub/密码会话与后台 Access 会话职责独立。项目历史记录的管理员邮箱为 `whuil574@gmail.com`，当前实际 Allow 策略以 Cloudflare 配置为准；本轮没有变更策略或管理员角色。
+
 ## Access 应用配置
 
 在 Cloudflare Zero Trust 中创建 Self-hosted application，并保护以下路径：

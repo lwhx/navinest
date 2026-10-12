@@ -2,6 +2,14 @@
 
 更新时间：2026-10-12（Asia/Shanghai）
 
+## GitHub 登录恢复与后台入口核对（2026-10-12）
+
+- 故障已定位并由用户确认恢复：GitHub OAuth 授权与账号绑定完成，但 `createUserSession` 向 D1 写入会话时失败，回调返回 `502 / GitHub login failed.`。用户提供的正式 `PRAGMA table_info(user_sessions)` 只有 `token_hash`、`user_id`、`expires_at`、`created_at`、`last_seen_at`，缺少当前代码使用的 `user_agent` 与 `ip_address`。
+- 使用现有 `0017_session_metadata.sql` 的两条新增字段及索引语句，在 D1 控制台补齐后，用户确认 GitHub 登录成功。未修改 OAuth 权限、Client Secret、Cookie/state 校验、账号角色或认证代码。本地真实 SQLite 已复现旧表写入失败，并验证执行该迁移后新会话写入成功，已有会话字段与用户记录保留。
+- 这是手工执行迁移内容的恢复记录，**不等于 Wrangler 的 `d1_migrations` 已登记该文件**。后续部署先只读核对实际列、索引和迁移记录，再按实际状态补齐登记；不要直接重跑新增列语句或全量 seed。其他迁移是否已应用不由本次恢复推断，`0020` 首页排序仍待核对应用。
+- 2026-10-12 匿名实测 `/admin` 与 `/api/admin/users` 均由 Cloudflare Access 返回 `302`，浏览器确认后台显示 “Log in to NaviNest Admin”、Email 和 “Send login code”。入口为 `https://nss.whks.de/admin`，使用 Access 邮箱验证码；应用随后按同一邮箱检查 D1 用户必须为 `role='admin'` 且 `status='active'`。前台 GitHub 会话不替代后台 Access 验证。
+- 历史交接中的管理员邮箱为 `whuil574@gmail.com`；本轮只确认登录方式和访问保护，没有读取当前 Access Allow 策略或正式管理员名单，不能将历史邮箱当作实时配置快照。后台完整登录与操作未由本轮浏览器验收。
+
 ## 任务与状态
 
 本轮按用户“按你的来”的授权，从已合并 PR #28 的最新 main `a560270702355971cf7b550883ed4c34c4bc41d8` 出发，在独立分支 `feat/search-resource-discovery` 实施资源检索、分页、搜索源记忆与推荐词配置，并提供旧首页排序的单独迁移。P0–P2 已于 PR #25 完成，紧凑卡片、移除首页条目计数、删除类型文字标签已于 PR #26–#28 完成；不重复开发字体、分类定位或手机抽屉。最初“P3 暂不实施”的约束已被本次明确授权的基础搜索优化替代，筛选与匹配词高亮仍待后续。合并记录不等同于部署验收。
