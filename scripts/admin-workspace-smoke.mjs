@@ -308,8 +308,33 @@ try {
 	assert.equal(await page.evaluate(() => document.body.style.overflow), '');
 	await page.locator('.content-row-select input').check();
 	await page.getByRole('combobox', { name: '批量操作' }).selectOption('publish');
+	// Hold the real reload so a success notice cannot race ahead of the rendered rows.
+	const refreshRoute = '**/admin/items/__data.json*';
+	let releaseRefresh, notifyRefresh;
+	const refreshGate = new Promise((resolve) => {
+		releaseRefresh = resolve;
+	});
+	const refreshStarted = new Promise((resolve) => {
+		notifyRefresh = resolve;
+	});
+	await page.route(refreshRoute, async (route) => {
+		notifyRefresh();
+		await refreshGate;
+		await route.continue();
+	});
 	await page.getByRole('button', { name: '应用到所选内容' }).click();
+	await Promise.race([
+		refreshStarted,
+		delay(10000).then(() => {
+			throw new Error('Batch operation did not reload the real content data');
+		})
+	]);
+	assert.equal(await page.getByRole('status').filter({ hasText: '已对 1 条内容执行' }).count(), 0);
+	assert.ok((await page.locator('.content-row-badges').textContent()).includes('草稿'));
+	await page.getByRole('status').filter({ hasText: '正在保存批量操作' }).waitFor();
+	releaseRefresh();
 	await page.getByRole('status').filter({ hasText: '已对 1 条内容执行' }).waitFor();
+	await page.unroute(refreshRoute);
 	assert.ok((await page.locator('.content-row-badges').textContent()).includes('已发布'));
 	assert.ok((await page.locator('.content-row-badges').textContent()).includes('私有'));
 	assert.equal(await page.locator('.content-selection-bar').count(), 0);
@@ -611,6 +636,7 @@ try {
 						'URL filters',
 						'editor refresh',
 						'bulk scope',
+						'bulk completion after rendered refresh',
 						'full-category ordering',
 						'config preservation',
 						'menu focus',
