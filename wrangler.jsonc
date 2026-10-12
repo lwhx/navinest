@@ -8,6 +8,7 @@
 		"APP_NAME": "NaviNest",
 		"PUBLIC_SITE_URL": "https://nss.whks.de",
 		"ADMIN_AUTH_MODE": "session",
+		"GITHUB_LOGIN_ENABLED": "false",
 		"GITHUB_CLIENT_ID": "Ov23li5a3AnNdqUzn86i"
 	},
 	"d1_databases": [

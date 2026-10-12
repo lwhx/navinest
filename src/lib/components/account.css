@@ -199,6 +199,9 @@
 .account-login .account-button {
 	min-height: 44px;
 }
+.account-login .account-form + .account-actions {
+	margin-top: 16px;
+}
 .account-profile-media {
 	position: relative;
 	min-height: 150px;
