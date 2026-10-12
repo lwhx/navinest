@@ -96,7 +96,11 @@ async function open(page, path) {
 async function shot(page, name) {
 	if (!screenshots) return;
 	mkdirSync(screenshots, { recursive: true });
-	await page.screenshot({ path: join(screenshots, name + '.png'), fullPage: false });
+	await page.screenshot({
+		path: join(screenshots, name + '.png'),
+		fullPage: false,
+		animations: 'disabled'
+	});
 }
 function contrast(a, b) {
 	const luminance = (color) => {
@@ -312,7 +316,7 @@ try {
 						background,
 						controls: [
 							...document.querySelectorAll(
-								'.admin-primary-button,.admin-secondary-button,.content-edit-button,.content-row-menu summary,.content-type-tabs a,.admin-menu-button'
+								'.admin-primary-button,.admin-secondary-button,.content-edit-button,.content-row-menu summary,.content-type-tabs a,.admin-menu-button,.admin-user-filters input,.admin-user-filters select'
 							)
 						]
 							.filter((node) => node.getClientRects().length > 0)

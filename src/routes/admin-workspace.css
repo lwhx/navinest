@@ -981,3 +981,17 @@
 	align-items: center;
 	gap: 8px;
 }
+
+:root .admin-shell .admin-user-filters input,
+:root .admin-shell .admin-user-filters select {
+	min-height: 44px;
+	border-color: var(--admin-input-border);
+	color: var(--admin-text);
+	background: var(--admin-surface);
+}
+.admin-shell .site-settings-form .admin-form-grid {
+	padding: 16px;
+}
+.admin-shell .site-settings-form .admin-form-hint {
+	padding: 0 16px 16px;
+}
