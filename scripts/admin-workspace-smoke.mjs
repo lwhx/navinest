@@ -658,6 +658,41 @@ try {
 					assert.ok(field.width >= 120, `${field.name}: field too narrow`);
 					assert.ok(field.height >= 44, `${field.name}: field too short`);
 				}
+				if (path.startsWith('/admin/categories')) {
+					assert.equal(await page.getByRole('group', { name: '父级分类', exact: true }).count(), 1);
+					if (width > 760 && (await page.locator('select[name="type"]').count())) {
+						const alignment = await page.evaluate(() => {
+							const metrics = (node) => {
+								const rect = node.getBoundingClientRect();
+								const label = node.closest('label').querySelector('span').getBoundingClientRect();
+								return { top: rect.top, bottom: rect.bottom, labelTop: label.top };
+							};
+							return {
+								type: metrics(document.querySelector('select[name="type"]')),
+								parents: [...document.querySelectorAll('.parent-selection-levels select')].map(
+									metrics
+								)
+							};
+						});
+						assert.ok(alignment.parents.length > 0, 'Parent selectors must be visible');
+						assert.ok(
+							Math.abs(alignment.parents[0].top - alignment.type.top) <= 1,
+							`${path} ${theme}: type and parent controls must start on the same line`
+						);
+						for (const parent of alignment.parents.filter(
+							(field) => Math.abs(field.top - alignment.parents[0].top) <= 1
+						)) {
+							assert.ok(
+								Math.abs(parent.labelTop - alignment.type.labelTop) <= 1,
+								`${path} ${theme}: first-row category labels must align`
+							);
+							assert.ok(
+								Math.abs(parent.bottom - alignment.type.bottom) <= 1,
+								`${path} ${theme}: first-row category controls must have equal height`
+							);
+						}
+					}
+				}
 				const scenario = {
 					'/admin/categories?create=1&parent=1': 'category-create',
 					'/admin/categories?edit=2': 'category-legacy-editor',
@@ -761,6 +796,7 @@ try {
 						'authorization',
 						'website/article categories and same-type parents',
 						'cascading parent path restoration and upper-level reset',
+						'category type and first-row parent label/control alignment',
 						'self and descendant parent exclusion and cycle rejection',
 						'JavaScript-disabled native category form',
 						'descendant content in homepage branches and category pages',
