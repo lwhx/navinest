@@ -62,7 +62,7 @@ statements.push(
 	`INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES(${quote(hash(adminToken))},1,${quote(expires)}),(${quote(hash(userToken))},2,${quote(expires)});`
 );
 statements.push(
-	"INSERT INTO categories(id,type,name,slug) VALUES(1,'site','开发工具与团队协作资源','tools'),(2,'app','软件资源','apps'); INSERT INTO tags(id,type,name,slug) VALUES(1,'site','团队协作','collaboration');"
+	"INSERT INTO categories(id,type,name,slug) VALUES(1,'site','开发工具与团队协作资源','tools'),(2,'app','软件资源','apps'),(3,'post','文章资源','articles'),(4,'book','历史书籍分类','books'),(5,'bulletin','历史公告分类','bulletins'); INSERT INTO categories(id,type,parent_id,name,slug) VALUES(6,'bulletin',5,'历史公告子分类','old-bulletins'); INSERT INTO tags(id,type,name,slug) VALUES(1,'site','团队协作','collaboration');"
 );
 for (let id = 1; id <= 123; id++) {
 	statements.push(
@@ -114,6 +114,28 @@ function contrast(a, b) {
 	};
 	const values = [luminance(a), luminance(b)].sort((x, y) => y - x);
 	return (values[0] + 0.05) / (values[1] + 0.05);
+}
+async function checkCategoryLabels(page) {
+	const labels = await page
+		.locator('.category-node-copy span, .category-node-copy em')
+		.evaluateAll((nodes) =>
+			nodes
+				.filter((node) => node.getClientRects().length)
+				.map((node) => ({
+					text: node.textContent,
+					height: node.getBoundingClientRect().height,
+					foreground: getComputedStyle(node).color,
+					background: getComputedStyle(node).backgroundColor
+				}))
+		);
+	assert.ok(labels.length > 0, 'Category labels must be present');
+	for (const label of labels) {
+		assert.ok(label.height <= 32, `Category label must stay on one line: ${label.text}`);
+		assert.ok(
+			contrast(label.foreground, label.background) >= 4.5,
+			`Category label must be readable: ${label.text}`
+		);
+	}
 }
 try {
 	command(['d1', 'execute', 'navinest-admin-check', '--local', '--file', sql, '--json']);
@@ -178,6 +200,85 @@ try {
 	page = await context.newPage();
 	page.on('pageerror', (error) => errors.push(error.message));
 	page.on('dialog', (dialog) => dialog.accept());
+	await open(page, '/admin/categories');
+	assert.deepEqual(
+		await page
+			.locator('.category-type-filter option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['all', 'site', 'post']
+	);
+	assert.equal(await page.locator('.category-browser .category-tree-node').count(), 2);
+	assert.equal(await page.locator('.category-legacy').getAttribute('open'), null);
+	await page.locator('.category-legacy summary').click();
+	assert.equal(await page.locator('.category-legacy .category-tree-node').count(), 4);
+	assert.equal(await page.locator('.category-legacy a[href*="create="]').count(), 0);
+	await open(page, '/admin/categories?create=1&parent=1');
+	assert.deepEqual(
+		await page
+			.locator('select[name="type"] option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['site', 'post']
+	);
+	assert.equal(await page.locator('select[name="parentId"]').inputValue(), '1');
+	await page.getByLabel('类型', { exact: true }).selectOption('post');
+	assert.equal(await page.locator('select[name="parentId"]').inputValue(), '');
+	assert.deepEqual(
+		await page
+			.locator('select[name="parentId"] option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['', '3']
+	);
+	await page.getByLabel('父级分类', { exact: true }).selectOption('3');
+	await page.getByLabel('名称', { exact: true }).fill('新的文章子分类');
+	await page.getByLabel('Slug', { exact: true }).fill('new-articles');
+	await page.getByRole('button', { name: '保存分类', exact: true }).click();
+	await page.waitForURL('**created=1');
+	await page.getByText('新的文章子分类', { exact: true }).waitFor();
+	for (const type of ['app', 'book', 'bulletin']) {
+		assert.equal(
+			(
+				await context.request.post(baseUrl + '/api/admin/categories', {
+					data: { type, name: '拒绝旧类型', slug: 'blocked-' + type }
+				})
+			).status(),
+			400
+		);
+		assert.equal(
+			(
+				await context.request.patch(baseUrl + '/api/admin/categories/3', {
+					data: { type, name: '拒绝改类型', slug: 'blocked-' + type }
+				})
+			).status(),
+			400
+		);
+		assert.equal(
+			(
+				await context.request.post(baseUrl + '/admin/categories?create=1&/create', {
+					headers: { Origin: baseUrl, Accept: 'text/html' },
+					form: { type, name: '拒绝旧类型', slug: 'blocked-' + type },
+					maxRedirects: 0
+				})
+			).status(),
+			400
+		);
+	}
+	assert.equal(
+		(await context.request.get(baseUrl + '/admin/categories?create=1&parent=2')).status(),
+		400
+	);
+	await open(page, '/admin/categories?edit=2');
+	assert.equal(await page.locator('select[name="type"]').count(), 0);
+	assert.equal(await page.locator('input[name="type"]').inputValue(), 'app');
+	await page.getByLabel('名称', { exact: true }).fill('整理后的历史软件分类');
+	await page.getByLabel('前台可见', { exact: true }).uncheck();
+	await page.getByRole('button', { name: '保存分类', exact: true }).click();
+	await page.waitForURL('**updated=1');
+	await page.locator('.category-legacy summary').click();
+	await page
+		.locator('.category-legacy .category-node-copy strong')
+		.filter({ hasText: '整理后的历史软件分类' })
+		.waitFor();
+	assert.ok((await page.locator('.category-legacy').textContent()).includes('已隐藏'));
 	await open(page, '/admin/items?page=3');
 	assert.equal(await page.locator('.content-row').count(), 23);
 	assert.ok((await page.locator('.content-overview').textContent()).includes('123'));
@@ -207,8 +308,33 @@ try {
 	assert.equal(await page.evaluate(() => document.body.style.overflow), '');
 	await page.locator('.content-row-select input').check();
 	await page.getByRole('combobox', { name: '批量操作' }).selectOption('publish');
+	// Hold the real reload so a success notice cannot race ahead of the rendered rows.
+	const refreshRoute = '**/admin/items/__data.json*';
+	let releaseRefresh, notifyRefresh;
+	const refreshGate = new Promise((resolve) => {
+		releaseRefresh = resolve;
+	});
+	const refreshStarted = new Promise((resolve) => {
+		notifyRefresh = resolve;
+	});
+	await page.route(refreshRoute, async (route) => {
+		notifyRefresh();
+		await refreshGate;
+		await route.continue();
+	});
 	await page.getByRole('button', { name: '应用到所选内容' }).click();
+	await Promise.race([
+		refreshStarted,
+		delay(10000).then(() => {
+			throw new Error('Batch operation did not reload the real content data');
+		})
+	]);
+	assert.equal(await page.getByRole('status').filter({ hasText: '已对 1 条内容执行' }).count(), 0);
+	assert.ok((await page.locator('.content-row-badges').textContent()).includes('草稿'));
+	await page.getByRole('status').filter({ hasText: '正在保存批量操作' }).waitFor();
+	releaseRefresh();
 	await page.getByRole('status').filter({ hasText: '已对 1 条内容执行' }).waitFor();
+	await page.unroute(refreshRoute);
 	assert.ok((await page.locator('.content-row-badges').textContent()).includes('已发布'));
 	assert.ok((await page.locator('.content-row-badges').textContent()).includes('私有'));
 	assert.equal(await page.locator('.content-selection-bar').count(), 0);
@@ -357,6 +483,7 @@ try {
 						);
 				}
 				const label = `${path} ${width}px ${theme}`;
+				if (path === '/admin/categories') await checkCategoryLabels(page);
 				assert.ok(state.overflow <= 1, `${label}: page overflow ${state.overflow}`);
 				assert.ok(
 					contrast(state.foreground, state.background) >= 4.5,
@@ -373,7 +500,9 @@ try {
 	for (const path of [
 		'/admin/items?edit=123',
 		'/admin/home-modules?edit=2',
-		'/admin/home-modules?edit=1'
+		'/admin/home-modules?edit=1',
+		'/admin/categories?create=1&parent=1',
+		'/admin/categories?edit=2'
 	])
 		for (const width of [320, 1366])
 			for (const theme of ['light', 'dark']) {
@@ -407,10 +536,31 @@ try {
 				}
 				await shot(
 					page,
-					`${path.startsWith('/admin/items') ? 'editor' : path.endsWith('2') ? 'module-category' : 'module-search'}-${width}-${theme}`
+					`${path.startsWith('/admin/categories') ? (path.includes('create=') ? 'category-create' : 'category-legacy-editor') : path.startsWith('/admin/items') ? 'editor' : path.endsWith('2') ? 'module-category' : 'module-search'}-${width}-${theme}`
 				);
 				layouts++;
 			}
+	for (const width of [320, 1366])
+		for (const theme of ['light', 'dark']) {
+			await page.setViewportSize({ width, height: 900 });
+			await open(page, '/admin/categories');
+			if ((await page.getByLabel('切换深色模式').isChecked()) !== (theme === 'dark'))
+				await page.locator('.theme-toggle').click();
+			await page.locator('.category-legacy summary').click();
+			await checkCategoryLabels(page);
+			assert.ok(
+				await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1),
+				'Expanded legacy categories must fit the viewport'
+			);
+			assert.ok(
+				await page
+					.locator('.category-legacy summary')
+					.evaluate((node) => node.getBoundingClientRect().height >= 44),
+				'Legacy categories keyboard/touch target'
+			);
+			await shot(page, `category-legacy-expanded-${width}-${theme}`);
+			layouts++;
+		}
 	assert.equal((await context.request.get(baseUrl + '/user/settings')).status(), 200);
 	assert.equal(
 		(await context.request.get(baseUrl + '/api/auth/github', { maxRedirects: 0 })).status(),
@@ -467,7 +617,7 @@ try {
 	await page.waitForFunction(() => document.querySelector('.admin-table-wrap').scrollLeft > 0);
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
-		`Admin workspace: authorization, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
+		`Admin workspace: authorization, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
 	);
 	if (screenshots)
 		writeFileSync(
@@ -479,10 +629,14 @@ try {
 					errors,
 					checks: [
 						'authorization',
+						'website/article categories and same-type parents',
+						'legacy category maintenance and retired type rejection',
+						'category label wrapping and contrast',
 						'pagination',
 						'URL filters',
 						'editor refresh',
 						'bulk scope',
+						'bulk completion after rendered refresh',
 						'full-category ordering',
 						'config preservation',
 						'menu focus',

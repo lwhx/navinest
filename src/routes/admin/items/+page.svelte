@@ -105,11 +105,13 @@
 			const body = await response.json();
 			if (!response.ok) throw new Error(body.error ?? '批量操作失败，请稍后重试。');
 			selectedItemIds.clear();
-			bulkMessage = `已对 ${body.count} 条内容执行“${label}”。`;
+			const completedMessage = `已对 ${body.count} 条内容执行“${label}”。`;
 			try {
 				await invalidateAll();
+				await tick();
+				bulkMessage = completedMessage;
 			} catch {
-				bulkMessage += '列表刷新失败，请刷新页面查看结果。';
+				bulkMessage = completedMessage + '列表刷新失败，请刷新页面查看结果。';
 			}
 		} catch (error) {
 			bulkFailed = true;

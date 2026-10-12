@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildCategoryWorkbench } from '$lib/server/services/category-workbench';
+import {
+	buildCategoryManagement,
+	buildCategoryWorkbench
+} from '$lib/server/services/category-workbench';
 const categories = [
 	{
 		id: 1,
@@ -81,5 +84,26 @@ describe('category workbench', () => {
 	it('summarizes totals for filtering and impact guidance', () => {
 		const result = buildCategoryWorkbench(categories as never, []);
 		expect(result.summary).toEqual({ total: 4, roots: 2, children: 2, hidden: 1, used: 0 });
+	});
+	it('keeps retired types in a separate complete tree without changing records or usage', () => {
+		const legacy = [
+			{ ...categories[0], id: 10, type: 'app', name: '旧软件分类' },
+			{ ...categories[1], id: 11, parentId: 10, type: 'app', name: '旧软件子分类' },
+			{ ...categories[0], id: 12, type: 'book', isVisible: false },
+			{ ...categories[0], id: 13, type: 'bulletin' }
+		];
+		const all = [...categories, ...legacy];
+		const before = structuredClone(all);
+		const result = buildCategoryManagement(all as never, [{ categoryId: 11, count: 2 }]);
+		expect(result.summary).toEqual({ total: 4, roots: 2, children: 2, hidden: 1, used: 0 });
+		expect(result.roots.map((root) => root.type)).toEqual(['site', 'post']);
+		expect(result.legacy.summary).toEqual({ total: 4, roots: 3, children: 1, hidden: 1, used: 1 });
+		expect(result.legacy.roots[0]).toMatchObject({ id: 10, totalItemCount: 2, canDelete: false });
+		expect(result.legacy.roots[0].children[0]).toMatchObject({
+			id: 11,
+			directItemCount: 2,
+			canDelete: false
+		});
+		expect(all).toEqual(before);
 	});
 });

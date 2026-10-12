@@ -1,4 +1,5 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
+import { isManagedCategoryType } from '$lib/category-types';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import {
 	categoryFormInput,
@@ -21,12 +22,16 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	const data = database ? await loadAdminCategories(database) : fallbackAdminCategories();
 	const editId = parsePositiveId(url.searchParams.get('edit') ?? ''),
 		parentId = parsePositiveId(url.searchParams.get('parent') ?? '');
+	const createParent = parentId
+		? (data.categories.find((category) => category.id === parentId) ?? null)
+		: null;
+	if (url.searchParams.has('create') && createParent && !isManagedCategoryType(createParent.type)) {
+		error(400, '历史分类不再新增子分类，请选择网址或文章分类。');
+	}
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
-		createParent: parentId
-			? (data.categories.find((category) => category.id === parentId) ?? null)
-			: null,
+		createParent,
 		editing: editId ? (data.categories.find((category) => category.id === editId) ?? null) : null
 	};
 };

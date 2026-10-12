@@ -5,7 +5,7 @@ import {
 import type { Database } from '$lib/server/db';
 import { listCategories } from '$lib/server/services/categories';
 import { listSearchEngines } from '$lib/server/services/search-engines';
-import { buildCategoryWorkbench } from '$lib/server/services/category-workbench';
+import { buildCategoryManagement } from '$lib/server/services/category-workbench';
 import { loadAdminContentSummary } from '$lib/server/services/admin-content';
 
 import { listTags } from '$lib/server/services/tags';
@@ -158,7 +158,7 @@ export async function loadAdminCategories(database: Database) {
 	]);
 	return {
 		categories,
-		workbench: buildCategoryWorkbench(
+		workbench: buildCategoryManagement(
 			categories,
 			usage.results.map((row) => ({ categoryId: row.category_id, count: row.count }))
 		),
@@ -182,7 +182,7 @@ export function fallbackAdminCategories() {
 	}));
 	return {
 		categories,
-		workbench: buildCategoryWorkbench(categories, []),
+		workbench: buildCategoryManagement(categories, []),
 		source: 'fallback' as const
 	};
 }
