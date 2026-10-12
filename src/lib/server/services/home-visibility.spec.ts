@@ -4,6 +4,7 @@ import { expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
 import { buildHomeCategoryLinks } from '$lib/home-category-navigation';
 import { loadHomeData } from '$lib/server/services/home';
+import { categoryContent } from '$lib/server/services/content-pages';
 
 it('keeps retired database categories out of the entire home plan without modifying stored data', async () => {
 	const sqlite = new DatabaseSync(':memory:');
@@ -17,7 +18,8 @@ it('keeps retired database categories out of the entire home plan without modify
 			(3,'app',NULL,'效率工具','productivity',30),(4,'book',NULL,'书籍影视','bookshelf',40),
 			(5,'post',NULL,'文章摘录','notes',50),(6,'bulletin',NULL,'站点公告','announcements',60),
 			(7,'post',NULL,'使用教程','guides',70),(8,'book',NULL,'已改名的书籍','reading',80),
-			(9,'bulletin',NULL,'已改名的公告','notices',90),(10,'site',2,'前端开发','frontend',100);
+			(9,'bulletin',NULL,'已改名的公告','notices',90),(10,'site',2,'前端开发','frontend',100),
+			(11,'site',10,'深层框架','frameworks',110);
 			INSERT INTO items(type,category_id,title,slug,summary,status,visibility)
 			SELECT type,id,name || '内容','item-' || id,'真实用途说明','published','public' FROM categories;
 			INSERT INTO item_meta(item_id,meta_key,meta_value)
@@ -75,7 +77,16 @@ it('keeps retired database categories out of the entire home plan without modify
 		const tools = home.sections.find((section) => section.slug === 'dev-tools')!;
 		expect(tools.children.map((category) => category.slug)).toEqual(['frontend']);
 		expect(tools.items.map((item) => item.slug)).toEqual(
-			expect.arrayContaining(['item-2', 'item-10'])
+			expect.arrayContaining(['item-2', 'item-10', 'item-11'])
+		);
+		expect(tools.itemsByChild?.frontend.map((item) => item.slug)).toEqual(
+			expect.arrayContaining(['item-10', 'item-11'])
+		);
+		expect((await categoryContent(database, 'dev-tools'))?.items.map((item) => item.slug)).toEqual(
+			expect.arrayContaining(['item-2', 'item-10', 'item-11'])
+		);
+		expect((await categoryContent(database, 'frontend'))?.items.map((item) => item.slug)).toEqual(
+			expect.arrayContaining(['item-10', 'item-11'])
 		);
 		expect(home.dashboard.popular.map((item) => item.type)).toContain('post');
 		expect(snapshot()).toEqual(before);

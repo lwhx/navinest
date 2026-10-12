@@ -133,7 +133,8 @@
 					activeSubcategories[section.slug] ?? 'all'}{@const activeChildName =
 					section.children.find((child) => child.slug === activeChild)?.name}{@const visibleItems =
 					activeChildName
-						? section.items.filter((item) => item.category === activeChildName)
+						? (section.itemsByChild?.[activeChild] ??
+							section.items.filter((item) => item.category === activeChildName))
 						: section.items}
 				<section
 					class="category-module"

@@ -62,7 +62,7 @@ statements.push(
 	`INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES(${quote(hash(adminToken))},1,${quote(expires)}),(${quote(hash(userToken))},2,${quote(expires)});`
 );
 statements.push(
-	"INSERT INTO categories(id,type,name,slug) VALUES(1,'site','开发工具与团队协作资源','tools'),(2,'app','软件资源','apps'),(3,'post','文章资源','articles'),(4,'book','历史书籍分类','books'),(5,'bulletin','历史公告分类','bulletins'); INSERT INTO categories(id,type,parent_id,name,slug) VALUES(6,'bulletin',5,'历史公告子分类','old-bulletins'); INSERT INTO tags(id,type,name,slug) VALUES(1,'site','团队协作','collaboration');"
+	"INSERT INTO categories(id,type,name,slug) VALUES(1,'site','开发工具与团队协作资源','tools'),(2,'app','软件资源','apps'),(3,'post','文章资源','articles'),(4,'book','历史书籍分类','books'),(5,'bulletin','历史公告分类','bulletins'),(9,'site','设计资源','design'); INSERT INTO categories(id,type,parent_id,name,slug) VALUES(6,'bulletin',5,'历史公告子分类','old-bulletins'),(7,'site',1,'代码托管','code-hosting'),(8,'site',1,'前端开发','frontend'),(10,'site',7,'代码平台','code-platforms'),(11,'site',9,'设计协作','design-collaboration'); INSERT INTO tags(id,type,name,slug) VALUES(1,'site','团队协作','collaboration');"
 );
 for (let id = 1; id <= 123; id++) {
 	statements.push(
@@ -207,7 +207,7 @@ try {
 			.evaluateAll((options) => options.map((option) => option.value)),
 		['all', 'site', 'post']
 	);
-	assert.equal(await page.locator('.category-browser .category-tree-node').count(), 2);
+	assert.equal(await page.locator('.category-browser .category-tree-node').count(), 7);
 	assert.equal(await page.locator('.category-legacy').getAttribute('open'), null);
 	await page.locator('.category-legacy summary').click();
 	assert.equal(await page.locator('.category-legacy .category-tree-node').count(), 4);
@@ -219,21 +219,109 @@ try {
 			.evaluateAll((options) => options.map((option) => option.value)),
 		['site', 'post']
 	);
-	assert.equal(await page.locator('select[name="parentId"]').inputValue(), '1');
-	await page.getByLabel('类型', { exact: true }).selectOption('post');
-	assert.equal(await page.locator('select[name="parentId"]').inputValue(), '');
+	assert.equal(await page.getByLabel('一级分类', { exact: true }).inputValue(), '1');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '1');
 	assert.deepEqual(
 		await page
-			.locator('select[name="parentId"] option')
+			.getByLabel('一级分类', { exact: true })
+			.locator('option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['', '1', '9']
+	);
+	assert.deepEqual(
+		await page
+			.getByLabel('二级分类', { exact: true })
+			.locator('option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['', '7', '8']
+	);
+	await page.getByLabel('类型', { exact: true }).selectOption('post');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '');
+	assert.equal(await page.getByLabel('二级分类', { exact: true }).count(), 0);
+	assert.deepEqual(
+		await page
+			.getByLabel('一级分类', { exact: true })
+			.locator('option')
 			.evaluateAll((options) => options.map((option) => option.value)),
 		['', '3']
 	);
-	await page.getByLabel('父级分类', { exact: true }).selectOption('3');
+	await page.getByLabel('一级分类', { exact: true }).selectOption('3');
 	await page.getByLabel('名称', { exact: true }).fill('新的文章子分类');
 	await page.getByLabel('Slug', { exact: true }).fill('new-articles');
 	await page.getByRole('button', { name: '保存分类', exact: true }).click();
 	await page.waitForURL('**created=1');
 	await page.getByText('新的文章子分类', { exact: true }).waitFor();
+	await open(page, '/admin/categories?create=1&parent=7');
+	assert.equal(await page.getByLabel('一级分类', { exact: true }).inputValue(), '1');
+	assert.equal(await page.getByLabel('二级分类', { exact: true }).inputValue(), '7');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '7');
+	assert.ok(
+		(await page.locator('.parent-selection-path').textContent()).includes('保存后为第 3 级分类')
+	);
+	await page.getByLabel('一级分类', { exact: true }).selectOption('9');
+	assert.equal(await page.getByLabel('二级分类', { exact: true }).inputValue(), '');
+	assert.deepEqual(
+		await page
+			.getByLabel('二级分类', { exact: true })
+			.locator('option')
+			.evaluateAll((options) => options.map((option) => option.value)),
+		['', '11']
+	);
+	assert.equal(await page.getByLabel('三级分类', { exact: true }).count(), 0);
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '9');
+	await page.getByLabel('一级分类', { exact: true }).selectOption('');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '');
+	assert.equal(await page.getByLabel('二级分类', { exact: true }).count(), 0);
+	await page.getByLabel('一级分类', { exact: true }).selectOption('1');
+	await page.getByLabel('一级分类', { exact: true }).focus();
+	await page.keyboard.press('Tab');
+	assert.equal(
+		await page
+			.getByLabel('二级分类', { exact: true })
+			.evaluate((node) => node === document.activeElement),
+		true
+	);
+	await open(page, '/admin/categories?edit=7');
+	const offered = await page
+		.locator('.parent-selection-levels option')
+		.evaluateAll((options) => options.map((option) => option.value));
+	assert.ok(
+		!offered.includes('7') && !offered.includes('10'),
+		'Editing parent cannot select itself or descendants'
+	);
+	await page.getByLabel('一级分类', { exact: true }).selectOption('9');
+	await page.getByRole('button', { name: '保存分类', exact: true }).click();
+	await page.waitForURL('**updated=1');
+	await open(page, '/admin/categories?edit=10');
+	assert.equal(await page.getByLabel('一级分类', { exact: true }).inputValue(), '9');
+	assert.equal(await page.getByLabel('二级分类', { exact: true }).inputValue(), '7');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '7');
+	assert.ok(
+		(await page.locator('.parent-selection-path').textContent()).includes('设计资源 / 代码托管')
+	);
+	assert.equal(
+		(
+			await context.request.patch(baseUrl + '/api/admin/categories/7', {
+				data: { type: 'site', parentId: 10, name: '代码托管', slug: 'code-hosting' }
+			})
+		).status(),
+		400
+	);
+	const noScript = await browser.newContext({ javaScriptEnabled: false });
+	await noScript.addCookies([{ name: 'navinest_session', value: adminToken, url: baseUrl }]);
+	const nativePage = await noScript.newPage();
+	await nativePage.goto(baseUrl + '/admin/categories?edit=10', { waitUntil: 'networkidle' });
+	assert.equal(
+		await nativePage.getByLabel('父级分类（完整路径）', { exact: true }).inputValue(),
+		'7'
+	);
+	await nativePage.getByLabel('名称', { exact: true }).fill('代码平台原生保存验证');
+	await nativePage.getByRole('button', { name: '保存分类', exact: true }).click();
+	await nativePage.waitForURL('**updated=1');
+	await noScript.close();
+	await open(page, '/admin/categories?edit=10');
+	assert.equal(await page.getByLabel('名称', { exact: true }).inputValue(), '代码平台原生保存验证');
+	assert.equal(await page.locator('input[name="parentId"]').inputValue(), '7');
 	for (const type of ['app', 'book', 'bulletin']) {
 		assert.equal(
 			(
@@ -346,6 +434,8 @@ try {
 		).status(),
 		200
 	);
+	await page.locator('.content-category-filter').selectOption('1');
+	await page.waitForURL('**category=1*');
 	await page.getByRole('button', { name: '进入排序', exact: true }).click();
 	await page.waitForURL('**mode=sort*');
 	assert.equal(await page.locator('.content-row').count(), 123);
@@ -359,6 +449,38 @@ try {
 		.locator('.content-row')
 		.evaluateAll((rows) => rows.map((row) => Number(row.dataset.contentId)));
 	assert.deepEqual(after, [before[1], before[0], ...before.slice(2)]);
+	assert.equal(
+		(
+			await context.request.patch(baseUrl + '/api/admin/items/1', {
+				data: {
+					type: 'site',
+					categoryId: 10,
+					title: '中文资源与团队协作工具 1',
+					slug: 'resource-1',
+					status: 'published',
+					visibility: 'public',
+					sortOrder: 20,
+					isFeatured: true,
+					meta: { site_url: 'https://example.com/resource-1' }
+				}
+			})
+		).status(),
+		200
+	);
+	await page.goto(baseUrl + '/', { waitUntil: 'networkidle' });
+	const design = page.locator('[data-category-section][id="design"]');
+	await design.getByRole('tab', { name: '代码托管', exact: true }).click();
+	assert.equal(await design.locator('.card-title-link[href="/sites/resource-1"]').count(), 1);
+	for (const slug of ['design', 'code-hosting']) {
+		assert.equal(
+			(await page.goto(baseUrl + '/categories/' + slug, { waitUntil: 'networkidle' })).status(),
+			200
+		);
+		assert.equal(
+			await page.locator('.results-cards .card-title-link[href="/sites/resource-1"]').count(),
+			1
+		);
+	}
 	await open(page, '/admin/home-modules?edit=2');
 	await page.getByLabel('资源分类', { exact: true }).selectOption('apps');
 	await page.getByRole('button', { name: '保存模块', exact: true }).click();
@@ -502,7 +624,9 @@ try {
 		'/admin/home-modules?edit=2',
 		'/admin/home-modules?edit=1',
 		'/admin/categories?create=1&parent=1',
-		'/admin/categories?edit=2'
+		'/admin/categories?edit=2',
+		'/admin/categories?edit=10',
+		'/admin/categories?create=1&parent=7'
 	])
 		for (const width of [320, 1366])
 			for (const theme of ['light', 'dark']) {
@@ -534,10 +658,16 @@ try {
 					assert.ok(field.width >= 120, `${field.name}: field too narrow`);
 					assert.ok(field.height >= 44, `${field.name}: field too short`);
 				}
-				await shot(
-					page,
-					`${path.startsWith('/admin/categories') ? (path.includes('create=') ? 'category-create' : 'category-legacy-editor') : path.startsWith('/admin/items') ? 'editor' : path.endsWith('2') ? 'module-category' : 'module-search'}-${width}-${theme}`
-				);
+				const scenario = {
+					'/admin/categories?create=1&parent=1': 'category-create',
+					'/admin/categories?edit=2': 'category-legacy-editor',
+					'/admin/categories?edit=10': 'category-parent-editor',
+					'/admin/categories?create=1&parent=7': 'category-parent-cascade',
+					'/admin/items?edit=123': 'editor',
+					'/admin/home-modules?edit=2': 'module-category',
+					'/admin/home-modules?edit=1': 'module-search'
+				}[path];
+				await shot(page, `${scenario}-${width}-${theme}`);
 				layouts++;
 			}
 	for (const width of [320, 1366])
@@ -617,7 +747,7 @@ try {
 	await page.waitForFunction(() => document.querySelector('.admin-table-wrap').scrollLeft > 0);
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
-		`Admin workspace: authorization, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
+		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
 	);
 	if (screenshots)
 		writeFileSync(
@@ -630,6 +760,10 @@ try {
 					checks: [
 						'authorization',
 						'website/article categories and same-type parents',
+						'cascading parent path restoration and upper-level reset',
+						'self and descendant parent exclusion and cycle rejection',
+						'JavaScript-disabled native category form',
+						'descendant content in homepage branches and category pages',
 						'legacy category maintenance and retired type rejection',
 						'category label wrapping and contrast',
 						'pagination',

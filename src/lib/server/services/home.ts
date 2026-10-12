@@ -14,9 +14,11 @@ import { listItems } from '$lib/server/services/items';
 import { toNavigationItem } from '$lib/server/services/navigation';
 import { listSearchEngines } from '$lib/server/services/search-engines';
 import type { Item } from '$lib/types/content';
+import { categoryBranch } from '$lib/category-tree';
 export type NavigationSection = NavigationCategory & {
 	items: NavigationItem[];
 	children: NavigationCategory[];
+	itemsByChild?: Record<string, NavigationItem[]>;
 };
 export type HomeData = {
 	categories: NavigationCategory[];
@@ -33,14 +35,27 @@ export function buildNavigationSections(
 	return categories
 		.filter((category) => !category.parentId)
 		.map((category) => {
-			const children = categories.filter((candidate) => candidate.parentId === category.id);
-			const slugs = new Set([category.slug, ...children.map((child) => child.slug)]);
+			const children =
+				category.id == null
+					? []
+					: categories.filter((candidate) => candidate.parentId === category.id);
+			const branchItems = (root: NavigationCategory) => {
+				const branch = categoryBranch(categories, root),
+					ids = new Set(branch.flatMap((node) => (node.id == null ? [] : [node.id]))),
+					slugs = new Set(branch.map((node) => node.slug));
+				return items
+					.filter(
+						(item) =>
+							item.category &&
+							(ids.size ? ids.has(item.category.id) : slugs.has(item.category.slug))
+					)
+					.map(toNavigationItem);
+			};
 			return {
 				...category,
 				children,
-				items: items
-					.filter((item) => item.category && slugs.has(item.category.slug))
-					.map(toNavigationItem)
+				items: branchItems(category),
+				itemsByChild: Object.fromEntries(children.map((child) => [child.slug, branchItems(child)]))
 			};
 		});
 }
