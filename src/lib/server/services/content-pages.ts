@@ -9,6 +9,7 @@ import { countItems, listItems } from '$lib/server/services/items';
 import { normalizeSearchQuery, searchPagination, searchRank } from '$lib/search';
 import { toNavigationItem } from '$lib/server/services/navigation';
 import { listTags } from '$lib/server/services/tags';
+import { categoryBranch } from '$lib/category-tree';
 
 export type ContentPageData = {
 	title: string;
@@ -74,7 +75,9 @@ export async function categoryContent(
 
 	const children = categories.filter((entry) => entry.parentId === category.id);
 	const groups = await Promise.all(
-		[category, ...children].map((entry) => listItems(database, { categorySlug: entry.slug }))
+		categoryBranch(categories, category).map((entry) =>
+			listItems(database, { categoryId: entry.id })
+		)
 	);
 	const items = groups.flat();
 	return {

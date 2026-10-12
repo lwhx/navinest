@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { isManagedCategoryType, managedCategoryTypes } from '$lib/category-types';
 	import CategoryTreeNode from '$lib/components/CategoryTreeNode.svelte';
+	import CategoryParentPicker from '$lib/components/admin/CategoryParentPicker.svelte';
 	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
@@ -96,17 +97,13 @@
 							</select>{#if errors.type}<small class="field-error">{errors.type}</small>{/if}</label
 						>
 					{/if}
-					<label
-						><span id="category-parent-label">父级分类</span><select
-							name="parentId"
-							aria-labelledby="category-parent-label"
-							><option value="" selected={selectedParent === ''}>无父级</option
-							>{#each data.categories.filter((category) => category.id !== data.editing?.id && category.type === selectedType) as category (category.id)}<option
-									value={category.id}
-									selected={selectedParent === String(category.id)}>{category.name}</option
-								>{/each}</select
-						>{#if errors.parentId}<small class="field-error">{errors.parentId}</small>{/if}</label
-					>
+					<CategoryParentPicker
+						categories={data.categories}
+						type={selectedType}
+						editingId={data.editing?.id}
+						bind:value={selectedParent}
+						error={errors.parentId}
+					/>
 					<label
 						><span>名称</span><input
 							name="name"
@@ -164,7 +161,7 @@
 <section class="category-summary" aria-label="分类概览">
 	<div><strong>{data.workbench.summary.total}</strong><span>网址与文章分类</span></div>
 	<div><strong>{data.workbench.summary.roots}</strong><span>一级分类</span></div>
-	<div><strong>{data.workbench.summary.children}</strong><span>二级分类</span></div>
+	<div><strong>{data.workbench.summary.children}</strong><span>子分类</span></div>
 	<div><strong>{data.workbench.summary.hidden}</strong><span>已隐藏</span></div>
 </section>
 

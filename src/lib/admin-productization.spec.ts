@@ -33,7 +33,7 @@ describe('administrator productization', () => {
 		expect(node).toContain('node.children');
 		expect(node).toContain('快速新增子分类');
 		expect(page).toContain('data.createParent?.type');
-		expect(page).toContain('selected={');
+		expect(page).toContain('<CategoryParentPicker');
 		expect(node).toContain('node.deleteImpact');
 		expect(node).toContain('disabled={!node.canDelete}');
 		expect(css).toContain('.category-workbench');
