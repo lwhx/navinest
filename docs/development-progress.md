@@ -2,12 +2,22 @@
 
 更新时间：2026-10-12
 
+## 最新开发：后台临时单次登录（2026-10-12）
+
+用户要求开发期间简化复杂登录。本轮在独立分支 `feat/admin-single-login` 增加 `ADMIN_AUTH_MODE` 开关，`wrangler.jsonc` 配置为 `session`。应用复用现有密码/GitHub 站内登录，只允许有效会话关联的 active admin 访问后台；每次请求读取当前 D1 状态和角色，撤销、过期、停用或降级会失去权限。未登录后台页面转站内登录，登录成功返回原页面；匿名管理 API/POST 返回 401、普通用户返回 403。Access 请求头不能替代 session 模式中的真实会话。未配置或其他开关值仍沿用 Access 模式，本地 loopback 预览边界保持原样。
+
+密码和 GitHub 流程只接受站内 `/admin` 回跳，正常前台登录仍回首页。GitHub 另使用限定 OAuth 路径、Secure/HttpOnly/SameSite=Lax、10 分钟有效的回跳 Cookie；原 OAuth state 校验和会话安全属性保持。没有开放匿名线上后台、修改管理员角色、重置密码或重跑数据库迁移；仅给登录表单输入与按钮补足 44px，手机登录操作纵向排列，避免 GitHub 文案多行挤压；首页卡片、字体、后台模块与抽屉保持原样。
+
+**状态：代码实现与仓库配置已完成，线上部署及 Access 策略切换待操作。** Cloudflare 边缘保护独立于仓库开关，目前没有可用的 Cloudflare 操作连接，本轮未修改线上配置。先部署并经现有 Access 确认站内管理员可用，再仅对两个后台路径添加临时 Bypass；完成项目后先恢复边缘 Access，再切回 `access`。切换与恢复的具体步骤见 [后台登录文档](cloudflare-access.md)。不要将 PR 合并当作线上验证码已关闭。
+
+本轮本地验证：`npm run check` 0 错误 / 0 警告，`npm run lint`、`npm test`（90 文件 / 436 项）及 `npm run build` 通过。真实 SQLite 和服务器守卫覆盖有效/伪造/过期/撤销会话、停用、角色降级、API/POST 拒绝、Access 模式隔离及公共路由。密码和 GitHub 回跳、正常前台登录、无效 state、旧回跳覆盖、外站/控制字符/非后台路径拒绝均有路由或函数回归。中文字体下完整 78 组桌面/手机浅深主题布局通过，新登录页 4 组在手机操作排版调整后另行复测；实际渲染 Noto Sans CJK SC，保存 66 张截图并复核两端登录页。Worker 入口、Cloudflare 绑定、Cron 和依赖保持原样，配置只新增认证模式及对应生成类型；线上切换尚未验收。
+
 ## GitHub 登录恢复与后台入口核对（2026-10-12）
 
 - 故障已定位并由用户确认恢复：GitHub OAuth 授权与账号绑定完成，但 `createUserSession` 向 D1 写入会话时失败，回调返回 `502 / GitHub login failed.`。用户提供的正式 `PRAGMA table_info(user_sessions)` 只有 `token_hash`、`user_id`、`expires_at`、`created_at`、`last_seen_at`，缺少当前代码使用的 `user_agent` 与 `ip_address`。
 - 使用现有 `0017_session_metadata.sql` 的两条新增字段及索引语句，在 D1 控制台补齐后，用户确认 GitHub 登录成功。未修改 OAuth 权限、Client Secret、Cookie/state 校验、账号角色或认证代码。本地真实 SQLite 已复现旧表写入失败，并验证执行该迁移后新会话写入成功，已有会话字段与用户记录保留。
 - 这是手工执行迁移内容的恢复记录，**不等于 Wrangler 的 `d1_migrations` 已登记该文件**。后续部署先只读核对实际列、索引和迁移记录，再按实际状态补齐登记；不要直接重跑新增列语句或全量 seed。其他迁移是否已应用不由本次恢复推断，`0020` 首页排序仍待核对应用。
-- 2026-10-12 匿名实测 `/admin` 与 `/api/admin/users` 均由 Cloudflare Access 返回 `302`，浏览器确认后台显示 “Log in to NaviNest Admin”、Email 和 “Send login code”。入口为 `https://nss.whks.de/admin`，使用 Access 邮箱验证码；应用随后按同一邮箱检查 D1 用户必须为 `role='admin'` 且 `status='active'`。前台 GitHub 会话不替代后台 Access 验证。
+- 2026-10-12 匿名实测 `/admin` 与 `/api/admin/users` 均由 Cloudflare Access 返回 `302`，浏览器确认后台显示 “Log in to NaviNest Admin”、Email 和 “Send login code”。入口为 `https://nss.whks.de/admin`，使用 Access 邮箱验证码；应用随后按同一邮箱检查 D1 用户必须为 `role='admin'` 且 `status='active'`。切换前的 `access` 模式中，前台 GitHub 会话不替代后台 Access 验证。
 - 历史交接中的管理员邮箱为 `whuil574@gmail.com`；本轮只确认登录方式和访问保护，没有读取当前 Access Allow 策略或正式管理员名单，不能将历史邮箱当作实时配置快照。后台完整登录与操作未由本轮浏览器验收。
 
 ## 最新开发：资源发现与搜索基础优化（2026-10-12）

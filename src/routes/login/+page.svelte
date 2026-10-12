@@ -3,12 +3,15 @@
 	import AccountShell from '$lib/components/AccountShell.svelte';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
+	const adminLogin = $derived(data.returnTo.startsWith('/admin'));
 </script>
 
 <svelte:head><title>登录 | NaviNest 导航巢</title></svelte:head>
 <AccountShell
-	title="登录 NaviNest"
-	description="进入你的个人空间，同步收藏、足迹、投稿和专属导航。"
+	title={adminLogin ? '登录管理后台' : '登录 NaviNest'}
+	description={adminLogin
+		? '使用已有管理员账号登录，完成后返回刚才的后台页面。'
+		: '进入你的个人空间，同步收藏、足迹、投稿和专属导航。'}
 	eyebrow="WELCOME BACK"
 	showNav={false}
 >
@@ -43,7 +46,11 @@
 		</form>
 		<div class="account-divider">或者</div>
 		<div class="account-actions">
-			<a class="account-button secondary" href={resolve('/api/auth/github')}>使用 GitHub 登录</a
+			<a
+				class="account-button secondary"
+				href={adminLogin
+					? resolve(`/api/auth/github?returnTo=${encodeURIComponent(data.returnTo)}`)
+					: resolve('/api/auth/github')}>使用 GitHub 登录</a
 			>{#if data.registrationOpen}<a class="account-button secondary" href={resolve('/register')}
 					>注册新账号</a
 				>{/if}<a class="account-button secondary" href={resolve('/')}>返回首页</a>

@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { adminLoginReturnTo, GITHUB_RETURN_COOKIE } from '$lib/login-return';
 import { requireDatabase } from '$lib/server/db';
 import {
 	exchangeGitHubCode,
@@ -19,7 +20,9 @@ export const GET: RequestHandler = async ({
 	const code = url.searchParams.get('code'),
 		state = url.searchParams.get('state'),
 		stored = cookies.get(OAUTH_STATE_COOKIE);
+	const returnTo = adminLoginReturnTo(cookies.get(GITHUB_RETURN_COOKIE));
 	cookies.delete(OAUTH_STATE_COOKIE, { path: '/api/auth/github' });
+	cookies.delete(GITHUB_RETURN_COOKIE, { path: '/api/auth/github' });
 	if (!code || !validateOAuthState(stored ?? null, state))
 		return new Response('Invalid OAuth callback.', { status: 400 });
 	const clientId = platform?.env?.GITHUB_CLIENT_ID,
@@ -49,5 +52,5 @@ export const GET: RequestHandler = async ({
 		return new Response('GitHub login failed.', { status: 502 });
 	}
 	setSessionCookie(cookies, session.token, session.expires);
-	redirect(303, '/');
+	redirect(303, returnTo);
 };
