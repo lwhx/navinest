@@ -1,4 +1,5 @@
 import type { Category } from '$lib/types/content';
+import { isManagedCategoryType } from '$lib/category-types';
 export type CategoryUsage = { categoryId: number; count: number };
 export type CategoryWorkbenchNode = Category & {
 	path: string;
@@ -48,5 +49,19 @@ export function buildCategoryWorkbench(categories: Category[], usage: CategoryUs
 			hidden: categories.filter((x) => !x.isVisible).length,
 			used: categories.filter((x) => (counts.get(x.id) ?? 0) > 0).length
 		}
+	};
+}
+
+// Keep legacy records available for maintenance without offering their types for new categories.
+export function buildCategoryManagement(categories: Category[], usage: CategoryUsage[]) {
+	return {
+		...buildCategoryWorkbench(
+			categories.filter((category) => isManagedCategoryType(category.type)),
+			usage
+		),
+		legacy: buildCategoryWorkbench(
+			categories.filter((category) => !isManagedCategoryType(category.type)),
+			usage
+		)
 	};
 }

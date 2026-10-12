@@ -146,6 +146,63 @@ afterEach(() => {
 });
 
 describe('administrator write services', () => {
+	it.each(['app', 'book', 'bulletin'])('rejects new %s categories before writing', async (type) => {
+		const { database, sqlite } = createDatabase();
+		await expect(
+			createCategory(database, validCategory({ type, name: '不再新增', slug: 'retired' }))
+		).rejects.toMatchObject({ field: 'type', status: 400 });
+		expect(sqlite.prepare('SELECT COUNT(*) AS count FROM categories').get()).toEqual({ count: 0 });
+	});
+	it.each(['app', 'book', 'bulletin'])(
+		'rejects converting a current category to %s',
+		async (type) => {
+			const { database, sqlite } = createDatabase();
+			const id = await createCategory(
+				database,
+				validCategory({ type: 'site', name: '网址', slug: 'sites' })
+			);
+			await expect(
+				updateCategory(database, id, validCategory({ type, name: '改类型', slug: 'changed' }))
+			).rejects.toMatchObject({ field: 'type', status: 400 });
+			expect(
+				sqlite.prepare('SELECT type, name, slug FROM categories WHERE id = ?').get(id)
+			).toEqual({ type: 'site', name: '网址', slug: 'sites' });
+		}
+	);
+	it.each(['app', 'book', 'bulletin'])(
+		'allows maintaining a legacy %s category and retains all references',
+		async (type) => {
+			const { database, sqlite } = createDatabase();
+			sqlite
+				.prepare("INSERT INTO categories(id,type,name,slug) VALUES(10,?,'旧分类','legacy')")
+				.run(type);
+			sqlite
+				.prepare(
+					"INSERT INTO categories(id,type,parent_id,name,slug) VALUES(11,?,10,'旧子分类','child')"
+				)
+				.run(type);
+			const itemId = await createItem(
+				database,
+				validItem({ type, categoryId: 10, title: '保留内容', slug: 'existing' }),
+				null
+			);
+			await updateCategory(
+				database,
+				10,
+				validCategory({ type, name: '已整理旧分类', slug: 'legacy', isVisible: false })
+			);
+			expect(
+				sqlite.prepare('SELECT type, name, is_visible FROM categories WHERE id = 10').get()
+			).toEqual({ type, name: '已整理旧分类', is_visible: 0 });
+			expect(sqlite.prepare('SELECT type, parent_id FROM categories WHERE id = 11').get()).toEqual({
+				type,
+				parent_id: 10
+			});
+			expect(
+				sqlite.prepare('SELECT type, category_id FROM items WHERE id = ?').get(itemId)
+			).toEqual({ type, category_id: 10 });
+		}
+	);
 	it('persists, replaces and clears validated content media relations', async () => {
 		const { database, sqlite } = createDatabase();
 		sqlite.exec(

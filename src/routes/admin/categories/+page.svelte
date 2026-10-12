@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { isManagedCategoryType, managedCategoryTypes } from '$lib/category-types';
 	import CategoryTreeNode from '$lib/components/CategoryTreeNode.svelte';
 	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
 	import type { PageProps } from './$types';
@@ -25,9 +26,8 @@
 			: null;
 	}
 	let filteredRoots = $derived(data.workbench.roots.flatMap((root) => matches(root) ?? []));
-	let selectedType = $derived(
-			value('type', data.editing?.type ?? data.createParent?.type ?? 'site')
-		),
+	const legacyEditor = $derived(Boolean(data.editing && !isManagedCategoryType(data.editing.type)));
+	let selectedType = $derived(legacyEditor ? data.editing!.type : managedType()),
 		selectedParent = $derived(
 			value('parentId', String(data.editing?.parentId ?? data.createParent?.id ?? ''))
 		);
@@ -35,6 +35,10 @@
 	function value(name: string, fallback = ''): string {
 		const submitted = form?.values?.[name];
 		return typeof submitted === 'string' ? submitted : fallback;
+	}
+	function managedType() {
+		const type = value('type', data.editing?.type ?? data.createParent?.type ?? 'site');
+		return isManagedCategoryType(type) ? type : 'site';
 	}
 
 	function visibleChecked(): boolean {
@@ -70,24 +74,36 @@
 				{#if data.editing}<input type="hidden" name="id" value={data.editing.id} />{/if}
 				{#if form?.message}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
 				<div class="admin-form-grid">
+					{#if legacyEditor}
+						<div class="admin-field-wide">
+							<input type="hidden" name="type" value={data.editing!.type} />
+							<p class="admin-notice">
+								历史分类：保留原类型和内容关联，仅维护现有分类，不再新增此类型。
+							</p>
+							{#if errors.type}<small class="field-error">{errors.type}</small>{/if}
+						</div>
+					{:else}
+						<label
+							><span id="category-type-label">类型</span><select
+								name="type"
+								aria-labelledby="category-type-label"
+								bind:value={selectedType}
+								onchange={() => (selectedParent = '')}
+							>
+								{#each managedCategoryTypes as type (type.value)}<option value={type.value}
+										>{type.label}</option
+									>{/each}
+							</select>{#if errors.type}<small class="field-error">{errors.type}</small>{/if}</label
+						>
+					{/if}
 					<label
-						><span>类型</span><select name="type"
-							><option value="site" selected={selectedType === 'site'}>网址</option><option
-								value="post"
-								selected={selectedType === 'post'}>文章</option
-							><option value="app" selected={selectedType === 'app'}>APP / 资源</option><option
-								value="book"
-								selected={selectedType === 'book'}>书籍 / 影视</option
-							><option value="bulletin" selected={selectedType === 'bulletin'}>公告</option></select
-						>{#if errors.type}<small class="field-error">{errors.type}</small>{/if}</label
-					>
-					<label
-						><span>父级分类</span><select name="parentId"
+						><span id="category-parent-label">父级分类</span><select
+							name="parentId"
+							aria-labelledby="category-parent-label"
 							><option value="" selected={selectedParent === ''}>无父级</option
-							>{#each data.categories.filter((category) => category.id !== data.editing?.id) as category (category.id)}<option
+							>{#each data.categories.filter((category) => category.id !== data.editing?.id && category.type === selectedType) as category (category.id)}<option
 									value={category.id}
-									selected={selectedParent === String(category.id)}
-									>{category.name} · {category.type}</option
+									selected={selectedParent === String(category.id)}>{category.name}</option
 								>{/each}</select
 						>{#if errors.parentId}<small class="field-error">{errors.parentId}</small>{/if}</label
 					>
@@ -146,7 +162,7 @@
 {/if}
 
 <section class="category-summary" aria-label="分类概览">
-	<div><strong>{data.workbench.summary.total}</strong><span>全部分类</span></div>
+	<div><strong>{data.workbench.summary.total}</strong><span>网址与文章分类</span></div>
 	<div><strong>{data.workbench.summary.roots}</strong><span>一级分类</span></div>
 	<div><strong>{data.workbench.summary.children}</strong><span>二级分类</span></div>
 	<div><strong>{data.workbench.summary.hidden}</strong><span>已隐藏</span></div>
@@ -172,11 +188,10 @@
 				><span class="sr-only">内容类型</span><select
 					class="category-type-filter"
 					bind:value={categoryTypeFilter}
-					><option value="all">全部类型</option><option value="site">网址</option><option
-						value="post">文章</option
-					><option value="app">APP / 资源</option><option value="book">书籍 / 影视</option><option
-						value="bulletin">公告</option
-					></select
+					><option value="all">全部类型</option
+					>{#each managedCategoryTypes as type (type.value)}<option value={type.value}
+							>{type.label}</option
+						>{/each}</select
 				></label
 			>
 			<label
@@ -209,3 +224,16 @@
 			</ul>
 		</aside>{/if}
 </div>
+
+{#if data.workbench.legacy.summary.total}
+	<details class="category-legacy">
+		<summary>历史分类（{data.workbench.legacy.summary.total}）</summary>
+		<p>已有分类及内容保留在这里，仍可编辑或隐藏，不再新增此类型分类。</p>
+		<div class="category-tree">
+			{#each data.workbench.legacy.roots as root (root.id)}<CategoryTreeNode
+					node={root}
+					database={data.source === 'database'}
+				/>{/each}
+		</div>
+	</details>
+{/if}

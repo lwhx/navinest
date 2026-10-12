@@ -695,6 +695,45 @@
 	margin-top: 12px;
 }
 /* Existing specialty workbenches use the same surface and text palette. */
+.admin-shell .category-legacy {
+	margin-top: 20px;
+	padding: 16px;
+	border: 1px solid var(--admin-border);
+	border-radius: 12px;
+	background: var(--admin-surface);
+}
+.admin-shell .category-legacy summary {
+	display: list-item;
+	min-height: 44px;
+	padding: 10px 0;
+	color: var(--admin-text);
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.admin-shell .category-legacy > p {
+	margin: 0 0 12px;
+	color: var(--admin-muted);
+	font-size: 13px;
+	line-height: 1.6;
+}
+.admin-shell .category-node-copy > div {
+	flex-wrap: wrap;
+}
+.admin-shell .category-node-copy strong {
+	max-width: 100%;
+}
+.admin-shell .category-node-copy :is(span, em) {
+	flex-shrink: 0;
+	color: var(--admin-muted);
+	background: var(--admin-soft);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.admin-shell .category-node-copy em {
+	color: var(--admin-danger);
+	background: var(--admin-accent-soft);
+}
 .admin-shell
 	:is(
 		.category-summary > div,

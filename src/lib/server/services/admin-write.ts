@@ -1,4 +1,5 @@
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
+import { isManagedCategoryType } from '$lib/category-types';
 import type {
 	CategoryInput,
 	HomeModuleInput,
@@ -188,6 +189,9 @@ function itemRelationStatements(database: Database, itemId: number, input: ItemI
 }
 
 export async function createCategory(database: Database, input: CategoryInput): Promise<number> {
+	if (!isManagedCategoryType(input.type)) {
+		throw new AdminWriteError('新分类只支持网址和文章。', 'type');
+	}
 	await validateCategoryParent(database, input);
 	return returningId(
 		database
@@ -215,6 +219,15 @@ export async function updateCategory(
 	categoryId: number,
 	input: CategoryInput
 ): Promise<void> {
+	if (!isManagedCategoryType(input.type)) {
+		const retainsLegacyType = await rowExists(
+			database,
+			'SELECT id FROM categories WHERE id = ? AND type = ? LIMIT 1',
+			[categoryId, input.type]
+		);
+		if (!retainsLegacyType)
+			throw new AdminWriteError('分类只支持网址和文章；历史分类只能保留原类型。', 'type');
+	}
 	await preventReferencedCategoryTypeChange(database, categoryId, input.type);
 	await validateCategoryParent(database, input, categoryId);
 	await returningId(

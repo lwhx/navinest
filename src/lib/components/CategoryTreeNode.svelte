@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { isManagedCategoryType } from '$lib/category-types';
 	import CategoryTreeNode from './CategoryTreeNode.svelte';
 	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
 	let { node, database = true }: { node: CategoryWorkbenchNode; database?: boolean } = $props();
@@ -40,7 +41,9 @@
 		</div>
 		{#if database}<div class="category-node-actions">
 				<a href={resolve(`/admin/categories?edit=${node.id}`)}>编辑</a>
-				<a href={resolve(`/admin/categories?create=1&parent=${node.id}`)}>快速新增子分类</a>
+				{#if isManagedCategoryType(node.type)}<a
+						href={resolve(`/admin/categories?create=1&parent=${node.id}`)}>快速新增子分类</a
+					>{/if}
 				<form
 					method="POST"
 					action="?/delete"
