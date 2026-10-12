@@ -1,4 +1,5 @@
-import { error, type Handle } from '@sveltejs/kit';
+import { error, redirect, type Handle } from '@sveltejs/kit';
+import { adminLoginReturnTo } from '$lib/login-return';
 import { adminAuthorizationContext, authorizeAdmin } from '$lib/server/admin-auth';
 import { getDatabase } from '$lib/server/db';
 import { sessionUser, SESSION_COOKIE } from '$lib/server/user-auth';
@@ -26,8 +27,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (database && sessionToken) event.locals.user = await sessionUser(database, sessionToken);
 
 	if (isAdminPath(event.url.pathname)) {
-		const authorization = await authorizeAdmin(adminAuthorizationContext(event));
-		if (!authorization.authorized) error(authorization.status, authorization.message);
+		const context = adminAuthorizationContext(event);
+		const authorization = await authorizeAdmin(context);
+		if (!authorization.authorized) {
+			if (
+				context.mode === 'session' &&
+				authorization.status === 401 &&
+				['GET', 'HEAD'].includes(event.request.method) &&
+				(event.url.pathname === '/admin' || event.url.pathname.startsWith('/admin/'))
+			) {
+				const returnTo = adminLoginReturnTo(event.url.pathname + event.url.search);
+				redirect(303, '/login?returnTo=' + encodeURIComponent(returnTo));
+			}
+			error(authorization.status, authorization.message);
+		}
 		event.locals.admin = authorization.identity;
 	}
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement } from '$lib/server/db';
-import { authorizeAdmin } from '$lib/server/admin-auth';
+import { adminAuthMode, adminAuthorizationContext, authorizeAdmin } from '$lib/server/admin-auth';
 
 function databaseWithUser(user: unknown): Database {
 	return {
@@ -19,6 +19,43 @@ function databaseWithUser(user: unknown): Database {
 }
 
 describe('administrator authorization', () => {
+	it('defaults to Access unless session mode is explicitly configured', () => {
+		expect(adminAuthMode('session')).toBe('session');
+		for (const value of [undefined, '', 'access', 'none', 'disabled'])
+			expect(adminAuthMode(value)).toBe('access');
+	});
+	it('limits local preview to loopback requests without a Cloudflare platform', () => {
+		for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+			const event = {
+				url: new URL('http://' + host + '/admin'),
+				request: new Request('http://' + host + '/admin'),
+				locals: { user: null }
+			};
+			expect(adminAuthorizationContext(event as never).isLocal).toBe(true);
+			expect(adminAuthorizationContext({ ...event, platform: { env: {} } } as never).isLocal).toBe(
+				false
+			);
+		}
+		expect(
+			adminAuthorizationContext({
+				url: new URL('https://nss.whks.de/admin'),
+				request: new Request('https://nss.whks.de/admin'),
+				locals: { user: null }
+			} as never).isLocal
+		).toBe(false);
+	});
+	it('does not trust a session identity without the deployed database binding', async () => {
+		expect(
+			await authorizeAdmin({
+				database: null,
+				isLocal: false,
+				email: null,
+				assertion: null,
+				mode: 'session',
+				user: { id: 7, email: null, username: 'owner', displayName: '管理员', role: 'admin' }
+			})
+		).toMatchObject({ authorized: false, status: 503 });
+	});
 	it('allows the explicit loopback development context', async () => {
 		const result = await authorizeAdmin({
 			database: null,

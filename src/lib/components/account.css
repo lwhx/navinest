@@ -195,6 +195,10 @@
 	opacity: 0.55;
 	cursor: not-allowed;
 }
+.account-login input,
+.account-login .account-button {
+	min-height: 44px;
+}
 .account-profile-media {
 	position: relative;
 	min-height: 150px;
@@ -376,6 +380,10 @@
 	}
 	.account-actions .account-button {
 		flex: 1;
+	}
+	.account-login .account-actions {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.account-stats {
 		grid-template-columns: 1fr 1fr;

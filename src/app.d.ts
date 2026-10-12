@@ -5,6 +5,7 @@ declare global {
 		AI_CONFIG_ENCRYPTION_KEY?: string;
 		ALLOW_GITHUB_AUTO_PROVISION?: string;
 		ALERT_WEBHOOK_URL?: string;
+		ADMIN_AUTH_MODE?: string;
 	}
 
 	namespace App {

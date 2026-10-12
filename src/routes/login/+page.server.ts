@@ -1,15 +1,20 @@
 import { fail, redirect } from '@sveltejs/kit';
+import { adminLoginReturnTo } from '$lib/login-return';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import { loadSiteSettings } from '$lib/server/services/site-settings';
 import { loginUser, setSessionCookie } from '$lib/server/user-auth';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, platform }) => {
-	if (locals.user) redirect(303, '/');
-	return { registrationOpen: (await loadSiteSettings(getDatabase(platform))).registrationOpen };
+export const load: PageServerLoad = async ({ locals, platform, url }) => {
+	const returnTo = adminLoginReturnTo(url.searchParams.get('returnTo'));
+	if (locals.user) redirect(303, returnTo);
+	return {
+		registrationOpen: (await loadSiteSettings(getDatabase(platform))).registrationOpen,
+		returnTo
+	};
 };
 export const actions: Actions = {
-	default: async ({ platform, request, cookies, getClientAddress }) => {
+	default: async ({ platform, request, cookies, getClientAddress, url }) => {
 		const form = await request.formData();
 		const identifier = String(form.get('identifier') ?? '');
 		const password = String(form.get('password') ?? '');
@@ -29,6 +34,6 @@ export const actions: Actions = {
 				identifier
 			});
 		setSessionCookie(cookies, result.token, result.expires);
-		redirect(303, '/');
+		redirect(303, adminLoginReturnTo(url.searchParams.get('returnTo')));
 	}
 };
