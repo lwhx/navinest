@@ -6,7 +6,7 @@ describe('administrator productization', () => {
 		const layout = read('src/routes/admin/+layout.svelte');
 		expect(layout).toContain('admin-menu-button');
 		expect(layout).toContain('admin-mobile-backdrop');
-		expect(layout).toContain('id="main-content"');
+		expect(layout).toContain('id="admin-main"');
 		expect(layout).toContain('aria-current');
 	});
 	it('shows protected previews and content references before deletion', () => {

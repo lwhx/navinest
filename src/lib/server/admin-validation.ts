@@ -292,6 +292,12 @@ export function validateHomeModuleInput(input: InputRecord): ValidationResult<Ho
 	} catch {
 		errors.configJson = '配置必须是有效的 JSON 对象。';
 	}
+	if (type === 'content' && typeof input.categorySlug === 'string') {
+		const slug = input.categorySlug.trim();
+		if (!SLUG_PATTERN.test(slug) || slug.length > 100)
+			errors.categorySlug = '请选择有效的资源分类。';
+		else config = { ...config, categorySlug: slug };
+	}
 	if (type === 'search') {
 		const field =
 			typeof input.recommendedSearchesText === 'string' ? 'recommendedSearchesText' : 'configJson';

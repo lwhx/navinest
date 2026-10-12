@@ -8,6 +8,7 @@ import {
 } from '$lib/server/admin-mutations';
 import { validateHomeModuleInput } from '$lib/server/admin-validation';
 import { fallbackAdminHomeModules, loadAdminHomeModules } from '$lib/server/services/admin-data';
+import { listCategories } from '$lib/server/services/categories';
 import {
 	AdminWriteError,
 	createHomeModule,
@@ -22,6 +23,7 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
 	return {
 		...data,
+		categories: database ? await listCategories(database, { visibleOnly: false }) : [],
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
 		editing: editId ? (data.modules.find((entry) => entry.id === editId) ?? null) : null
 	};

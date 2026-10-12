@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { scrollableTable } from '$lib/admin-actions';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
@@ -81,7 +82,12 @@
 	</section>
 {/if}
 
-<div class="admin-table-wrap">
+<div
+	class="admin-table-wrap"
+	use:scrollableTable
+	role="region"
+	aria-label="管理数据列表，可横向滚动"
+>
 	<table class="admin-table">
 		<thead
 			><tr

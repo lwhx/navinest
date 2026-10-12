@@ -29,9 +29,12 @@ type ItemRow = {
 };
 
 export type ItemQuery = {
+	id?: number;
 	type?: ContentType;
 	slug?: string;
 	categorySlug?: string;
+	categoryId?: number | null;
+	includeSlugInSearch?: boolean;
 	tagSlug?: string;
 	search?: string;
 	order?: 'relevance';
@@ -71,6 +74,10 @@ function parseTags(entries: string | null): Array<{ name: string; slug: string }
 function itemFilters(query: ItemQuery) {
 	const conditions: string[] = [];
 	const values: DatabaseValue[] = [];
+	if (query.id !== undefined) {
+		conditions.push('i.id = ?');
+		values.push(query.id);
+	}
 
 	if (query.visibility !== null) {
 		conditions.push('i.visibility = ?');
@@ -96,6 +103,10 @@ function itemFilters(query: ItemQuery) {
 		conditions.push('c.slug = ?');
 		values.push(query.categorySlug);
 	}
+	if (query.categoryId !== undefined) {
+		conditions.push(query.categoryId === null ? 'i.category_id IS NULL' : 'i.category_id = ?');
+		if (query.categoryId !== null) values.push(query.categoryId);
+	}
 
 	if (query.tagSlug) {
 		conditions.push(
@@ -106,10 +117,13 @@ function itemFilters(query: ItemQuery) {
 
 	if (query.search?.trim()) {
 		conditions.push(
-			"(i.title LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM item_tags search_it JOIN tags search_tag ON search_tag.id = search_it.tag_id WHERE search_it.item_id = i.id AND search_tag.name LIKE ? ESCAPE '\\'))"
+			"(i.title LIKE ? ESCAPE '\\' OR i.summary LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM item_tags search_it JOIN tags search_tag ON search_tag.id = search_it.tag_id WHERE search_it.item_id = i.id AND search_tag.name LIKE ? ESCAPE '\\')" +
+				(query.includeSlugInSearch ? " OR i.slug LIKE ? ESCAPE '\\'" : '') +
+				')'
 		);
 		const escaped = query.search.trim().replace(/[\\%_]/g, '\\$&');
 		values.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+		if (query.includeSlugInSearch) values.push(`%${escaped}%`);
 	}
 	return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
 }

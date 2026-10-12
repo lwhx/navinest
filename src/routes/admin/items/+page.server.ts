@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import {
 	invalidAction,
@@ -7,7 +7,9 @@ import {
 	parsePositiveId
 } from '$lib/server/admin-mutations';
 import { validateItemInput } from '$lib/server/admin-validation';
-import { fallbackAdminItems, loadAdminItems } from '$lib/server/services/admin-data';
+import { fallbackAdminItems } from '$lib/server/services/admin-data';
+import { loadAdminContent, paginateAdminFallback } from '$lib/server/services/admin-content';
+import { listItems } from '$lib/server/services/items';
 import {
 	AdminWriteError,
 	createItem,
@@ -20,20 +22,26 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	const database = getDatabase(platform);
 	let data;
 	try {
-		data = database ? await loadAdminItems(database) : fallbackAdminItems();
-	} catch (error) {
-		console.error('Failed to load content administration data.', error);
-		data = fallbackAdminItems();
+		const fallback = database ? null : fallbackAdminItems();
+		data = database
+			? await loadAdminContent(database, url.searchParams)
+			: { ...fallback!, ...paginateAdminFallback(fallback!, url.searchParams) };
+	} catch (cause) {
+		console.error('Failed to load content administration data.', cause);
+		error(503, '内容列表暂时无法读取，请稍后重试。');
 	}
 	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
-	const initialType = url.searchParams.get('type') ?? 'all',
-		initialCategoryId = parsePositiveId(url.searchParams.get('category') ?? '');
+	const editing =
+		editId && database
+			? ((await listItems(database, { status: null, visibility: null, limit: 1, id: editId }))[0] ??
+				null)
+			: null;
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
-		initialType,
-		initialCategoryId: initialCategoryId ? String(initialCategoryId) : '',
-		editing: editId ? (data.items.find((item) => item.id === editId) ?? null) : null
+		initialType: data.filters.type,
+		initialCategoryId: data.filters.category === 'all' ? '' : data.filters.category,
+		editing
 	};
 };
 

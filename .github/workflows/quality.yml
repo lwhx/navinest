@@ -55,3 +55,15 @@ jobs:
           npm run build
           after="$(sha256sum cloudflare/worker.ts | cut -d' ' -f1)"
           test "$before" = "$after"
+      - name: Administration workflow and responsive layouts
+        env:
+          NAVINEST_REQUIRE_CJK: '1'
+          NAVINEST_ADMIN_SCREENSHOT_DIR: ${{ runner.temp }}/navinest-admin-layout
+        run: npm run test:admin-workspace
+      - name: Upload administration layout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: administration-layout
+          path: ${{ runner.temp }}/navinest-admin-layout
+          if-no-files-found: ignore
