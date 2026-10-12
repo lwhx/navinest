@@ -4,6 +4,27 @@ import { join } from 'node:path';
 import { checkHomeDensity } from './home-density-checks.mjs';
 
 export async function checkHomeExperience(page, baseUrl) {
+	await page.setViewportSize({ width: 375, height: 900 });
+	await page.goto(baseUrl, { waitUntil: 'networkidle' });
+	for (const slug of ['bookshelf', 'notes', 'announcements']) {
+		assert.equal(
+			await page
+				.locator(`[data-category-section][id="${slug}"], .home-sidebar a[href="#${slug}"]`)
+				.count(),
+			0,
+			`Retired homepage section and sidebar entry: ${slug}`
+		);
+	}
+	await page.getByRole('button', { name: '打开分类菜单', exact: true }).click();
+	await page.getByRole('dialog', { name: '分类导航', exact: true }).waitFor();
+	for (const slug of ['bookshelf', 'notes', 'announcements'])
+		assert.equal(
+			await page.locator(`.mobile-drawer a[href="#${slug}"]`).count(),
+			0,
+			`Retired mobile navigation entry: ${slug}`
+		);
+	assert.ok(await page.locator('.mobile-drawer a[href="#favorites"]').isVisible());
+	await page.keyboard.press('Escape');
 	await page.setViewportSize({ width: 1366, height: 900 });
 	await page.goto(baseUrl, { waitUntil: 'networkidle' });
 	assert.equal(await page.locator('.popular-sites').count(), 1, 'Only one main ranking dataset');

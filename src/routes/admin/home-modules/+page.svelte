@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { canShowHomeCategory } from '$lib/home-category-visibility';
 	import { resolve } from '$app/paths';
 	import { homeModuleLabels } from '$lib/admin-home-modules';
 	import type { PageProps } from './$types';
@@ -94,10 +95,14 @@
 										>{data.editing.config.categorySlug}（原分类未找到）</option
 									>{/if}{#each data.categories as category (category.id)}<option
 										value={category.slug}
-										>{category.name}{category.isVisible ? '' : '（已隐藏）'}</option
+										>{category.name}{!canShowHomeCategory(category)
+											? '（首页不显示）'
+											: category.isVisible
+												? ''
+												: '（已隐藏）'}</option
 									>{/each}</select
 							><small id="module-category-hint"
-								>首页只展示启用分类中的公开内容。隐藏或没有公开内容的分类不会显示。</small
+								>首页只读取可见分类中的公开内容。书籍、公告及旧“文章摘录”分类不在首页展示。</small
 							>{#if errors.categorySlug}<small class="field-error">{errors.categorySlug}</small
 								>{/if}</label
 						>{/if}
@@ -154,7 +159,7 @@
 		<a href={resolve('/')} target="_blank" rel="noopener noreferrer">查看首页</a>
 	</div>
 	<p class="admin-plan-hint">
-		排序数值越小越靠前，停用模块不展示。首页会在这些模块之外补齐未单独配置的启用分类。
+		排序数值越小越靠前，停用模块不展示。首页会补齐符合展示规则的启用分类，不再补齐书籍、公告及旧“文章摘录”。
 	</p>
 	<ol class="admin-module-list">
 		{#each data.modules as module, index (module.id)}<li class:disabled={!module.isEnabled}>

@@ -103,6 +103,7 @@ export async function loadHomeData(database: Database): Promise<HomeData> {
 		loadHomeDashboard(database)
 	]);
 	const navigationCategories = categories.map((category) => ({
+		type: category.type,
 		id: category.id,
 		parentId: category.parentId,
 		name: category.name,

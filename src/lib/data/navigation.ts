@@ -1,4 +1,5 @@
 export type NavigationCategory = {
+	type?: ContentType;
 	id?: number;
 	parentId?: number | null;
 	name: string;
@@ -26,13 +27,13 @@ export type SearchEngine = {
 };
 
 export const categories: NavigationCategory[] = [
-	{ name: '常用推荐', slug: 'favorites', icon: 'star' },
-	{ name: '开发工具', slug: 'dev-tools', icon: 'code' },
-	{ name: '设计资源', slug: 'design', icon: 'palette' },
-	{ name: '效率工具', slug: 'productivity', icon: 'app' },
-	{ name: '书籍影视', slug: 'bookshelf', icon: 'book' },
-	{ name: '文章摘录', slug: 'notes', icon: 'file' },
-	{ name: '站点公告', slug: 'announcements', icon: 'bell' }
+	{ type: 'site', name: '常用推荐', slug: 'favorites', icon: 'star' },
+	{ type: 'site', name: '开发工具', slug: 'dev-tools', icon: 'code' },
+	{ type: 'site', name: '设计资源', slug: 'design', icon: 'palette' },
+	{ type: 'app', name: '效率工具', slug: 'productivity', icon: 'app' },
+	{ type: 'book', name: '书籍影视', slug: 'bookshelf', icon: 'book' },
+	{ type: 'post', name: '文章摘录', slug: 'notes', icon: 'file' },
+	{ type: 'bulletin', name: '站点公告', slug: 'announcements', icon: 'bell' }
 ];
 
 export const navigationItems: NavigationItem[] = [

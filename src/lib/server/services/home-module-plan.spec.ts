@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildHomeCategoryLinks } from '$lib/home-category-navigation';
 import { fallbackHomeData } from '$lib/server/services/home';
 import { buildHomeModulePlan } from '$lib/server/services/home-module-plan';
+import type { ContentType } from '$lib/types/content';
 const sections = [
 	{ slug: 'favorites', name: '常用推荐' },
 	{ slug: 'dev-tools', name: '开发工具' },
@@ -130,8 +131,57 @@ describe('homepage module combinations', () => {
 		const home = fallbackHomeData();
 		expect(home.modulePlan.map((entry) => entry.type)).toEqual([
 			'search',
-			...home.sections.map(() => 'content'),
+			'content',
+			'content',
+			'content',
+			'content',
 			'ranking'
 		]);
 	});
+	it('omits all three seeded sections from fallback content and navigation', () => {
+		const home = fallbackHomeData();
+		expect(
+			buildHomeCategoryLinks(home.modulePlan, home.sections).map((entry) => entry.slug)
+		).toEqual(['favorites', 'dev-tools', 'design', 'productivity']);
+		expect(home.sections.map((section) => section.slug)).toContain('notes');
+		expect(home.dashboard.popular.map((item) => item.type)).toContain('post');
+	});
+	it.each([true, false])(
+		'omits retired sections even with explicit configuration: %s',
+		(explicit) => {
+			const categories = [
+				...sections,
+				{ slug: 'bookshelf', name: '已改名的书籍分类', type: 'book' as ContentType },
+				{ slug: 'notes', name: '已改名的原文章摘录', type: 'post' as ContentType },
+				{ slug: 'announcements', name: '已改名的公告分类', type: 'bulletin' as ContentType },
+				{ slug: 'custom-books', name: '其他书籍', type: 'book' as ContentType },
+				{ slug: 'custom-notices', name: '其他公告', type: 'bulletin' as ContentType },
+				{ slug: 'guides', name: '使用教程', type: 'post' as ContentType }
+			];
+			const modules = explicit
+				? categories.map((section, index) => ({
+						id: index + 1,
+						type: 'content',
+						title: section.name,
+						sortOrder: index,
+						config: { categorySlug: section.slug, custom: 'keep' }
+					}))
+				: [];
+			const before = structuredClone({ modules, categories });
+			const plan = buildHomeModulePlan(modules, categories);
+			expect(plan.map((entry) => entry.categorySlug)).toEqual([
+				'favorites',
+				'dev-tools',
+				'design',
+				'guides'
+			]);
+			expect(buildHomeCategoryLinks(plan, categories).map((entry) => entry.slug)).toEqual([
+				'favorites',
+				'dev-tools',
+				'design',
+				'guides'
+			]);
+			expect({ modules, categories }).toEqual(before);
+		}
+	);
 });

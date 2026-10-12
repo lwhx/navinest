@@ -1,4 +1,6 @@
 import { searchRecommendations } from '$lib/search';
+import { canShowHomeCategory } from '$lib/home-category-visibility';
+import type { ContentType } from '$lib/types/content';
 
 type Module = {
 	id: number;
@@ -7,7 +9,7 @@ type Module = {
 	sortOrder: number;
 	config: Record<string, unknown>;
 };
-type Section = { slug: string; name: string };
+type Section = { slug: string; name: string; type?: ContentType };
 type Link = { label: string; url: string };
 export type HomePlanItem = {
 	key: string;
@@ -44,7 +46,8 @@ export function buildHomeModulePlan(
 	sections: Section[],
 	disabledCategorySlugs: string[] = []
 ): HomePlanItem[] {
-	const known = new Set(sections.map((x) => x.slug)),
+	const visibleSections = sections.filter(canShowHomeCategory);
+	const known = new Set(visibleSections.map((x) => x.slug)),
 		used = new Set<string>(),
 		auxiliary = new Set<string>(),
 		plan: HomePlanItem[] = [];
@@ -79,7 +82,7 @@ export function buildHomeModulePlan(
 				plan.push({ key: `links:${module.id}`, type: 'links', title: module.title, links: safe });
 		}
 	}
-	const extraCategories: HomePlanItem[] = sections
+	const extraCategories: HomePlanItem[] = visibleSections
 		.filter((section) => !used.has(section.slug) && !disabledCategorySlugs.includes(section.slug))
 		.map((section) => ({
 			key: `content:${section.slug}`,
