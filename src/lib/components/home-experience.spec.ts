@@ -1,11 +1,13 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('$app/state', () => ({
-	page: { url: new URL('http://localhost/rankings'), data: { user: null } }
+	page: { url: new URL('http://localhost/rankings'), data: { user: null } },
+	navigating: { to: null }
 }));
 import HomeModuleFlow from './HomeModuleFlow.svelte';
 import NavigationCard from './NavigationCard.svelte';
 import RankingsPage from '../../routes/rankings/+page.svelte';
+import HomePage from '../../routes/+page.svelte';
 import { SITE_SETTINGS_DEFAULTS } from '$lib/types/site';
 import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
@@ -13,6 +15,19 @@ import { contentDetailRoute } from '$lib/content-routing';
 import type { ContentType } from '$lib/types/content';
 
 describe('homepage content rendering', () => {
+	it('omits retired homepage anchors and sidebar entries in real page SSR', () => {
+		const home = fallbackHomeData();
+		const { body } = render(HomePage, {
+			props: { data: { ...home, site: SITE_SETTINGS_DEFAULTS, user: null } }
+		});
+		for (const slug of ['bookshelf', 'notes', 'announcements']) {
+			expect(body).not.toContain(`href="#${slug}"`);
+			expect(body).not.toContain(`id="${slug}"`);
+		}
+		expect(body).toContain('href="#favorites"');
+		expect(body).toContain('id="productivity"');
+		expect(body).toContain('href="/posts/building-a-quiet-start-space"');
+	});
 	it('omits view and favorite counts from home cards while keeping ranked content reachable', () => {
 		const home = fallbackHomeData();
 		home.dashboard.popular[0].views = 123456789;
