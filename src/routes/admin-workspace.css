@@ -982,8 +982,8 @@
 	gap: 8px;
 }
 
-:root .admin-shell .admin-user-filters input,
-:root .admin-shell .admin-user-filters select {
+:root .admin-shell .admin-filter-bar input,
+:root .admin-shell .admin-filter-bar select {
 	min-height: 44px;
 	border-color: var(--admin-input-border);
 	color: var(--admin-text);
@@ -994,4 +994,9 @@
 }
 .admin-shell .site-settings-form .admin-form-hint {
 	padding: 0 16px 16px;
+}
+
+:root .admin-shell :is(.admin-filter-bar, .content-command-bar, .admin-form) input::placeholder {
+	color: var(--admin-muted);
+	opacity: 1;
 }

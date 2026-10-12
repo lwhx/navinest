@@ -316,7 +316,7 @@ try {
 						background,
 						controls: [
 							...document.querySelectorAll(
-								'.admin-primary-button,.admin-secondary-button,.content-edit-button,.content-row-menu summary,.content-type-tabs a,.admin-menu-button,.admin-user-filters input,.admin-user-filters select'
+								'.admin-primary-button,.admin-secondary-button,.content-edit-button,.content-row-menu summary,.content-type-tabs a,.admin-menu-button,.admin-filter-bar input,.admin-filter-bar select'
 							)
 						]
 							.filter((node) => node.getClientRects().length > 0)
@@ -327,6 +327,37 @@ try {
 						head: getComputedStyle(document.querySelector('.admin-page-header h1')).color
 					};
 				});
+
+				if (path === '/admin/users') {
+					assert.equal(
+						await page.locator('.admin-filter-bar input, .admin-filter-bar select').count(),
+						3
+					);
+					const filter = await page
+						.locator('.admin-filter-bar input')
+						.evaluate((node) => ({
+							foreground: getComputedStyle(node).color,
+							background: getComputedStyle(node).backgroundColor,
+							placeholder: getComputedStyle(node, '::placeholder').color
+						}));
+					assert.ok(
+						contrast(filter.foreground, filter.background) >= 4.5,
+						'User filter text must be readable'
+					);
+					assert.ok(
+						contrast(filter.placeholder, filter.background) >= 4.5,
+						'User filter placeholder must be readable'
+					);
+					if (theme === 'dark')
+						assert.ok(
+							filter.background
+								.match(/[\d.]+/g)
+								.slice(0, 3)
+								.map(Number)
+								.every((channel) => channel < 128),
+							'User filters must follow the dark theme'
+						);
+				}
 				const label = `${path} ${width}px ${theme}`;
 				assert.ok(state.overflow <= 1, `${label}: page overflow ${state.overflow}`);
 				assert.ok(
