@@ -53,7 +53,7 @@
 </script>
 
 <fieldset class="category-parent-picker">
-	<legend>父级分类</legend>
+	<legend class="sr-only">父级分类</legend>
 	<input type="hidden" name="parentId" {value} disabled={!mounted} />
 	<div class="parent-selection-levels" hidden={!mounted}>
 		{#each levels as options, index (index)}
@@ -115,13 +115,6 @@
 		margin: 0;
 		padding: 0;
 		border: 0;
-	}
-	.category-parent-picker legend {
-		margin-bottom: 8px;
-		padding: 0;
-		color: var(--admin-text);
-		font-size: 13px;
-		font-weight: 600;
 	}
 	.parent-selection-levels {
 		display: flex;
