@@ -3,7 +3,7 @@ import { adminLoginReturnTo, GITHUB_RETURN_COOKIE } from '$lib/login-return';
 import { load, actions } from '../../routes/login/+page.server';
 import { GET as githubStart } from '../../routes/api/auth/github/+server';
 import { GET as githubCallback } from '../../routes/api/auth/github/callback/+server';
-import { loginUser, setSessionCookie } from '$lib/server/user-auth';
+import { loginUser, setSessionCookie, SESSION_COOKIE } from '$lib/server/user-auth';
 import { exchangeGitHubCode, loginWithGitHub, OAUTH_STATE_COOKIE } from '$lib/server/github-oauth';
 
 vi.mock('$lib/server/user-auth', async (original) => ({
@@ -17,7 +17,7 @@ vi.mock('$lib/server/github-oauth', async (original) => ({
 	loginWithGitHub: vi.fn()
 }));
 
-function event(path: string) {
+function event(path: string, enabled: string | undefined = 'true') {
 	const url = new URL(path, 'https://nss.whks.de');
 	const values = new Map<string, string>();
 	const cookies = {
@@ -36,7 +36,12 @@ function event(path: string) {
 		values,
 		locals: { user: null },
 		platform: {
-			env: { DB: {}, GITHUB_CLIENT_ID: 'test-client', GITHUB_CLIENT_SECRET: 'test-secret' }
+			env: {
+				DB: {},
+				GITHUB_CLIENT_ID: 'test-client',
+				GITHUB_CLIENT_SECRET: 'test-secret',
+				GITHUB_LOGIN_ENABLED: enabled as string | undefined
+			}
 		},
 		getClientAddress: () => '127.0.0.1'
 	};
@@ -46,6 +51,47 @@ const session = { token: 'new-session', expires: new Date('2099-01-01') };
 beforeEach(() => vi.clearAllMocks());
 
 describe('single sign-in admin return flow', () => {
+	it.each([undefined, 'false', '', 'TRUE', '1'])(
+		'blocks both OAuth endpoints when the switch is %s',
+		async (enabled) => {
+			const request = event('/api/auth/github');
+			request.platform.env.GITHUB_LOGIN_ENABLED = enabled;
+			const start = await githubStart(request as never);
+			expect(start.status).toBe(503);
+			expect(start.headers.get('location')).toBeNull();
+			expect(start.headers.get('cache-control')).toBe('private, no-store');
+			expect(await start.text()).toContain('暂时关闭');
+			expect(request.cookies.set).not.toHaveBeenCalled();
+			request.values.set(OAUTH_STATE_COOKIE, 'stored-state');
+			request.values.set(GITHUB_RETURN_COOKIE, '/admin');
+			request.values.set(SESSION_COOKIE, 'existing-session');
+			request.url = new URL(
+				'/api/auth/github/callback?code=unused&state=stored-state',
+				request.url.origin
+			);
+			const callback = await githubCallback(request as never);
+			expect(callback.status).toBe(503);
+			expect(request.values.size).toBe(1);
+			expect(request.values.get(SESSION_COOKIE)).toBe('existing-session');
+			expect(exchangeGitHubCode).not.toHaveBeenCalled();
+			expect(loginWithGitHub).not.toHaveBeenCalled();
+			expect(setSessionCookie).not.toHaveBeenCalled();
+		}
+	);
+	it('exposes the login option only when explicitly enabled and a client ID exists', async () => {
+		for (const [enabled, clientId, expected] of [
+			['false', 'configured', false],
+			['true', 'configured', true],
+			['true', '', false]
+		] as const) {
+			const request = event('/login', enabled);
+			const result = await load({
+				...request,
+				platform: { env: { GITHUB_LOGIN_ENABLED: enabled, GITHUB_CLIENT_ID: clientId } }
+			} as never);
+			expect(result).toMatchObject({ githubLoginEnabled: expected });
+		}
+	});
 	it('uses the admin target when already signed in, and home for normal login', async () => {
 		for (const [target, expected] of [
 			[returnTo, returnTo],

@@ -9,6 +9,7 @@ import {
 	validateOAuthState
 } from '$lib/server/github-oauth';
 import { setSessionCookie } from '$lib/server/user-auth';
+import { githubLoginEnabled, githubLoginDisabledResponse } from '$lib/server/github-login';
 import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({
 	platform,
@@ -23,6 +24,7 @@ export const GET: RequestHandler = async ({
 	const returnTo = adminLoginReturnTo(cookies.get(GITHUB_RETURN_COOKIE));
 	cookies.delete(OAUTH_STATE_COOKIE, { path: '/api/auth/github' });
 	cookies.delete(GITHUB_RETURN_COOKIE, { path: '/api/auth/github' });
+	if (!githubLoginEnabled(platform)) return githubLoginDisabledResponse();
 	if (!code || !validateOAuthState(stored ?? null, state))
 		return new Response('Invalid OAuth callback.', { status: 400 });
 	const clientId = platform?.env?.GITHUB_CLIENT_ID,

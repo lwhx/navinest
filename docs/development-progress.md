@@ -2,7 +2,19 @@
 
 更新时间：2026-10-12
 
-## 最新开发：后台临时单次登录（2026-10-12）
+## 最新开发：临时关闭 GitHub 登录（2026-10-12）
+
+按用户要求，在最新 main（已合并 PR #31）上使用独立分支 `fix/pause-github-login` 增加 `GITHUB_LOGIN_ENABLED`，`wrangler.jsonc` 与环境变量示例均设为 `false`。未配置或不是精确字符串 `true` 时默认关闭：登录页不显示 GitHub 按钮，只有密码登录时不显示空的“或者”分隔线；用户中心与账号安全页隐藏 GitHub 登录/绑定区块，账号安全的密码区域沿用单列容器，避免留下空的半栏。
+
+`/api/auth/github` 与 `/api/auth/github/callback` 都在服务端拒绝关闭状态，返回 503 和中文说明；即使保留旧链接、有效 code/state 或已绑定账号也不能完成 OAuth 登录，不发起 GitHub OAuth 请求、不创建新会话，回调清理短期 OAuth Cookie。已登录会话保留，密码登录、注册原开关、后台 active admin 权限、管理 API 和安全响应头保持。
+
+没有删除 OAuth 实现、Client ID/Secret、用户记录或已有 GitHub 绑定，不重置密码或变更角色，不执行数据库迁移。以后将 `GITHUB_LOGIN_ENABLED=true` 并部署即可恢复原入口和 state/回跳流程，仍需有效的 OAuth 配置。这个开关与 `ADMIN_AUTH_MODE`、`ALLOW_GITHUB_AUTO_PROVISION` 相互独立。
+
+**状态：代码与仓库配置已完成，线上生效待部署新版 Worker。** 当前没有 Cloudflare 操作连接，不能把合并当作已上线。部署前确认至少一名 active admin 有已知有效密码；只有 GitHub 绑定、没有密码的账号需要管理员在“后台 → 用户”设置密码后才能用密码重新登录，现有账号安全页只支持修改已有密码。没有查询或更改正式账号密码。此前 Cloudflare Access 边缘切换仍为待操作，顺序见 [后台登录文档](cloudflare-access.md)。
+
+本轮本地验证：`npm run check` 0 错误 / 0 警告，`npm test`（91 文件 / 445 项）、`npm run lint` 和 `npm run build` 通过。覆盖未配置/false/非法开关拒绝、已绑定身份的 OAuth 起始及回调阻断、保留已有 Session Cookie、恢复开启后的 state/安全回跳、密码登录与注册开关独立，以及实际 Svelte SSR 中三个账号页面的入口隐藏/恢复。中文字体下完整 78 组浅深主题桌面/手机布局通过，暂停入口及旧 URL 拒绝纳入 4 组登录页检查；移除空分隔线后的 16px 操作间距另行复测并复核两端截图。实际使用 Noto Sans CJK SC，保存 66 张布局截图，Worker 入口哈希与此前保持一致。
+
+## 后台临时单次登录（已合并 PR #31，2026-10-12）
 
 用户要求开发期间简化复杂登录。本轮在独立分支 `feat/admin-single-login` 增加 `ADMIN_AUTH_MODE` 开关，`wrangler.jsonc` 配置为 `session`。应用复用现有密码/GitHub 站内登录，只允许有效会话关联的 active admin 访问后台；每次请求读取当前 D1 状态和角色，撤销、过期、停用或降级会失去权限。未登录后台页面转站内登录，登录成功返回原页面；匿名管理 API/POST 返回 401、普通用户返回 403。Access 请求头不能替代 session 模式中的真实会话。未配置或其他开关值仍沿用 Access 模式，本地 loopback 预览边界保持原样。
 

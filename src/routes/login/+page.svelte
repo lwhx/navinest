@@ -44,15 +44,18 @@
 			>
 			<button class="account-button account-wide" type="submit">登录</button>
 		</form>
-		<div class="account-divider">或者</div>
+		{#if data.githubLoginEnabled || data.registrationOpen}<div class="account-divider">
+				或者
+			</div>{/if}
 		<div class="account-actions">
-			<a
-				class="account-button secondary"
-				href={adminLogin
-					? resolve(`/api/auth/github?returnTo=${encodeURIComponent(data.returnTo)}`)
-					: resolve('/api/auth/github')}>使用 GitHub 登录</a
-			>{#if data.registrationOpen}<a class="account-button secondary" href={resolve('/register')}
-					>注册新账号</a
+			{#if data.githubLoginEnabled}<a
+					class="account-button secondary"
+					href={adminLogin
+						? resolve(`/api/auth/github?returnTo=${encodeURIComponent(data.returnTo)}`)
+						: resolve('/api/auth/github')}>使用 GitHub 登录</a
+				>{/if}{#if data.registrationOpen}<a
+					class="account-button secondary"
+					href={resolve('/register')}>注册新账号</a
 				>{/if}<a class="account-button secondary" href={resolve('/')}>返回首页</a>
 		</div>
 	</section>

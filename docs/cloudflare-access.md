@@ -2,9 +2,9 @@
 
 ## 开发期间：站内登录一次
 
-用户要求暂时简化复杂登录。`wrangler.jsonc` 已配置 `ADMIN_AUTH_MODE=session`：管理员使用现有 `/login` 的密码或 GitHub 登录，站内会话可直接进入 `/admin`，不再由应用要求额外 Access 邮箱验证码。后台页面未登录时转到站内登录页，成功后返回原后台页面；管理 API 和未登录 POST 仍返回 `401`，普通账号返回 `403`。
+用户要求暂时简化复杂登录。`wrangler.jsonc` 已配置 `ADMIN_AUTH_MODE=session`：当前同时配置 `GITHUB_LOGIN_ENABLED=false`，管理员使用现有 `/login` 的账号密码登录，站内会话可直接进入 `/admin`，不再由应用要求额外 Access 邮箱验证码。后台页面未登录时转到站内登录页，成功后返回原后台页面；管理 API 和未登录 POST 仍返回 `401`，普通账号返回 `403`。
 
-应用每次请求从 D1 验证会话摘要、有效期、账号 active 状态和当前 admin 角色；退出、撤销、过期、停用或降级立即影响后续后台请求。此模式不信任 Access 邮箱/JWT 请求头，前台注册也不会自动获得管理员角色。当前会话沿用 Secure、HttpOnly、SameSite=Lax Cookie。回跳仅接受站内 `/admin` 页面，GitHub 回跳通过 10 分钟、限定 OAuth 路径的 HttpOnly Cookie 传递，正常前台登录仍回首页。
+应用每次请求从 D1 验证会话摘要、有效期、账号 active 状态和当前 admin 角色；退出、撤销、过期、停用或降级立即影响后续后台请求。此模式不信任 Access 邮箱/JWT 请求头，前台注册也不会自动获得管理员角色。当前会话沿用 Secure、HttpOnly、SameSite=Lax Cookie。回跳仅接受站内 `/admin` 页面，GitHub 暂停期间不启动 OAuth；恢复后回跳通过 10 分钟、限定 OAuth 路径的 HttpOnly Cookie 传递，正常前台登录仍回首页。
 
 | 配置                      | 后台应用要求                          |
 | ------------------------- | ------------------------------------- |
@@ -12,11 +12,18 @@
 | `ADMIN_AUTH_MODE=access`  | Access 验证及同邮箱的 D1 active admin |
 | 未配置或其他值            | 沿用 Access 模式                      |
 
+### GitHub 登录临时关闭
+
+- `GITHUB_LOGIN_ENABLED=false`（或未配置）：隐藏登录页按钮与用户中心的第三方区块；授权和回调接口均返回 503 中文提示，不创建新 OAuth 会话。已有登录会话不被注销，OAuth 数据和绑定保留。
+- 以后设置 `GITHUB_LOGIN_ENABLED=true` 并部署，恢复原入口及回调；保留现有 Client ID/Secret 配置，原 state 验证、安全 Cookie 和 admin 回跳继续生效。此开关不替代注册或管理员权限开关。
+- 部署前先确认至少一名 active admin 具备已知有效密码。只有 GitHub 绑定、没有密码的账号需要管理员在“后台 → 用户”设置密码，当前“账号安全”页只支持修改已有密码；不要在无法用密码重新登录时主动退出唯一可用的会话。此轮不查询或重置正式密码，不删绑定。
+- 仓库关闭配置已经准备，正式站须部署最新 Worker 后才生效，不能仅凭 PR 合并认定线上关闭完成。
+
 ### 正式站切换顺序（待操作）
 
 仓库配置与 Cloudflare 边缘策略是独立的。本轮没有部署 Worker、修改 Access 应用或管理员角色；截至切换前匿名探测仍进入邮箱验证码页面。因此 PR 合并不代表线上验证码已经关闭。
 
-1. 先部署本轮代码，确认实际 Worker 环境使用 `ADMIN_AUTH_MODE=session`，数据库会话字段已经修复。保持 Access 策略，先由管理员经过现有 Access 打开后台：未登录站内账号时应转 `/login?returnTo=...`；站内管理员登录后可进入原后台页。这一步确认应用内守卫与真实管理员账号可用。
+1. 先确认管理员密码可用，再部署本轮代码，确认实际 Worker 环境使用 `ADMIN_AUTH_MODE=session` 与 `GITHUB_LOGIN_ENABLED=false`，数据库会话字段已经修复。保持 Access 策略，先由管理员经过现有 Access 打开后台：未登录站内账号时应转 `/login?returnTo=...`；站内管理员登录后可进入原后台页。这一步确认应用内守卫与真实管理员账号可用。
 2. 在 Cloudflare Zero Trust 的 Access Applications 中找到覆盖 `nss.whks.de/admin*` 与 `nss.whks.de/api/admin/*` 的后台应用，保存原 Allow 策略内容；仅给这些后台路径添加临时 `Bypass / Include / Everyone` 策略，名称可用“开发期站内管理员登录”。保留原 Allow 策略以便恢复，不更改其他应用、全站保护、域名或数据库。若两条路径分属不同应用，需要分别处理。Bypass 会暂停这些路径的 Access 认证与 Access 请求日志，应用内 D1 会话及角色检查继续负责授权。[Cloudflare 官方策略说明](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/#bypass)
 3. 无痕窗口确认匿名 `/admin` 转站内登录页，匿名 `/api/admin/users` 返回 `401`；普通用户无法进入后台，真实 active admin 可读取和修改原模块，退出后重新要求登录。异常时立即移除临时 Bypass，恢复原 Access 保护。
 

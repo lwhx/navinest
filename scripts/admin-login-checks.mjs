@@ -16,9 +16,12 @@ export async function checkAdminLogin(page, baseUrl, screenshots) {
 			await page.evaluate(() => document.fonts.ready);
 			assert.equal(await page.locator('.account-hero h1').textContent(), '登录管理后台');
 			const github = page.getByRole('link', { name: '使用 GitHub 登录' });
-			const target = new URL(await github.getAttribute('href'), baseUrl);
-			assert.equal(target.pathname, '/api/auth/github');
-			assert.equal(target.searchParams.get('returnTo'), returnTo);
+			assert.equal(await github.count(), 0, 'GitHub sign-in is paused');
+			assert.equal(
+				await page.locator('.account-divider').count(),
+				0,
+				'Password-only login has no empty alternatives divider'
+			);
 			assert.equal(await page.locator('.account-form').getAttribute('method'), 'POST');
 			assert.equal(
 				await page.locator('.account-form').getAttribute('action'),
@@ -32,6 +35,17 @@ export async function checkAdminLogin(page, baseUrl, screenshots) {
 				)
 			}));
 			assert.ok(layout.overflow <= 1, 'Admin login must fit the viewport');
+			assert.ok(
+				await page
+					.locator('.account-actions')
+					.evaluate(
+						(actions) =>
+							actions.getBoundingClientRect().top -
+								document.querySelector('.account-form').getBoundingClientRect().bottom >=
+							16
+					),
+				'Password and home actions keep separation after removing the divider'
+			);
 			assert.ok(
 				layout.targets.every((height) => height >= 44),
 				'Sign-in controls must retain touch size'
@@ -70,10 +84,16 @@ export async function checkAdminLogin(page, baseUrl, screenshots) {
 		waitUntil: 'networkidle'
 	});
 	assert.equal(await page.locator('.account-hero h1').textContent(), '登录 NaviNest');
-	assert.equal(
-		await page.getByRole('link', { name: '使用 GitHub 登录' }).getAttribute('href'),
-		'/api/auth/github'
-	);
+	assert.equal(await page.getByRole('link', { name: '使用 GitHub 登录' }).count(), 0);
+	for (const path of ['/api/auth/github', '/api/auth/github/callback?code=unused&state=unused']) {
+		const response = await page.request.get(new URL(path, baseUrl).href);
+		assert.equal(
+			response.status(),
+			503,
+			'Paused OAuth cannot be started or completed by visiting the old URL'
+		);
+		assert.ok((await response.text()).includes('GitHub 登录暂时关闭'));
+	}
 	console.log(
 		'Administrator sign-in: 4 desktop/mobile Chinese layouts and safe return links passed'
 	);

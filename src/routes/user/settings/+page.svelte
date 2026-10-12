@@ -204,11 +204,13 @@
 <svelte:head><title>账号安全 | NaviNest 导航巢</title></svelte:head>
 <AccountShell
 	title="账号安全"
-	description="管理登录密码、活跃会话、第三方绑定和账号状态。"
+	description={data.githubLoginEnabled
+		? '管理登录密码、活跃会话、第三方绑定和账号状态。'
+		: '管理登录密码、活跃会话和账号状态。'}
 	eyebrow="SECURITY"
 	role={data.user.role}
 >
-	<div class="account-grid">
+	<div class={data.githubLoginEnabled ? 'account-grid' : 'account-content'}>
 		<section class="account-card" aria-labelledby="password-title">
 			<div class="account-card-header">
 				<div>
@@ -269,41 +271,41 @@
 			{/if}
 		</section>
 
-		<section class="account-card" aria-labelledby="binding-title">
-			<div class="account-card-header">
-				<div>
-					<h2 id="binding-title">第三方登录</h2>
-					<p>GitHub 账号用于快捷登录，解绑后请确保仍能用密码登录。</p>
-				</div>
-				<span class="account-status {github ? 'published' : ''}"
-					>{github ? '已绑定' : '未绑定'}</span
-				>
-			</div>
-			{#if bindingMessage}<p class="account-note" role="status">{bindingMessage}</p>{/if}
-			{#if bindingError}<p class="account-note danger-note" role="alert">{bindingError}</p>{/if}
-			<ul class="account-list">
-				<li>
+		{#if data.githubLoginEnabled}<section class="account-card" aria-labelledby="binding-title">
+				<div class="account-card-header">
 					<div>
-						<strong>GitHub</strong>
-						<p>
-							{github ? '已绑定 GitHub 账号，可直接使用 GitHub 登录。' : '尚未绑定 GitHub 账号。'}
-						</p>
+						<h2 id="binding-title">第三方登录</h2>
+						<p>GitHub 账号用于快捷登录，解绑后请确保仍能用密码登录。</p>
 					</div>
-					{#if github}<button
-							class="account-button secondary"
-							type="button"
-							disabled={bindingBusy || !data.hasPassword}
-							onclick={unbindGithub}
-							title={data.hasPassword ? '' : '请先设置密码后再解绑'}
-						>
-							{bindingBusy ? '处理中…' : '解绑'}
-						</button>{/if}
-				</li>
-			</ul>
-			{#if !data.hasPassword}<p class="account-muted">
-					该账号没有密码，解绑 GitHub 后将无法登录，因此当前不可解绑。
-				</p>{/if}
-		</section>
+					<span class="account-status {github ? 'published' : ''}"
+						>{github ? '已绑定' : '未绑定'}</span
+					>
+				</div>
+				{#if bindingMessage}<p class="account-note" role="status">{bindingMessage}</p>{/if}
+				{#if bindingError}<p class="account-note danger-note" role="alert">{bindingError}</p>{/if}
+				<ul class="account-list">
+					<li>
+						<div>
+							<strong>GitHub</strong>
+							<p>
+								{github ? '已绑定 GitHub 账号，可直接使用 GitHub 登录。' : '尚未绑定 GitHub 账号。'}
+							</p>
+						</div>
+						{#if github}<button
+								class="account-button secondary"
+								type="button"
+								disabled={bindingBusy || !data.hasPassword}
+								onclick={unbindGithub}
+								title={data.hasPassword ? '' : '请先设置密码后再解绑'}
+							>
+								{bindingBusy ? '处理中…' : '解绑'}
+							</button>{/if}
+					</li>
+				</ul>
+				{#if !data.hasPassword}<p class="account-muted">
+						该账号没有密码，解绑 GitHub 后将无法登录，因此当前不可解绑。
+					</p>{/if}
+			</section>{/if}
 	</div>
 
 	<section class="account-card" aria-labelledby="share-title">

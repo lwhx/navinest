@@ -1,8 +1,10 @@
 import { redirect } from '@sveltejs/kit';
 import { adminLoginReturnTo, GITHUB_RETURN_COOKIE } from '$lib/login-return';
 import { createOAuthState, githubAuthorizeUrl, OAUTH_STATE_COOKIE } from '$lib/server/github-oauth';
+import { githubLoginEnabled, githubLoginDisabledResponse } from '$lib/server/github-login';
 import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ platform, cookies, url }) => {
+	if (!githubLoginEnabled(platform)) return githubLoginDisabledResponse();
 	const clientId = platform?.env?.GITHUB_CLIENT_ID;
 	if (!clientId) return new Response('GitHub OAuth is not configured.', { status: 503 });
 	const state = createOAuthState();

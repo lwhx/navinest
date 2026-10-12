@@ -6,6 +6,7 @@ declare global {
 		ALLOW_GITHUB_AUTO_PROVISION?: string;
 		ALERT_WEBHOOK_URL?: string;
 		ADMIN_AUTH_MODE?: string;
+		GITHUB_LOGIN_ENABLED?: string;
 	}
 
 	namespace App {

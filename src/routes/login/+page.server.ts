@@ -3,6 +3,7 @@ import { adminLoginReturnTo } from '$lib/login-return';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import { loadSiteSettings } from '$lib/server/services/site-settings';
 import { loginUser, setSessionCookie } from '$lib/server/user-auth';
+import { githubLoginEnabled } from '$lib/server/github-login';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, platform, url }) => {
@@ -10,6 +11,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	if (locals.user) redirect(303, returnTo);
 	return {
 		registrationOpen: (await loadSiteSettings(getDatabase(platform))).registrationOpen,
+		githubLoginEnabled: githubLoginEnabled(platform) && Boolean(platform?.env?.GITHUB_CLIENT_ID),
 		returnTo
 	};
 };

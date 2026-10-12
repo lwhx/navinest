@@ -151,15 +151,15 @@
 				</div>
 			</div>
 			<ul class="account-list">
-				<li>
-					<div>
-						<strong>GitHub账户</strong>
-						<p>{data.github ? '已完成绑定，可用于快捷登录。' : '尚未绑定GitHub账户。'}</p>
-					</div>
-					<span class="account-status {data.github ? 'published' : ''}"
-						>{data.github ? '已绑定' : '未绑定'}</span
-					>
-				</li>
+				{#if data.githubLoginEnabled}<li>
+						<div>
+							<strong>GitHub账户</strong>
+							<p>{data.github ? '已完成绑定，可用于快捷登录。' : '尚未绑定GitHub账户。'}</p>
+						</div>
+						<span class="account-status {data.github ? 'published' : ''}"
+							>{data.github ? '已绑定' : '未绑定'}</span
+						>
+					</li>{/if}
 				<li>
 					<div>
 						<strong>内容贡献</strong>

@@ -1,5 +1,7 @@
 # NaviNest 导航巢开发大纲
 
+开发期认证临时状态（2026-10-12）：GitHub OAuth 功能已实现，但现按用户要求设置 `GITHUB_LOGIN_ENABLED=false` 暂停入口及授权/回调，保留密码登录、已有会话和绑定。后台应用使用 `ADMIN_AUTH_MODE=session`；正式部署与 Access 边缘切换需单独验收。原大纲中的 GitHub 能力/验收条目在恢复开关后适用，当前操作与恢复说明见 [后台登录文档](cloudflare-access.md)。
+
 ## 1. 项目定位
 
 NaviNest 是一个部署在 Cloudflare 上的个人云端导航与收藏空间，访问域名为 `nss.whks.de`。
