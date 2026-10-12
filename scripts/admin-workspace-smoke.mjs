@@ -333,13 +333,11 @@ try {
 						await page.locator('.admin-filter-bar input, .admin-filter-bar select').count(),
 						3
 					);
-					const filter = await page
-						.locator('.admin-filter-bar input')
-						.evaluate((node) => ({
-							foreground: getComputedStyle(node).color,
-							background: getComputedStyle(node).backgroundColor,
-							placeholder: getComputedStyle(node, '::placeholder').color
-						}));
+					const filter = await page.locator('.admin-filter-bar input').evaluate((node) => ({
+						foreground: getComputedStyle(node).color,
+						background: getComputedStyle(node).backgroundColor,
+						placeholder: getComputedStyle(node, '::placeholder').color
+					}));
 					assert.ok(
 						contrast(filter.foreground, filter.background) >= 4.5,
 						'User filter text must be readable'
