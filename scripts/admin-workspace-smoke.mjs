@@ -493,6 +493,118 @@ try {
 		categorySlug: 'apps',
 		custom: { keep: true }
 	});
+
+	// Content entry: progressive categories, metadata fill, duplicate notice, media and unsaved guards.
+	const uploaded = await context.request.post(baseUrl + '/api/admin/files', {
+		headers: { origin: baseUrl },
+		multipart: {
+			file: {
+				name: 'editor-icon.png',
+				mimeType: 'image/png',
+				buffer: Buffer.from(
+					'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV7sAAAAASUVORK5CYII=',
+					'base64'
+				)
+			}
+		}
+	});
+	assert.equal(uploaded.status(), 201);
+	const mediaId = (await uploaded.json()).data.id;
+	await open(page, '/admin/items?create=1');
+	await page.getByRole('combobox', { name: '内容类型', exact: true }).waitFor();
+	assert.deepEqual(
+		await page
+			.locator('select[name="type"] option')
+			.evaluateAll((nodes) => nodes.map((node) => node.value)),
+		['site', 'post']
+	);
+	await page.getByLabel('目标地址', { exact: true }).fill('https://example.com/resource-1');
+	await page.getByLabel('标题', { exact: true }).fill('手动标题保留');
+	await page.route('**/api/admin/items/enrich', (route) =>
+		route.fulfill({
+			json: {
+				title: '抓取标题',
+				description: '抓取用途',
+				duplicates: [{ id: 1, title: '已有资源' }]
+			}
+		})
+	);
+	await page.getByRole('button', { name: '读取网页信息', exact: true }).click();
+	await page.getByText(/发现已收录的网址/).waitFor();
+	assert.equal(await page.getByLabel('标题', { exact: true }).inputValue(), '手动标题保留');
+	assert.equal(await page.getByLabel('摘要', { exact: true }).inputValue(), '抓取用途');
+	await page.unroute('**/api/admin/items/enrich');
+	await page.getByLabel('一级分类', { exact: true }).selectOption('9');
+	await page.getByLabel('二级分类', { exact: true }).selectOption('7');
+	await page.getByLabel('三级分类', { exact: true }).selectOption('10');
+	assert.equal(await page.locator('input[name="categoryId"]').inputValue(), '10');
+	await page.getByRole('combobox', { name: '内容类型', exact: true }).selectOption('post');
+	assert.equal(await page.locator('input[name="categoryId"]').inputValue(), '');
+	assert.equal(await page.locator('input[name="site_url"]').count(), 0);
+	await page.getByLabel('正文', { exact: true }).fill('这是需要保存的文章正文。');
+	await page.getByText('图标与封面', { exact: true }).click();
+	const iconPicker = page
+		.locator('.media-picker')
+		.filter({ has: page.locator('input[name="iconFileId"]') });
+	await iconPicker.getByRole('button', { name: '选择图片', exact: true }).click();
+	await iconPicker.locator('.media-grid button').click();
+	assert.equal(await page.locator('input[name="iconFileId"]').inputValue(), String(mediaId));
+	page.removeAllListeners('dialog');
+	page.once('dialog', (dialog) => dialog.dismiss());
+	await page.getByRole('button', { name: '关闭编辑窗口', exact: true }).click();
+	assert.equal(await page.getByRole('dialog').count(), 1);
+	page.on('dialog', (dialog) => dialog.accept());
+	const conflictResponse = await context.request.post(baseUrl + '/api/admin/items', {
+		data: { type: 'post', title: '地址冲突测试', slug: 'editor-slug-conflict' }
+	});
+	assert.equal(conflictResponse.status(), 201);
+	const conflictId = (await conflictResponse.json()).id;
+	await page.getByText('更多设置', { exact: true }).click();
+	await page.getByLabel('Slug', { exact: true }).fill('editor-slug-conflict');
+	await page.getByRole('button', { name: '保存内容', exact: true }).click();
+	await page.locator('.admin-form-message').waitFor();
+	assert.equal(await page.getByRole('dialog').count(), 1);
+	assert.equal(await page.getByLabel('标题', { exact: true }).inputValue(), '手动标题保留');
+	assert.equal(
+		await page.getByLabel('正文', { exact: true }).inputValue(),
+		'这是需要保存的文章正文。'
+	);
+	await page.getByLabel('Slug', { exact: true }).fill('');
+	assert.equal(
+		(await context.request.delete(baseUrl + '/api/admin/items/' + conflictId)).status(),
+		204
+	);
+	await page.getByRole('button', { name: '保存内容', exact: true }).click();
+	await page.getByRole('dialog').waitFor({ state: 'hidden' });
+	await page.getByText('手动标题保留', { exact: true }).waitFor();
+	await page
+		.locator('.content-row')
+		.filter({ hasText: '手动标题保留' })
+		.getByRole('button', { name: /编辑/ })
+		.click();
+	assert.equal(
+		await page.getByRole('combobox', { name: '内容类型', exact: true }).inputValue(),
+		'post'
+	);
+	assert.equal(
+		await page.getByLabel('正文', { exact: true }).inputValue(),
+		'这是需要保存的文章正文。'
+	);
+	assert.equal(await page.locator('input[name="iconFileId"]').inputValue(), String(mediaId));
+	await page.getByText('更多设置', { exact: true }).click();
+	assert.match(
+		await page.getByLabel('Slug', { exact: true }).inputValue(),
+		/^[a-z0-9]+(?:-[a-z0-9]+)*$/
+	);
+	await page.getByRole('button', { name: '关闭编辑窗口', exact: true }).click();
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/api/admin/items', {
+				data: { type: 'app', title: '禁止新增', slug: 'rejected-app' }
+			})
+		).status(),
+		400
+	);
 	await open(page, '/admin');
 	assert.ok((await page.locator('.admin-task-list').textContent()).includes('1 条'));
 	assert.equal(await page.locator('.admin-sidebar nav a').count(), 15);
@@ -621,6 +733,7 @@ try {
 
 	for (const path of [
 		'/admin/items?edit=123',
+		'/admin/items?create=1&type=post',
 		'/admin/home-modules?edit=2',
 		'/admin/home-modules?edit=1',
 		'/admin/categories?create=1&parent=1',
@@ -648,6 +761,9 @@ try {
 						.filter((node) => node.getClientRects().length)
 						.map((node) => ({
 							name: node.name,
+							hasPlaceholder: Boolean(node.getAttribute('placeholder')),
+							placeholder: getComputedStyle(node, '::placeholder').color,
+							background: getComputedStyle(node).backgroundColor,
 							width: node.getBoundingClientRect().width,
 							height: node.getBoundingClientRect().height
 						}))
@@ -657,6 +773,11 @@ try {
 				for (const field of state.fields) {
 					assert.ok(field.width >= 120, `${field.name}: field too narrow`);
 					assert.ok(field.height >= 44, `${field.name}: field too short`);
+					if (field.hasPlaceholder)
+						assert.ok(
+							contrast(field.placeholder, field.background) >= 4.5,
+							`${path} ${theme}: ${field.name} placeholder must be readable`
+						);
 				}
 				if (path.startsWith('/admin/categories')) {
 					assert.equal(await page.getByRole('group', { name: '父级分类', exact: true }).count(), 1);
@@ -699,6 +820,7 @@ try {
 					'/admin/categories?edit=10': 'category-parent-editor',
 					'/admin/categories?create=1&parent=7': 'category-parent-cascade',
 					'/admin/items?edit=123': 'editor',
+					'/admin/items?create=1&type=post': 'article-editor',
 					'/admin/home-modules?edit=2': 'module-category',
 					'/admin/home-modules?edit=1': 'module-search'
 				}[path];

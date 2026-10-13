@@ -1035,7 +1035,10 @@
 	padding: 0 16px 16px;
 }
 
-:root .admin-shell :is(.admin-filter-bar, .content-command-bar, .admin-form) input::placeholder {
+:root
+	.admin-shell
+	:is(.admin-filter-bar, .content-command-bar, .admin-form)
+	:is(input, textarea)::placeholder {
 	color: var(--admin-muted);
 	opacity: 1;
 }

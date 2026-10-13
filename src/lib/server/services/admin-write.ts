@@ -259,7 +259,23 @@ export async function deleteCategory(database: Database, categoryId: number): Pr
 	);
 }
 
+export async function requireManagedType(
+	database: Database,
+	table: 'items' | 'tags',
+	type: string,
+	id?: number
+) {
+	if (isManagedCategoryType(type)) return;
+	if (
+		id &&
+		(await rowExists(database, `SELECT id FROM ${table} WHERE id = ? AND type = ?`, [id, type]))
+	)
+		return;
+	throw new AdminWriteError('新增内容和标签只支持网址、文章；历史记录请保留原类型。', 'type');
+}
+
 export async function createTag(database: Database, input: TagInput): Promise<number> {
+	await requireManagedType(database, 'tags', input.type);
 	return returningId(
 		database
 			.prepare('INSERT INTO tags (type, name, slug, description) VALUES (?, ?, ?, ?) RETURNING id')
@@ -268,6 +284,7 @@ export async function createTag(database: Database, input: TagInput): Promise<nu
 }
 
 export async function updateTag(database: Database, tagId: number, input: TagInput): Promise<void> {
+	await requireManagedType(database, 'tags', input.type, tagId);
 	await preventReferencedTagTypeChange(database, tagId, input.type);
 	await returningId(
 		database
