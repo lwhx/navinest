@@ -51,16 +51,15 @@
 	</div>
 </section>
 <section class="admin-editor">
-	<div class="admin-editor-header"><h2>定时备份</h2></div>
+	<div class="admin-editor-header"><h2>任务备份</h2></div>
 	<div class="detail-content">
 		<p>
 			每天 03:00（北京时间）自动把站点快照写入 R2（<code>FILES</code> 绑定的
-			<code>backups/</code> 前缀下），仅保留最新 {data.retention} 份；超过保留份数的旧备份会被自动删除。
+			<code>backups/</code> 前缀下），仅保留最新 {data.retention} 份。手动补跑独立保存于
+			<code>manual-backups/</code>，也保留最新 {data.retention} 份，不覆盖定时快照。
 		</p>
 		{#if !data.backups.length}
-			<p>
-				暂无定时备份。首次定时任务执行后，或在 <code>wrangler</code> 配置第二个 cron 触发后即可看到。
-			</p>
+			<p>暂无任务备份。首次每日备份或在定时任务页面手动补跑后，可在这里下载。</p>
 		{:else}
 			<ul class="backup-list">
 				{#each data.backups as backup (backup.key)}

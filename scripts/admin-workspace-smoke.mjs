@@ -186,6 +186,15 @@ try {
 		).status(),
 		401
 	);
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/admin/cron-runs?/run', {
+				form: { task: 'hotnews', requestKey: 'auth-task-request-123' },
+				headers: { origin: baseUrl, accept: 'text/html' }
+			})
+		).status(),
+		401
+	);
 	await context.addCookies([{ name: 'navinest_session', value: userToken, url: baseUrl }]);
 	assert.equal((await context.request.get(baseUrl + '/admin', { maxRedirects: 0 })).status(), 403);
 	assert.equal(
@@ -196,7 +205,25 @@ try {
 		).status(),
 		403
 	);
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/admin/cron-runs?/run', {
+				form: { task: 'hotnews', requestKey: 'auth-task-request-123' },
+				headers: { origin: baseUrl, accept: 'text/html' }
+			})
+		).status(),
+		403
+	);
 	await context.addCookies([{ name: 'navinest_session', value: adminToken, url: baseUrl }]);
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/admin/cron-runs?/run', {
+				form: { task: 'hotnews', requestKey: 'cross-origin-request-123' },
+				headers: { origin: 'https://untrusted.example', accept: 'text/html' }
+			})
+		).status(),
+		403
+	);
 	page = await context.newPage();
 	page.on('pageerror', (error) => errors.push(error.message));
 	page.on('dialog', (dialog) => dialog.accept());
@@ -496,7 +523,7 @@ try {
 
 	// Content entry: progressive categories, metadata fill, duplicate notice, media and unsaved guards.
 	const uploaded = await context.request.post(baseUrl + '/api/admin/files', {
-		headers: { origin: baseUrl },
+		headers: { origin: baseUrl, accept: 'text/html' },
 		multipart: {
 			file: {
 				name: 'editor-icon.png',
@@ -610,6 +637,125 @@ try {
 	assert.equal(await page.locator('.admin-sidebar nav a').count(), 15);
 	assert.equal(await page.locator('.admin-sidebar a[aria-current="page"]').count(), 1);
 	assert.equal(await page.locator('.skip-link').getAttribute('href'), '#admin-main');
+	// Task checks use only this script's temporary LOCAL bindings.
+	command([
+		'd1',
+		'execute',
+		'navinest-admin-check',
+		'--local',
+		'--command',
+		'UPDATE hot_sources SET is_enabled=0',
+		'--json'
+	]);
+	await open(page, '/admin/cron-runs');
+	assert.equal(await page.locator('.task-card').count(), 3);
+	const hotnewsCard = page
+		.locator('.task-card')
+		.filter({ has: page.getByRole('heading', { name: '热榜刷新', exact: true }) });
+	const replayKey = await hotnewsCard.locator('input[name=requestKey]').inputValue();
+	let releaseTaskRequest;
+	const heldTaskRequest = new Promise((resolve) => {
+		releaseTaskRequest = resolve;
+	});
+	await page.route(/\/admin\/cron-runs\?\/run$/, async (route) => {
+		await heldTaskRequest;
+		await route.continue();
+	});
+	await hotnewsCard.getByRole('button', { name: '立即补跑', exact: true }).click();
+	await page.getByRole('button', { name: '执行中，请稍候…', exact: true }).waitFor();
+	assert.equal(await page.locator('.task-card button.admin-primary-button:disabled').count(), 3);
+	releaseTaskRequest();
+	await page.getByRole('status').filter({ hasText: '补跑已完成' }).waitFor();
+	await page.unroute(/\/admin\/cron-runs\?\/run$/);
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/admin/cron-runs?/run', {
+				form: { task: 'hotnews', requestKey: replayKey },
+				headers: { origin: baseUrl, accept: 'text/html' }
+			})
+		).status(),
+		409
+	);
+	assert.ok((await page.locator('.task-history').innerText()).includes('手动 · 中文管理测试账号'));
+	const backupCard = page
+		.locator('.task-card')
+		.filter({ has: page.getByRole('heading', { name: '数据备份', exact: true }) });
+	await backupCard.getByRole('button', { name: '立即补跑', exact: true }).click();
+	await page
+		.locator('.task-history')
+		.getByText(/已保存 manual-backups/)
+		.waitFor();
+	const backupListing = await context.request.get(baseUrl + '/api/admin/backup/scheduled');
+	const manualBackup = (await backupListing.json()).data.find((value) =>
+		value.key.startsWith('manual-backups/')
+	);
+	assert.ok(manualBackup, 'Manual snapshot must be listed');
+	const backupDownload = await context.request.get(
+		baseUrl + '/api/admin/backup/scheduled?key=' + encodeURIComponent(manualBackup.key)
+	);
+	assert.equal(backupDownload.status(), 200);
+	assert.ok((await backupDownload.json()).generatedAt);
+	const cleanCard = page
+		.locator('.task-card')
+		.filter({ has: page.getByRole('heading', { name: '系统清理', exact: true }) });
+	await cleanCard.getByRole('button', { name: '立即补跑', exact: true }).click();
+	await page
+		.locator('.task-history')
+		.getByText(/过期会话/)
+		.waitFor();
+	await page.getByRole('combobox', { name: '任务', exact: true }).selectOption('backup');
+	await page.getByRole('button', { name: '筛选', exact: true }).click();
+	await page.waitForURL('**/admin/cron-runs?task=backup');
+	assert.equal(await page.locator('.task-history tbody tr').count(), 1);
+	command([
+		'd1',
+		'execute',
+		'navinest-admin-check',
+		'--local',
+		'--command',
+		`INSERT INTO cron_runs(cron,scheduled_at,status,started_at,result_json) VALUES('0 19 * * *',datetime('now'),'running',datetime('now','-45 minutes'),${quote(JSON.stringify({ trigger: 'manual', requestKey: 'interrupted-request-123' }))})`,
+		'--json'
+	]);
+	await page.getByRole('button', { name: '刷新记录', exact: true }).click();
+	await backupCard.getByText('长时间未完成', { exact: true }).waitFor();
+	assert.equal(
+		await backupCard.getByRole('button', { name: '任务运行中', exact: true }).isDisabled(),
+		true
+	);
+	assert.equal(
+		(
+			await context.request.post(baseUrl + '/admin/cron-runs?/run', {
+				form: { task: 'backup', requestKey: 'another-admin-request-123' },
+				headers: { origin: baseUrl, accept: 'text/html' }
+			})
+		).status(),
+		409
+	);
+	await backupCard.getByLabel('已核对，确认任务停止').check();
+	await backupCard.getByRole('button', { name: '解除运行标记', exact: true }).click();
+	await page.getByRole('status').filter({ hasText: '运行标记已解除' }).waitFor();
+	assert.equal(
+		await backupCard.getByRole('button', { name: '立即补跑', exact: true }).isEnabled(),
+		true
+	);
+	command([
+		'd1',
+		'execute',
+		'navinest-admin-check',
+		'--local',
+		'--command',
+		"UPDATE hot_sources SET is_enabled=1,url='http://127.0.0.1/private'",
+		'--json'
+	]);
+	await hotnewsCard.getByRole('button', { name: '立即补跑', exact: true }).click();
+	await page.getByRole('alert').filter({ hasText: '存在刷新失败的来源' }).waitFor();
+	assert.ok((await hotnewsCard.innerText()).includes('失败 1'));
+	await page.getByRole('combobox', { name: '任务', exact: true }).selectOption('all');
+	await page.getByRole('button', { name: '筛选', exact: true }).click();
+	await page.waitForURL('**/admin/cron-runs?task=all');
+	await page.locator('.task-history details summary').first().click();
+	assert.ok((await page.locator('.task-history details').first().innerText()).includes('失败'));
+	await open(page, '/admin');
 	const cdp = await context.newCDPSession(page);
 	await cdp.send('DOM.enable');
 	await cdp.send('CSS.enable');
@@ -637,7 +783,8 @@ try {
 		'/admin/home-modules',
 		'/admin/categories',
 		'/admin/settings',
-		'/admin/users'
+		'/admin/users',
+		'/admin/cron-runs'
 	];
 	const other = [
 		'/admin/tags',
@@ -647,7 +794,6 @@ try {
 		'/admin/hot-sources',
 		'/admin/messages',
 		'/admin/ai-providers',
-		'/admin/cron-runs',
 		'/admin/import-export'
 	];
 	for (const path of [...primary, ...other])
@@ -714,6 +860,30 @@ try {
 								.map(Number)
 								.every((channel) => channel < 128),
 							'User filters must follow the dark theme'
+						);
+				}
+
+				if (path === '/admin/cron-runs') {
+					const cards = await page.locator('.task-card').evaluateAll((cards) =>
+						cards.map((card) => ({
+							background: getComputedStyle(card).backgroundColor,
+							state: getComputedStyle(card.querySelector('.task-state')).color,
+							buttonTop: card.querySelector('button.admin-primary-button').getBoundingClientRect()
+								.top
+						}))
+					);
+					assert.equal(cards.length, 3);
+					for (const card of cards)
+						assert.ok(
+							contrast(card.state, card.background) >= 4.5,
+							'Task status text must be readable'
+						);
+					if (width >= 1366)
+						assert.ok(
+							Math.max(...cards.map((card) => card.buttonTop)) -
+								Math.min(...cards.map((card) => card.buttonTop)) <=
+								1,
+							'Task actions must align at the bottom of desktop cards'
 						);
 				}
 				const label = `${path} ${width}px ${theme}`;

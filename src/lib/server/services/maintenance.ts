@@ -62,7 +62,7 @@ export async function runMaintenance(
 	);
 	const prunedCronRuns = await affected(
 		database,
-		`DELETE FROM cron_runs WHERE started_at<=datetime('now','-${cronRunDays} days') RETURNING id`,
+		`DELETE FROM cron_runs WHERE status<>'running' AND started_at<=datetime('now','-${cronRunDays} days') RETURNING id`,
 		[]
 	);
 	const abandonedReservations = await affected(

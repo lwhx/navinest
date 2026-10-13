@@ -120,7 +120,7 @@ describe('scheduled job dispatch', () => {
 		expect(result).toMatchObject({ job: 'backup', key: 'backups/navinest-2026-10-13.json' });
 		expect([...store.keys()]).toEqual(['backups/navinest-2026-10-13.json']);
 		expect(sqlite.prepare('SELECT COUNT(*) count FROM cron_runs').get()).toMatchObject({
-			count: 0
+			count: 1
 		});
 	});
 
