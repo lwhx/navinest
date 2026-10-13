@@ -2,13 +2,14 @@ import { json } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
 import { validateItemInput } from '$lib/server/admin-validation';
 import { mutationApiError, readJsonObject, validationApiError } from '$lib/server/admin-mutations';
-import { createItem } from '$lib/server/services/admin-write';
+import { createItem, requireManagedType } from '$lib/server/services/admin-write';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ platform, request, locals }) => {
 	try {
 		const validation = validateItemInput(await readJsonObject(request));
 		if (!validation.valid) return validationApiError(validation);
+		await requireManagedType(requireDatabase(platform), 'items', validation.data.type);
 		const id = await createItem(
 			requireDatabase(platform),
 			validation.data,

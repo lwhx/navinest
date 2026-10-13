@@ -3,10 +3,9 @@ import { describe, expect, it } from 'vitest';
 describe('administrator item media form', () => {
 	it('keeps existing category and tag options during initial SSR state', () => {
 		const form = readFileSync('src/lib/components/admin/AdminItemForm.svelte', 'utf8');
-		expect(form).toContain('!selectedType || category.type === selectedType');
+		expect(form).toContain('CategoryParentPicker');
 		expect(form).toContain('bind:value={selectedCategory}');
-		expect(form).toContain('value={String(category.id)}');
-		expect(form).toContain('value={String(file.id)}');
+		expect(form).toContain('untrack');
 		expect(form).toContain('!selectedType || tag.type === selectedType');
 	});
 	it('offers icon and cover fields loaded from protected media API', () => {

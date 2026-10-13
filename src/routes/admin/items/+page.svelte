@@ -24,6 +24,8 @@
 	let draggedItemId = $state<number | null>(null),
 		sortSaving = $state(false),
 		sortMessage = $state('');
+	let editorDirty = $state(false),
+		editorBusy = $state(false);
 	let editingItem = $state<Item | null>(null),
 		creatingModal = $state(false);
 	let editorScrollY = $state(0),
@@ -214,6 +216,9 @@
 	}
 
 	async function closeEditor() {
+		if (editorBusy || (editorDirty && !confirm('内容尚未保存，确定关闭吗？'))) return;
+		editorDirty = false;
+		form = null;
 		editingItem = null;
 		creatingModal = false;
 		if (data.mode)
@@ -259,8 +264,9 @@
 	}
 
 	async function savedEditor() {
-		await closeEditor();
 		await invalidateAll();
+		editorBusy = false;
+		await closeEditor();
 	}
 </script>
 
@@ -537,6 +543,8 @@
 			</div>
 			<div class="content-modal-body">
 				<AdminItemForm
+					bind:dirty={editorDirty}
+					bind:busy={editorBusy}
 					item={editingItem}
 					categories={data.categories as Category[]}
 					tags={data.tags as Tag[]}

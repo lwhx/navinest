@@ -7,7 +7,12 @@ import {
 	readJsonObject,
 	validationApiError
 } from '$lib/server/admin-mutations';
-import { AdminWriteError, deleteItem, updateItem } from '$lib/server/services/admin-write';
+import {
+	AdminWriteError,
+	deleteItem,
+	updateItem,
+	requireManagedType
+} from '$lib/server/services/admin-write';
 import type { RequestHandler } from './$types';
 
 function idFrom(params: { id: string }): number {
@@ -20,6 +25,12 @@ export const PATCH: RequestHandler = async ({ platform, request, params }) => {
 	try {
 		const validation = validateItemInput(await readJsonObject(request));
 		if (!validation.valid) return validationApiError(validation);
+		await requireManagedType(
+			requireDatabase(platform),
+			'items',
+			validation.data.type,
+			idFrom(params)
+		);
 		await updateItem(requireDatabase(platform), idFrom(params), validation.data);
 		return json({ success: true });
 	} catch (error) {

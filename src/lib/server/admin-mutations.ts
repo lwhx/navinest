@@ -1,3 +1,4 @@
+import { suggestedContentSlug } from '$lib/content-editor';
 import { fail, json } from '@sveltejs/kit';
 import { DatabaseUnavailableError } from '$lib/server/db';
 import type { ValidationResult } from '$lib/server/admin-validation';
@@ -38,6 +39,13 @@ export function configurationFormInput(formData: FormData) {
 export function itemFormInput(formData: FormData) {
 	return {
 		...Object.fromEntries(formData),
+		slug:
+			formData.get('slug') ||
+			suggestedContentSlug(
+				String(formData.get('title') ?? ''),
+				String(formData.get('site_url') ?? ''),
+				crypto.randomUUID()
+			),
 		iconFileId: formData.get('iconFileId'),
 		coverFileId: formData.get('coverFileId'),
 		isFeatured: formData.has('isFeatured'),

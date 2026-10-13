@@ -11,6 +11,7 @@ import {
 } from '$lib/server/admin-validation';
 import {
 	AdminWriteError,
+	requireManagedType,
 	createCategory,
 	createItem,
 	createTag,
@@ -146,6 +147,35 @@ afterEach(() => {
 });
 
 describe('administrator write services', () => {
+	it.each(['app', 'book', 'bulletin'])(
+		'restricts admin creation of %s while preserving existing records',
+		async (type) => {
+			const { database, sqlite } = createDatabase();
+			await expect(requireManagedType(database, 'items', type)).rejects.toMatchObject({
+				field: 'type'
+			});
+			await expect(
+				createTag(database, validTag({ type, name: '旧类型', slug: 'old' }))
+			).rejects.toMatchObject({ field: 'type' });
+			sqlite
+				.prepare("INSERT INTO tags(id,type,name,slug) VALUES(30,?,'已有标签','legacy')")
+				.run(type);
+			await updateTag(database, 30, validTag({ type, name: '保留标签', slug: 'legacy' }));
+			expect(sqlite.prepare('SELECT type,name FROM tags WHERE id=30').get()).toEqual({
+				type,
+				name: '保留标签'
+			});
+			const id = await createItem(
+				database,
+				validItem({ type, title: '历史投稿', slug: 'legacy' }),
+				null
+			);
+			await expect(requireManagedType(database, 'items', type, id)).resolves.toBeUndefined();
+			await expect(requireManagedType(database, 'items', type, id + 1)).rejects.toMatchObject({
+				field: 'type'
+			});
+		}
+	);
 	it.each(['app', 'book', 'bulletin'])('rejects new %s categories before writing', async (type) => {
 		const { database, sqlite } = createDatabase();
 		await expect(

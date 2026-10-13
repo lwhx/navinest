@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isManagedCategoryType } from '$lib/category-types';
 	import { scrollableTable } from '$lib/admin-actions';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
@@ -42,10 +43,10 @@
 						><span>类型</span><select
 							name="type"
 							value={value('type', data.editing?.type ?? 'site')}
-							><option value="site">网址</option><option value="post">文章</option><option
-								value="app">APP / 资源</option
-							><option value="book">书籍 / 影视</option><option value="bulletin">公告</option
-							></select
+							>{#if data.editing && !isManagedCategoryType(data.editing.type)}<option
+									value={data.editing.type}>历史标签（{data.editing.type}）</option
+								>{:else}<option value="site">网址</option><option value="post">文章</option
+								>{/if}</select
 						>{#if errors.type}<small class="field-error">{errors.type}</small>{/if}</label
 					>
 					<label
@@ -82,37 +83,69 @@
 	</section>
 {/if}
 
-<div
-	class="admin-table-wrap"
-	use:scrollableTable
-	role="region"
-	aria-label="管理数据列表，可横向滚动"
->
-	<table class="admin-table">
-		<thead
-			><tr
-				><th>名称</th><th>Slug</th><th>类型</th>{#if data.source === 'database'}<th>操作</th
-					>{/if}</tr
-			></thead
-		><tbody
-			>{#each data.tags as tag (tag.id)}<tr
-					><td><strong>{tag.name}</strong></td><td>{tag.slug}</td><td>{tag.type}</td
-					>{#if data.source === 'database'}<td
-							><div class="admin-row-actions">
-								<a href={resolve(`/admin/tags?edit=${tag.id}`)}>编辑</a>
-								<form
-									method="POST"
-									action="?/delete"
-									onsubmit={(event) => {
-										if (!confirm(`确定删除标签“${tag.name}”吗？`)) event.preventDefault();
-									}}
-								>
-									<input type="hidden" name="id" value={tag.id} /><button type="submit">删除</button
-									>
-								</form>
-							</div></td
+{#snippet tagTable(entries: typeof data.tags)}
+	<div
+		class="admin-table-wrap"
+		use:scrollableTable
+		role="region"
+		aria-label="管理数据列表，可横向滚动"
+	>
+		<table class="admin-table">
+			<thead
+				><tr
+					><th>名称</th><th>Slug</th><th>类型</th>{#if data.source === 'database'}<th>操作</th
 						>{/if}</tr
-				>{/each}</tbody
+				></thead
+			><tbody
+				>{#each entries as tag (tag.id)}<tr
+						><td><strong>{tag.name}</strong></td><td>{tag.slug}</td><td
+							>{{
+								site: '网址',
+								post: '文章',
+								app: '历史 · 软件',
+								book: '历史 · 书籍',
+								bulletin: '历史 · 公告'
+							}[tag.type]}</td
+						>{#if data.source === 'database'}<td
+								><div class="admin-row-actions">
+									<a href={resolve(`/admin/tags?edit=${tag.id}`)}>编辑</a>
+									<form
+										method="POST"
+										action="?/delete"
+										onsubmit={(event) => {
+											if (!confirm(`确定删除标签“${tag.name}”吗？`)) event.preventDefault();
+										}}
+									>
+										<input type="hidden" name="id" value={tag.id} /><button type="submit"
+											>删除</button
+										>
+									</form>
+								</div></td
+							>{/if}</tr
+					>{/each}</tbody
+			>
+		</table>
+	</div>
+{/snippet}
+{@render tagTable(data.tags.filter((tag) => isManagedCategoryType(tag.type)))}
+{#if data.tags.some((tag) => !isManagedCategoryType(tag.type))}
+	<details class="legacy-tags">
+		<summary
+			>历史标签（{data.tags.filter((tag) => !isManagedCategoryType(tag.type)).length}）</summary
 		>
-	</table>
-</div>
+		<p class="admin-form-hint">保留已有内容关联，可继续维护，不再新增这些类型。</p>
+		{@render tagTable(data.tags.filter((tag) => !isManagedCategoryType(tag.type)))}
+	</details>
+{/if}
+
+<style>
+	.legacy-tags {
+		margin-top: 20px;
+	}
+	.legacy-tags summary {
+		cursor: pointer;
+		min-height: 44px;
+		align-content: center;
+		font-weight: 600;
+	}
+</style>

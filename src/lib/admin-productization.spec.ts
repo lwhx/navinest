@@ -80,11 +80,11 @@ describe('administrator productization', () => {
 		expect(page).toContain('content-selection-bar');
 		expect(row).toContain('content-row-select');
 		expect(row).toContain('content-row-menu');
-		expect(form).toContain('editor-section-nav');
-		expect(form).toContain('基础信息');
-		expect(form).toContain('内容与描述');
-		expect(form).toContain('媒体资源');
-		expect(form).toContain('发布设置');
+		expect(form).toContain('读取网页信息');
+		expect(form).toContain('CategoryParentPicker');
+		expect(form).toContain('图标与封面');
+		expect(form).toContain('更多设置');
+		expect(form).toContain('editor-savebar');
 		expect(row).toContain('onEdit');
 		expect(row).not.toContain('href={resolve(`/admin/items?edit=');
 		expect(row).toContain('content-drag-handle');

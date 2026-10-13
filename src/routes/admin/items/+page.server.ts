@@ -12,6 +12,7 @@ import { loadAdminContent, paginateAdminFallback } from '$lib/server/services/ad
 import { listItems } from '$lib/server/services/items';
 import {
 	AdminWriteError,
+	requireManagedType,
 	createItem,
 	deleteItem,
 	updateItem
@@ -51,6 +52,7 @@ export const actions: Actions = {
 		const validation = validateItemInput(itemFormInput(formData));
 		if (!validation.valid) return invalidAction(validation, formData);
 		try {
+			await requireManagedType(requireDatabase(platform), 'items', validation.data.type);
 			await createItem(requireDatabase(platform), validation.data, locals.admin?.id ?? null);
 		} catch (error) {
 			return mutationActionError(error, formData);
@@ -64,6 +66,7 @@ export const actions: Actions = {
 		if (!id) return mutationActionError(new AdminWriteError('内容 ID 无效。'), formData);
 		if (!validation.valid) return invalidAction(validation, formData);
 		try {
+			await requireManagedType(requireDatabase(platform), 'items', validation.data.type, id);
 			await updateItem(requireDatabase(platform), id, validation.data);
 		} catch (error) {
 			return mutationActionError(error, formData);
