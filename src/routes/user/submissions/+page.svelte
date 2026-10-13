@@ -5,6 +5,7 @@
 	let { data }: PageProps = $props();
 	const labels: Record<string, string> = {
 		pending: '待审核',
+		reviewing: '处理中',
 		approved: '已通过',
 		rejected: '已拒绝',
 		published: '已发布',
@@ -22,7 +23,7 @@
 		<div class="account-card-header">
 			<div>
 				<h2>投稿记录</h2>
-				<p>共提交 {data.submissions.length} 条内容</p>
+				<p>最近 {data.submissions.length} 条投稿</p>
 			</div>
 			<a class="account-button" href={resolve('/contribute')}>新投稿</a>
 		</div>
@@ -40,6 +41,10 @@
 									审核意见：{submission.reviewMessage}
 								</p>{/if}<time datetime={submission.createdAt}>{submission.createdAt}</time>
 						</div>
+						{#if data.publishedLinks[submission.id]}<a
+								class="account-button"
+								href={resolve(data.publishedLinks[submission.id] as '/')}>查看已发布内容</a
+							>{/if}
 						{#if submission.payload.url}<a
 								class="account-button secondary"
 								href={resolve(`/go?url=${encodeURIComponent(submission.payload.url)}` as '/')}
