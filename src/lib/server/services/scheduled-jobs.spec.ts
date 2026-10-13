@@ -1,10 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
 import {
 	BACKUP_CRON,
 	HOTNEWS_CRON,
 	MAINTENANCE_CRON,
+	SCHEDULER_CRON,
+	getDueJobCron,
 	runScheduledJob
 } from '$lib/server/services/scheduled-jobs';
 import type { BackupBucket } from '$lib/server/services/scheduled-backup';
@@ -39,7 +42,10 @@ function fixture() {
 	};
 	return { sqlite, db };
 }
-afterEach(() => connections.splice(0).forEach((connection) => connection.close()));
+afterEach(() => {
+	connections.splice(0).forEach((connection) => connection.close());
+	vi.useRealTimers();
+});
 
 function memoryBucket() {
 	const store = new Map<string, string>();
@@ -70,6 +76,88 @@ const exporter = (async () =>
 ) => Promise<SiteBackup>;
 
 describe('scheduled job dispatch', () => {
+	it('uses one configured trigger and preserves exactly three daily UTC slots', () => {
+		const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
+		expect(config.triggers.crons).toEqual([SCHEDULER_CRON]);
+		for (const day of ['2026-10-13', '2026-12-31', '2027-01-01']) {
+			const start = Date.parse(`${day}T00:00:00Z`);
+			const due = [];
+			for (let minute = 0; minute < 1440; minute += 15) {
+				const cron = getDueJobCron(start + minute * 60_000);
+				if (cron) due.push({ minute, cron });
+			}
+			expect(due).toEqual([
+				{ minute: 75, cron: HOTNEWS_CRON },
+				{ minute: 180, cron: MAINTENANCE_CRON },
+				{ minute: 1140, cron: BACKUP_CRON }
+			]);
+		}
+	});
+
+	it.each(['2026-10-13T01:14:00Z', '2026-10-13T01:16:00Z', '2026-10-13T19:01:00Z'])(
+		'does not run a job outside its scheduled minute: %s',
+		(time) => expect(getDueJobCron(Date.parse(time))).toBeNull()
+	);
+
+	it('routes a delayed shared event using scheduledTime rather than wall-clock time', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-13T03:00:00Z'));
+		const { db, sqlite } = fixture();
+		const result = await runScheduledJob(db, SCHEDULER_CRON, Date.parse('2026-10-13T01:15:00Z'));
+		expect(result).toMatchObject({ job: 'hotnews', status: 'success' });
+		expect(sqlite.prepare('SELECT cron,scheduled_at FROM cron_runs').all()).toEqual([
+			{ cron: HOTNEWS_CRON, scheduled_at: '2026-10-13T01:15:00.000Z' }
+		]);
+	});
+
+	it('writes the daily backup through the shared event', async () => {
+		const { db, sqlite } = fixture();
+		const { bucket, store } = memoryBucket();
+		const result = await runScheduledJob(db, SCHEDULER_CRON, Date.parse('2026-10-13T19:00:00Z'), {
+			bucket,
+			exporter
+		});
+		expect(result).toMatchObject({ job: 'backup', key: 'backups/navinest-2026-10-13.json' });
+		expect([...store.keys()]).toEqual(['backups/navinest-2026-10-13.json']);
+		expect(sqlite.prepare('SELECT COUNT(*) count FROM cron_runs').get()).toMatchObject({
+			count: 0
+		});
+	});
+
+	it('cleans expired sessions through the shared event', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(`CREATE TABLE user_sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER,expires_at TEXT NOT NULL);
+			INSERT INTO user_sessions VALUES('stale',1,'2020-01-01T00:00:00Z'),('valid',1,'2099-01-01T00:00:00Z');`);
+		const result = await runScheduledJob(db, SCHEDULER_CRON, Date.parse('2026-10-13T03:00:00Z'));
+		expect(result).toMatchObject({ job: 'maintenance', expiredSessions: 1 });
+		expect(sqlite.prepare('SELECT token_hash FROM user_sessions').all()).toEqual([
+			{ token_hash: 'valid' }
+		]);
+	});
+
+	it('does not access any bindings on idle ticks or invalid times', async () => {
+		const prepare = vi.fn(() => {
+			throw new Error('Unexpected database access');
+		});
+		const db = { prepare } as Database;
+		expect(await runScheduledJob(db, SCHEDULER_CRON, Date.parse('2026-10-13T00:00:00Z'))).toEqual({
+			job: 'idle',
+			cron: SCHEDULER_CRON
+		});
+		await expect(runScheduledJob(db, SCHEDULER_CRON, NaN)).rejects.toThrow(
+			'Invalid scheduled time'
+		);
+		expect(prepare).not.toHaveBeenCalled();
+	});
+
+	it('keeps backup failure alerts when the shared event dispatches it', async () => {
+		const { db, sqlite } = fixture();
+		await expect(
+			runScheduledJob(db, SCHEDULER_CRON, Date.parse('2026-10-13T19:00:00Z'))
+		).rejects.toThrow('未配置备份存储');
+		expect(sqlite.prepare('SELECT title FROM messages').all()).toEqual([{ title: '定时备份失败' }]);
+	});
+
 	it('routes the hotnews trigger through the monitored cron', async () => {
 		const { db, sqlite } = fixture();
 		const result = await runScheduledJob(db, HOTNEWS_CRON, Date.parse('2026-07-13T01:15:00Z'));
