@@ -303,7 +303,10 @@
 	padding: 4px;
 	background: #e8eaed;
 }
-.subcategory-tabs button {
+.subcategory-tabs a {
+	display: inline-flex;
+	align-items: center;
+	text-decoration: none;
 	min-height: 36px;
 	border: 0;
 	border-radius: 9px;
@@ -316,12 +319,12 @@
 	white-space: nowrap;
 	cursor: pointer;
 }
-.subcategory-tabs button:hover,
-.subcategory-tabs button.active {
-	color: #fff;
+.subcategory-tabs a:hover,
+.subcategory-tabs a.active {
+	color: var(--ui-on-accent);
 	background: var(--nav-red);
 }
-.subcategory-tabs button:focus-visible {
+.subcategory-tabs a:focus-visible {
 	outline: 2px solid var(--nav-red);
 	outline-offset: 2px;
 }

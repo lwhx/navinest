@@ -30,8 +30,8 @@ export async function checkHomeDensity(page, baseUrl, screenshots) {
 				tabs.className = 'subcategory-tabs';
 				tabs.setAttribute('role', 'tablist');
 				tabs.setAttribute('aria-label', '常用推荐子分类');
-				const template = document.createElement('button');
-				template.type = 'button';
+				const template = document.createElement('a');
+				template.href = '#favorites';
 				template.setAttribute('role', 'tab');
 				template.setAttribute('aria-selected', 'false');
 				document.querySelector('#favorites .module-title > div').appendChild(tabs);
@@ -86,7 +86,7 @@ export async function checkHomeDensity(page, baseUrl, screenshots) {
 				sample.tabsScrollable && sample.headingFits,
 				`${label}: many tabs must scroll locally`
 			);
-			const lastTab = page.locator('.subcategory-tabs button').last();
+			const lastTab = page.locator('.subcategory-tabs a').last();
 			await lastTab.focus();
 			const reachable = await lastTab.evaluate((tab) => {
 				const target = tab.getBoundingClientRect();

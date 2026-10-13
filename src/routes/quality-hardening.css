@@ -5,7 +5,7 @@
 .site-content > p,
 .tag-row a,
 .detail-link,
-.subcategory-tabs a,
+.subcategory-tabs a:not(:hover):not(.active),
 .card-metrics span,
 .rail-card > p,
 .site-stats span,
@@ -29,7 +29,7 @@
 :root[data-theme='dark'] .site-content > p,
 :root[data-theme='dark'] .tag-row a,
 :root[data-theme='dark'] .detail-link,
-:root[data-theme='dark'] .subcategory-tabs a,
+:root[data-theme='dark'] .subcategory-tabs a:not(:hover):not(.active),
 :root[data-theme='dark'] .card-metrics span,
 :root[data-theme='dark'] .rail-card > p,
 :root[data-theme='dark'] .site-stats span,
@@ -51,4 +51,8 @@
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}
+}
+
+:root[data-theme] .subcategory-tabs a:is(:hover, .active) {
+	color: var(--ui-on-accent) !important;
 }

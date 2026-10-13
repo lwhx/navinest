@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import { readHomeSubcategories, homeSubcategoryUrl } from '$lib/home-subcategory-state';
 	import { normalizeSearchQuery } from '$lib/search';
 	import {
 		readSearchEnginePreference,
@@ -12,8 +15,17 @@
 	import type { HomeData } from '$lib/server/services/home';
 	let { home, mode }: { home: HomeData; mode: 'hero' | 'content' } = $props();
 	let query = $state(''),
-		engineKey = $state<string | null>(null),
-		activeSubcategories = $state<Record<string, string>>({});
+		engineKey = $state<string | null>(null);
+	let activeSubcategories = $derived(
+		readHomeSubcategories(
+			page.url,
+			home.sections.filter((section) =>
+				home.modulePlan.some(
+					(module) => module.type === 'content' && module.categorySlug === section.slug
+				)
+			)
+		)
+	);
 	let engine = $derived(
 		home.searchEngines.find((x) => x.key === engineKey) ??
 			home.searchEngines[0] ?? { name: '站内', key: 'site', urlTemplate: '/search?q={query}' }
@@ -55,8 +67,15 @@
 			location.href = target.startsWith('/') ? resolve(target as '/search') : target;
 		}
 	}
-	function selectSubcategory(sectionSlug: string, childSlug: string) {
-		activeSubcategories = { ...activeSubcategories, [sectionSlug]: childSlug };
+	function selectSubcategory(event: MouseEvent, sectionSlug: string, childSlug: string | null) {
+		// Keep native links for opening a new tab and for browsers without JavaScript.
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+			return;
+		event.preventDefault();
+		const target = resolve(`/${homeSubcategoryUrl(page.url, sectionSlug, childSlug)}` as '/');
+		if (new URL(target, page.url).search === page.url.search) return;
+		// The homepage loaders do not depend on query parameters, so Kit reuses their data.
+		void goto(target, { keepFocus: true, noScroll: true });
 	}
 </script>
 
@@ -130,12 +149,12 @@
 		{:else if module.type === 'content'}{@const section = home.sections.find(
 				(x) => x.slug === module.categorySlug
 			)}{#if section}{@const activeChild =
-					activeSubcategories[section.slug] ?? 'all'}{@const activeChildName =
-					section.children.find((child) => child.slug === activeChild)?.name}{@const visibleItems =
-					activeChildName
-						? (section.itemsByChild?.[activeChild] ??
-							section.items.filter((item) => item.category === activeChildName))
-						: section.items}
+					activeSubcategories[section.slug]}{@const activeChildName = section.children.find(
+					(child) => child.slug === activeChild
+				)?.name}{@const visibleItems = activeChildName
+					? (section.itemsByChild?.[activeChild ?? ''] ??
+						section.items.filter((item) => item.category === activeChildName))
+					: section.items}
 				<section
 					class="category-module"
 					id={section.slug}
@@ -148,22 +167,25 @@
 							<h2 id={`${section.slug}-heading`}>{module.title}</h2>
 							{#if section.children.length}<div
 									class="subcategory-tabs"
+									data-sveltekit-preload-data="off"
 									role="tablist"
 									aria-label={`${section.name}子分类`}
 								>
-									<button
-										type="button"
+									<a
+										href={resolve(`/${homeSubcategoryUrl(page.url, section.slug, null)}` as '/')}
 										role="tab"
-										class:active={activeChild === 'all'}
-										aria-selected={activeChild === 'all'}
-										onclick={() => selectSubcategory(section.slug, 'all')}>全部</button
-									>{#each section.children as child (child.slug)}<button
-											type="button"
+										class:active={!activeChild}
+										aria-selected={!activeChild}
+										onclick={(event) => selectSubcategory(event, section.slug, null)}>全部</a
+									>{#each section.children as child (child.slug)}<a
+											href={resolve(
+												`/${homeSubcategoryUrl(page.url, section.slug, child.slug)}` as '/'
+											)}
 											role="tab"
 											class:active={activeChild === child.slug}
 											aria-selected={activeChild === child.slug}
-											onclick={() => selectSubcategory(section.slug, child.slug)}
-											>{child.name}</button
+											onclick={(event) => selectSubcategory(event, section.slug, child.slug)}
+											>{child.name}</a
 										>{/each}
 								</div>{/if}
 						</div>

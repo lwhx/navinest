@@ -1,7 +1,10 @@
 import { render } from 'svelte/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+const { mockPage } = vi.hoisted(() => ({
+	mockPage: { url: new URL('http://localhost/rankings'), data: { user: null } }
+}));
 vi.mock('$app/state', () => ({
-	page: { url: new URL('http://localhost/rankings'), data: { user: null } },
+	page: mockPage,
 	navigating: { to: null }
 }));
 import HomeModuleFlow from './HomeModuleFlow.svelte';
@@ -13,6 +16,73 @@ import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
 import { contentDetailRoute } from '$lib/content-routing';
 import type { ContentType } from '$lib/types/content';
+
+afterEach(() => {
+	mockPage.url = new URL('http://localhost/rankings');
+});
+
+function subcategoryHome() {
+	const home = fallbackHomeData();
+	const root = { ...navigationItems[0], slug: 'root-resource', title: '父级资源' };
+	const child = { ...root, slug: 'child-resource', title: '子分类资源', category: '前端开发' };
+	const grandchild = {
+		...child,
+		slug: 'grandchild-resource',
+		title: '孙分类资源',
+		category: '框架'
+	};
+	home.sections = [
+		{
+			...home.sections[0],
+			slug: 'tools',
+			children: [
+				{ slug: 'frontend', name: '前端开发', icon: 'link' },
+				{ slug: 'empty', name: '空分类', icon: 'link' }
+			],
+			items: [root, child, grandchild],
+			itemsByChild: { frontend: [child, grandchild], empty: [] }
+		}
+	];
+	home.modulePlan = [
+		{ key: 'content:tools', type: 'content', title: '开发工具', categorySlug: 'tools' }
+	];
+	return home;
+}
+
+describe('homepage subcategory SSR', () => {
+	it('renders the URL-selected child and its descendants before hydration, with native links', () => {
+		mockPage.url = new URL('http://localhost/?sub.tools=frontend&source=share#tools');
+		const { body } = render(HomePage, {
+			props: { data: { ...subcategoryHome(), site: SITE_SETTINGS_DEFAULTS, user: null } }
+		});
+		expect(body).toContain('子分类资源');
+		expect(body).toContain('孙分类资源');
+		expect(body).not.toContain('父级资源');
+		expect(body).toContain('data-sveltekit-preload-data="off"');
+		expect(body).toMatch(/<a[^>]*href="\/\?source=share#tools"[^>]*aria-selected="false"/);
+		expect(body).toMatch(
+			/<a[^>]*href="\/\?sub.tools=frontend&amp;source=share#tools"[^>]*aria-selected="true"/
+		);
+	});
+	it('renders empty children as empty rather than silently showing all parent items', () => {
+		mockPage.url = new URL('http://localhost/?sub.tools=empty');
+		const { body } = render(HomeModuleFlow, {
+			props: { home: subcategoryHome(), mode: 'content' }
+		});
+		expect(body).toContain('此分类暂时没有内容');
+		expect(body).not.toContain('父级资源');
+		expect(body).not.toContain('子分类资源');
+	});
+	it('uses all public parent items when a child is no longer available', () => {
+		mockPage.url = new URL('http://localhost/?sub.tools=deleted');
+		const { body } = render(HomeModuleFlow, {
+			props: { home: subcategoryHome(), mode: 'content' }
+		});
+		expect(body).toContain('父级资源');
+		expect(body).toContain('子分类资源');
+		expect(body).toMatch(/<a[^>]*href="\/#tools"[^>]*aria-selected="true"/);
+	});
+});
 
 describe('homepage content rendering', () => {
 	it('omits retired homepage anchors and sidebar entries in real page SSR', () => {

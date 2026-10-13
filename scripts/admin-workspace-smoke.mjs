@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { checkHomeSubcategories } from './home-subcategory-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -43,6 +44,7 @@ writeFileSync(
 const migrations = [
 	'0001_initial',
 	'0002_auth_sessions',
+	'0003_user_activity',
 	'0008_cron_health',
 	'0011_ai_providers',
 	'0012_hot_board_customization',
@@ -227,6 +229,27 @@ try {
 	page = await context.newPage();
 	page.on('pageerror', (error) => errors.push(error.message));
 	page.on('dialog', (dialog) => dialog.accept());
+	// Reuse isolated local D1 fixtures; restore their original state before administration checks.
+	command([
+		'd1',
+		'execute',
+		'DB',
+		'--local',
+		'--command',
+		"UPDATE items SET category_id=CASE id WHEN 1 THEN 7 WHEN 2 THEN 10 WHEN 3 THEN 7 WHEN 4 THEN 8 WHEN 5 THEN 11 END WHERE id IN(1,2,3,4,5); INSERT INTO categories(id,type,parent_id,name,slug) VALUES(12,'site',1,'空分类','empty'); INSERT INTO home_modules(id,type,title,config_json,sort_order,is_enabled) VALUES(5,'content','设计资源','{\"categorySlug\":\"design\"}',30,1);"
+	]);
+	try {
+		await checkHomeSubcategories(page, baseUrl, screenshots);
+	} finally {
+		command([
+			'd1',
+			'execute',
+			'DB',
+			'--local',
+			'--command',
+			'UPDATE items SET category_id=1 WHERE id IN(1,2,3,4,5); DELETE FROM home_modules WHERE id=5; DELETE FROM categories WHERE id=12;'
+		]);
+	}
 
 	// The actual local D1-backed Worker must filter before counting and paging public results.
 	await page.goto(
@@ -1138,6 +1161,7 @@ try {
 	if (page && screenshots) {
 		await shot(page, 'failure');
 		writeFileSync(join(screenshots, 'failure.html'), await page.content());
+		writeFileSync(join(screenshots, 'failure-worker.log'), output);
 	}
 	throw error;
 } finally {
