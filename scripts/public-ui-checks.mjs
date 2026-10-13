@@ -153,7 +153,10 @@ export async function checkPublicUI(page, baseUrl) {
 	await page.waitForFunction(() => document.activeElement?.matches('.public-search-form input'));
 	await page.getByRole('searchbox', { name: '搜索关键词' }).fill('GitHub');
 	await page.getByRole('button', { name: '搜索', exact: true }).click();
-	await page.waitForURL('**/search?q=GitHub');
+	await page.waitForURL(
+		(url) => url.pathname === '/search' && url.searchParams.get('q') === 'GitHub'
+	);
+	assert.equal(new URL(page.url()).searchParams.get('category'), '');
 	assert.ok(await page.locator('.results-cards .card-title-link').count());
 	await page.goto(new URL('/search?q=unlikely-no-results-xyz', baseUrl).href, {
 		waitUntil: 'networkidle'

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HighlightedText from '$lib/components/HighlightedText.svelte';
 	import { resolve } from '$app/paths';
 	import { contentDetailRoute } from '$lib/content-routing';
 	import type { NavigationItem } from '$lib/data/navigation';
@@ -8,11 +9,13 @@
 		item,
 		compact = false,
 		dense = false,
-		metrics
+		metrics,
+		highlightQuery = ''
 	}: {
 		item: NavigationItem;
 		compact?: boolean;
 		dense?: boolean;
+		highlightQuery?: string;
 		metrics?: { views: number; favorites: number };
 	} = $props();
 	let detail = $derived(resolve(contentDetailRoute(item.type), { slug: item.slug }));
@@ -119,12 +122,22 @@
 	</div>
 	<div class="site-content">
 		{#if dense}<a class="card-title-link card-body-link" href={detail} aria-describedby={hintId}>
-				<div class="site-title-row"><h3>{item.title}</h3></div>
-				{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}
+				<div class="site-title-row">
+					<h3><HighlightedText text={item.title} query={highlightQuery} /></h3>
+				</div>
+				{#if item.summary.trim()}<p class="card-summary">
+						<HighlightedText text={item.summary} query={highlightQuery} />
+					</p>{/if}
 			</a>{:else}<div class="site-title-row">
-				<h3><a class="card-title-link" href={detail} aria-describedby={hintId}>{item.title}</a></h3>
+				<h3>
+					<a class="card-title-link" href={detail} aria-describedby={hintId}
+						><HighlightedText text={item.title} query={highlightQuery} /></a
+					>
+				</h3>
 			</div>
-			{#if item.summary.trim()}<p class="card-summary">{item.summary}</p>{/if}{/if}
+			{#if item.summary.trim()}<p class="card-summary">
+					<HighlightedText text={item.summary} query={highlightQuery} />
+				</p>{/if}{/if}
 		{#if metrics}<div class="card-secondary">
 				<div class="card-metrics">
 					<span title={`浏览 ${metrics.views}`}>浏览 {countFormatter.format(metrics.views)}</span

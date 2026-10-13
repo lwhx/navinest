@@ -227,6 +227,31 @@ try {
 	page = await context.newPage();
 	page.on('pageerror', (error) => errors.push(error.message));
 	page.on('dialog', (dialog) => dialog.accept());
+
+	// The actual local D1-backed Worker must filter before counting and paging public results.
+	await page.goto(
+		baseUrl + '/search?q=' + encodeURIComponent('中文资源') + '&category=site%3Atools&page=2',
+		{ waitUntil: 'networkidle' }
+	);
+	assert.equal(await page.locator('.results-cards .benchmark-card').count(), 24);
+	assert.ok((await page.locator('.search-listing-hero strong').textContent()).includes('67'));
+	assert.equal(
+		await page.getByRole('combobox', { name: '分类范围', exact: true }).inputValue(),
+		'site:tools'
+	);
+	assert.equal(await page.locator('.results-cards h3 mark').first().textContent(), '中文资源');
+	await page.getByRole('link', { name: '下一页', exact: true }).click();
+	await page.waitForURL(
+		(url) =>
+			url.searchParams.get('page') === '3' && url.searchParams.get('category') === 'site:tools'
+	);
+	assert.equal(await page.locator('.results-cards .benchmark-card').count(), 19);
+	await page.goBack({ waitUntil: 'networkidle' });
+	assert.equal(new URL(page.url()).searchParams.get('category'), 'site:tools');
+	await page.waitForFunction(() =>
+		document.querySelector('.search-pagination p')?.textContent?.includes('第 2 / 3 页')
+	);
+	assert.equal(await page.locator('.results-cards .benchmark-card').count(), 24);
 	await open(page, '/admin/categories');
 	assert.deepEqual(
 		await page

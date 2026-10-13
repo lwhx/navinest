@@ -16,7 +16,9 @@ import ContentResults from './ContentResults.svelte';
 import { SITE_SETTINGS_DEFAULTS } from '$lib/types/site';
 import { fallbackHomeData } from '$lib/server/services/home';
 import { navigationItems } from '$lib/data/navigation';
-import { searchPageUrl } from '$lib/search';
+import HighlightedText from './HighlightedText.svelte';
+import { searchCategoryOptions } from '$lib/search-categories';
+import { searchTextParts, searchPageUrl } from '$lib/search';
 
 const query = '中文资源 & 协作';
 function searchFixture(page: number, total = 61) {
@@ -26,6 +28,9 @@ function searchFixture(page: number, total = 61) {
 		title: '“' + query + '”的搜索结果',
 		description: '找到 ' + total + ' 条相关内容',
 		query,
+		category: 'site:tools',
+		categoryUnavailable: false,
+		categories: [{ value: 'site:tools', label: '网址 · 开发工具与团队协作 / 前端工具' }],
 		total,
 		page,
 		pageCount: Math.ceil(total / 24),
@@ -93,6 +98,52 @@ function adminFixture() {
 	}).body;
 }
 
+describe('literal and safe search highlights', () => {
+	it.each([
+		['GitHub github', 'GITHUB', 2],
+		['工具工具', '工具', 2],
+		['a.*b %_\\', '.*', 1],
+		['<img onerror=alert(1)>', '<img', 1],
+		['中文😀工具', '😀', 1]
+	])('highlights %s literally and preserves the original text', (text, query, count) => {
+		const parts = searchTextParts(text, query);
+		expect(parts.map((part) => part.text).join('')).toBe(text);
+		expect(parts.filter((part) => part.match)).toHaveLength(count);
+	});
+	it('renders untrusted HTML as escaped text without adding executable nodes', () => {
+		const { body } = render(HighlightedText, {
+			props: { text: '<img src=x onerror=alert(1)>', query: '<img' }
+		});
+		expect(body).toContain('&lt;img');
+		expect(body).not.toContain('<img');
+		expect(body).not.toContain('@html');
+	});
+	it('leaves other card contexts unmarked and preserves title/detail links with search marks', () => {
+		const item = { ...navigationItems[0], title: 'GitHub 协作', summary: '使用 github 管理项目' };
+		const normal = render(ContentResults, { props: { items: [item] } }).body;
+		const search = render(ContentResults, {
+			props: { items: [item], highlightQuery: 'github' }
+		}).body;
+		expect(normal).not.toContain('<mark');
+		expect(search.match(/<mark /g)).toHaveLength(2);
+		expect(search).toContain('href="/sites/cloudflare-dashboard"');
+	});
+	it('keeps taxonomy keys distinct and full paths readable even in cyclic historical data', () => {
+		const options = searchCategoryOptions([
+			{ id: 1, type: 'site', parentId: 2, name: '同名', slug: 'tools' },
+			{ id: 2, type: 'site', parentId: 1, name: '子分类', slug: 'child' },
+			{ id: 3, type: 'post', parentId: null, name: '同名', slug: 'tools' }
+		]);
+		expect(new Set(options.map((option) => option.value)).size).toBe(3);
+		expect(options[0].label).toContain('子分类 / 同名');
+	});
+	it('keeps keywords and category when changing pages, including punctuation', () => {
+		const url = new URL(searchPageUrl('中文 & %_\\', 3, 'site:deep'), 'https://example.test');
+		expect(url.searchParams.get('q')).toBe('中文 & %_\\');
+		expect(url.searchParams.get('category')).toBe('site:deep');
+		expect(url.searchParams.get('page')).toBe('3');
+	});
+});
 describe('search experience rendering', () => {
 	it('shows the full result count and URL-based, accessible pagination', () => {
 		const body = searchFixture(2);
@@ -102,7 +153,7 @@ describe('search experience rendering', () => {
 		expect(pagination).toContain('aria-label="搜索结果分页"');
 		expect(pagination).toContain('第 2 / 3 页');
 		expect(pagination).toContain('aria-current="page"');
-		expect(pagination).toContain(searchPageUrl(query, 3).replaceAll('&', '&amp;'));
+		expect(pagination).toContain(searchPageUrl(query, 3, 'site:tools').replaceAll('&', '&amp;'));
 		expect(pagination).toContain('rel="prev"');
 		expect(pagination).toContain('rel="next"');
 	});

@@ -34,6 +34,7 @@ export type ItemQuery = {
 	slug?: string;
 	categorySlug?: string;
 	categoryId?: number | null;
+	categoryBranchId?: number;
 	includeSlugInSearch?: boolean;
 	tagSlug?: string;
 	search?: string;
@@ -108,6 +109,14 @@ function itemFilters(query: ItemQuery) {
 		if (query.categoryId !== null) values.push(query.categoryId);
 	}
 
+	if (query.categoryBranchId !== undefined) {
+		conditions.push(`i.category_id IN (WITH RECURSIVE search_branch(id,type) AS (
+   SELECT id,type FROM categories WHERE id=? AND is_visible=1
+   UNION SELECT child.id,child.type FROM categories child JOIN search_branch parent ON child.parent_id=parent.id
+   WHERE child.is_visible=1 AND child.type=parent.type
+  ) SELECT id FROM search_branch)`);
+		values.push(query.categoryBranchId);
+	}
 	if (query.tagSlug) {
 		conditions.push(
 			'EXISTS (SELECT 1 FROM item_tags filter_it JOIN tags filter_tag ON filter_tag.id = filter_it.tag_id WHERE filter_it.item_id = i.id AND filter_tag.slug = ?)'

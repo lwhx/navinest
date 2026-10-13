@@ -4,8 +4,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { checkPublicUI } from './public-ui-checks.mjs';
 import { checkHomeExperience } from './home-experience-checks.mjs';
-import { checkSearchDiscovery } from './search-discovery-checks.mjs';
+import {
+	checkSearchDiscovery,
+	prepareSearchDiscoveryFixtures
+} from './search-discovery-checks.mjs';
 import { checkAdminLogin } from './admin-login-checks.mjs';
+
+// Generate SSR fixtures before the dev server starts so Kit sync cannot interrupt browser navigation.
+prepareSearchDiscoveryFixtures();
 
 // Exercise the real homepage with fallback content, including all five card types.
 const baseUrl = process.env.NAVINEST_LAYOUT_URL ?? 'http://127.0.0.1:5175';
