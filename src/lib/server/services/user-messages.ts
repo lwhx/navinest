@@ -14,6 +14,7 @@ type ReviewMessageInput = {
 	senderId: number;
 	submissionId: number;
 	submissionTitle: string;
+	reviewKey?: string;
 	status: 'published' | 'rejected';
 	content: string;
 	item: { id: number; type: string; slug: string } | null;
@@ -32,7 +33,12 @@ export async function createReviewMessage(database: Database, input: ReviewMessa
 		input.status === 'published'
 			? `投稿“${input.submissionTitle}”已发布`
 			: `投稿“${input.submissionTitle}”未通过审核`;
-	const data = { submissionId: input.submissionId, status: input.status, item: input.item };
+	const data = {
+		submissionId: input.submissionId,
+		status: input.status,
+		item: input.item,
+		...(input.reviewKey ? { reviewKey: input.reviewKey } : {})
+	};
 	const row = (
 		await database
 			.prepare(
