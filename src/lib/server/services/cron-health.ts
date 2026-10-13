@@ -1,10 +1,13 @@
 import type { Database } from '$lib/server/db';
 import { sendAlertWebhook, type CronAlert } from '$lib/server/services/alert-webhook';
 
-type RefreshResult =
-	{ ok: true; sourceId: number; count: number } | { ok: false; sourceId: number; error: string };
+export type RefreshResult =
+	| { ok: true; sourceId: number; count: number; skipped?: boolean }
+	| { ok: false; sourceId: number; error: string };
 type Refresh = () => Promise<RefreshResult[]>;
 export type CronAlertOptions = {
+	/** An already claimed unified task run; its owner persists the final outcome. */
+	runId?: number;
 	alertWebhookUrl?: string;
 	fetcher?: typeof fetch;
 	staleAfterHours?: number;
@@ -74,24 +77,30 @@ export async function executeMonitoredHotnewsCron(
 	options: CronAlertOptions = {}
 ) {
 	const scheduledAt = new Date(scheduledTime).toISOString();
-	const inserted = (
-		await database
-			.prepare("INSERT INTO cron_runs(cron,scheduled_at,status) VALUES(?,?,'running') RETURNING id")
-			.bind(cron, scheduledAt)
-			.all<{ id: number }>()
-	).results[0];
+	const inserted = options.runId
+		? { id: options.runId }
+		: (
+				await database
+					.prepare(
+						"INSERT INTO cron_runs(cron,scheduled_at,status) VALUES(?,?,'running') RETURNING id"
+					)
+					.bind(cron, scheduledAt)
+					.all<{ id: number }>()
+			).results[0];
 	if (!inserted) throw new Error('Cron运行记录创建失败。');
 	try {
 		const results = await refresh();
 		const succeeded = results.filter((x) => x.ok).length,
 			failed = results.length - succeeded,
-			status = failed === 0 ? 'success' : succeeded === 0 ? 'failed' : 'partial';
-		await database
-			.prepare(
-				'UPDATE cron_runs SET finished_at=CURRENT_TIMESTAMP,status=?,total_sources=?,succeeded_sources=?,failed_sources=?,result_json=? WHERE id=?'
-			)
-			.bind(status, results.length, succeeded, failed, JSON.stringify(results), inserted.id)
-			.all();
+			status: 'success' | 'failed' | 'partial' =
+				failed === 0 ? 'success' : succeeded === 0 ? 'failed' : 'partial';
+		if (!options.runId)
+			await database
+				.prepare(
+					'UPDATE cron_runs SET finished_at=CURRENT_TIMESTAMP,status=?,total_sources=?,succeeded_sources=?,failed_sources=?,result_json=? WHERE id=?'
+				)
+				.bind(status, results.length, succeeded, failed, JSON.stringify(results), inserted.id)
+				.all();
 		if (failed > 0) {
 			const failures = results
 				.filter((x): x is Extract<RefreshResult, { ok: false }> => !x.ok)
@@ -138,12 +147,13 @@ export async function executeMonitoredHotnewsCron(
 		};
 	} catch (error) {
 		const message = cleanError(error);
-		await database
-			.prepare(
-				"UPDATE cron_runs SET finished_at=CURRENT_TIMESTAMP,status='failed',error_message=? WHERE id=?"
-			)
-			.bind(message, inserted.id)
-			.all();
+		if (!options.runId)
+			await database
+				.prepare(
+					"UPDATE cron_runs SET finished_at=CURRENT_TIMESTAMP,status='failed',error_message=? WHERE id=?"
+				)
+				.bind(message, inserted.id)
+				.all();
 		await alertActiveAdmins(
 			database,
 			'热榜定时任务失败',
@@ -177,7 +187,16 @@ export async function listCronRuns(database: Database, limit = 50) {
 		totalSources: r.total_sources,
 		succeededSources: r.succeeded_sources,
 		failedSources: r.failed_sources,
-		results: JSON.parse(r.result_json) as RefreshResult[],
+		results: (() => {
+			try {
+				const parsed = JSON.parse(r.result_json ?? '[]');
+				return (
+					Array.isArray(parsed) ? parsed : Array.isArray(parsed?.sources) ? parsed.sources : []
+				) as RefreshResult[];
+			} catch {
+				return [];
+			}
+		})(),
 		errorMessage: r.error_message
 	}));
 }
