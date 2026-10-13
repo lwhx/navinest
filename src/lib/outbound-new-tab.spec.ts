@@ -3,7 +3,11 @@ import { render } from 'svelte/server';
 import HomePage from '../routes/+page.svelte';
 import { fallbackHomeData } from '$lib/server/services/home';
 import { SITE_SETTINGS_DEFAULTS } from '$lib/types/site';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('$app/state', () => ({
+	page: { url: new URL('http://localhost/'), data: { user: null } },
+	navigating: { to: null }
+}));
 
 const outboundFiles = [
 	'src/routes/hotnews/+page.svelte',

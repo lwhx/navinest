@@ -35,9 +35,9 @@ describe('home reference parity', () => {
 		expect(flow).toContain('role="tablist"');
 		expect(flow).toContain('role="tab"');
 		expect(flow).toContain('aria-selected');
-		expect(flow).toContain("activeSubcategories[section.slug] ?? 'all'");
+		expect(flow).toContain('activeSubcategories[section.slug]');
 		expect(flow).toContain('item.category === activeChildName');
-		expect(css).toContain('.subcategory-tabs button.active');
+		expect(css).toContain('.subcategory-tabs a.active');
 		expect(css).toContain('.subcategory-tabs {');
 		expect(css).toContain('padding: 4px');
 		expect(css).toContain('background: #e8eaed');

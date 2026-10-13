@@ -6,9 +6,9 @@ const phaseCss = readFileSync('src/routes/benchmark-home-phase4.css', 'utf8'),
 
 describe('home taxonomy and link density', () => {
 	it('gives second-level category buttons a clear touch target', () => {
-		expect(referenceCss).toMatch(/\.subcategory-tabs button\s*\{[^}]*min-height:\s*36px/s);
-		expect(referenceCss).toMatch(/\.subcategory-tabs button\s*\{[^}]*padding:\s*8px 14px/s);
-		expect(referenceCss).toMatch(/\.subcategory-tabs button\s*\{[^}]*font-size:\s*12px/s);
+		expect(referenceCss).toMatch(/\.subcategory-tabs a\s*\{[^}]*min-height:\s*36px/s);
+		expect(referenceCss).toMatch(/\.subcategory-tabs a\s*\{[^}]*padding:\s*8px 14px/s);
+		expect(referenceCss).toMatch(/\.subcategory-tabs a\s*\{[^}]*font-size:\s*12px/s);
 		expect(referenceCss).toMatch(
 			/@media \(max-width: 620px\)[\s\S]*\.subcategory-tabs\s*\{[^}]*max-width:\s*min\(240px, calc\(100vw - 140px\)\)/s
 		);

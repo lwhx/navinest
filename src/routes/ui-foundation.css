@@ -86,11 +86,11 @@
 :root[data-theme] :is(.home-header, .public-header) nav a:is(.active, [aria-current]) {
 	font-weight: var(--ui-weight-title);
 }
-:root[data-theme] .home-page .subcategory-tabs button {
+:root[data-theme] .home-page .subcategory-tabs a {
 	font-size: 14px;
 	font-weight: var(--ui-weight-nav);
 }
-:root[data-theme] .home-page .subcategory-tabs button.active {
+:root[data-theme] .home-page .subcategory-tabs a.active {
 	font-weight: var(--ui-weight-title);
 }
 :root[data-theme] :is(.rail-card h2, .public-footer h2) {
@@ -655,11 +655,11 @@
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
 }
-.home-page .home-module-flow .subcategory-tabs button {
+.home-page .home-module-flow .subcategory-tabs a {
 	flex: 0 0 auto;
 }
 @media (max-width: 900px) {
-	:root[data-theme] .home-page .subcategory-tabs button {
+	:root[data-theme] .home-page .subcategory-tabs a {
 		min-height: var(--ui-control);
 	}
 }
