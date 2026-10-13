@@ -9,6 +9,19 @@ import type { SiteBackup } from '$lib/server/services/site-backup';
 export const HOTNEWS_CRON = '15 1 * * *';
 export const BACKUP_CRON = '0 19 * * *';
 export const MAINTENANCE_CRON = '0 3 * * *';
+export const SCHEDULER_CRON = '*/15 * * * *';
+
+/** Select by the event's planned UTC time, even when delivery is delayed. */
+export function getDueJobCron(scheduledTime: number): string | null {
+	const time = new Date(scheduledTime);
+	if (!Number.isFinite(time.getTime())) throw new RangeError('Invalid scheduled time.');
+	const hour = time.getUTCHours();
+	const minute = time.getUTCMinutes();
+	if (hour === 1 && minute === 15) return HOTNEWS_CRON;
+	if (hour === 19 && minute === 0) return BACKUP_CRON;
+	if (hour === 3 && minute === 0) return MAINTENANCE_CRON;
+	return null;
+}
 
 export type ScheduledJobOptions = {
 	bucket?: BackupBucket;
@@ -21,15 +34,18 @@ export type ScheduledJobResult =
 	| { job: 'hotnews'; runId: number; status: string; failedSources: number }
 	| { job: 'backup'; key: string; bytes: number; pruned: string[] }
 	| ({ job: 'maintenance' } & MaintenanceResult)
+	| { job: 'idle'; cron: string }
 	| { job: 'unknown'; cron: string };
 
-/** Dispatches one cron trigger to its job; unknown triggers are reported instead of failing the worker. */
+/** One shared trigger preserves each daily job's time. Legacy triggers remain compatible during rollout. */
 export async function runScheduledJob(
 	database: Database,
-	cron: string,
+	triggerCron: string,
 	scheduledTime: number,
 	options: ScheduledJobOptions = {}
 ): Promise<ScheduledJobResult> {
+	const cron = triggerCron === SCHEDULER_CRON ? getDueJobCron(scheduledTime) : triggerCron;
+	if (cron === null) return { job: 'idle', cron: triggerCron };
 	if (cron === HOTNEWS_CRON) {
 		const run = await executeMonitoredHotnewsCron(
 			database,
