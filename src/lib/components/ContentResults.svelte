@@ -5,11 +5,13 @@
 
 	let {
 		items,
+		highlightQuery = '',
 		emptyMessage = '没有找到符合条件的内容。',
 		actionHref = '/',
 		actionLabel = '返回首页'
 	}: {
 		items: NavigationItem[];
+		highlightQuery?: string;
 		emptyMessage?: string;
 		actionHref?: '/' | '/search';
 		actionLabel?: string;
@@ -19,7 +21,7 @@
 {#if items.length > 0}
 	<div class="cards results-cards">
 		{#each items as item (`${item.type}-${item.slug}`)}
-			<NavigationCard {item} />
+			<NavigationCard {item} {highlightQuery} />
 		{/each}
 	</div>
 {:else}

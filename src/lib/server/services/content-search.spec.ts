@@ -17,6 +17,7 @@ function fixture() {
 			let values: DatabaseValue[] = [];
 			const statement: DatabaseStatement = {
 				bind(...next) {
+					if (next.length > 100) throw new Error('D1 parameter limit exceeded');
 					values = next;
 					return statement;
 				},
@@ -143,10 +144,18 @@ describe('public content search', () => {
 		});
 	});
 
-	it('does not query the database for an empty search', async () => {
+	it('loads visible category options without querying content for an empty search', async () => {
 		const database: Database = {
-			prepare() {
-				throw new Error('must not query');
+			prepare(sql) {
+				if (!sql.includes('FROM categories')) throw new Error('must not query content');
+				return {
+					bind() {
+						return this;
+					},
+					async all() {
+						return { results: [] };
+					}
+				};
 			}
 		};
 		expect(await searchContent(database, '  ', 100)).toMatchObject({
@@ -189,6 +198,80 @@ describe('public content search', () => {
 		}
 	});
 
+	it('filters a visible branch, isolates same names and types, and counts all filtered pages', async () => {
+		const { database, sqlite, insert } = fixture();
+		sqlite.exec(
+			"INSERT INTO categories(id,type,parent_id,name,slug,is_visible) VALUES(1,'site',NULL,'工具','tools',1),(2,'site',1,'前端','frontend',1),(3,'site',2,'深层','deep',1),(4,'site',NULL,'前端','other',1),(5,'site',1,'隐藏分类','hidden',0),(6,'post',NULL,'工具','articles',1),(7,'post',1,'跨类型坏数据','cross-type',1)"
+		);
+		for (let index = 0; index < 61; index++) {
+			const id = insert('共同资源');
+			sqlite.prepare('UPDATE items SET category_id=? WHERE id=?').run(index % 2 ? 2 : 3, id);
+		}
+		for (const [category, status, visibility] of [
+			[4, 'published', 'public'],
+			[5, 'published', 'public'],
+			[2, 'draft', 'public'],
+			[2, 'published', 'private'],
+			[6, 'published', 'public'],
+			[7, 'published', 'public']
+		] as const) {
+			const id = insert('共同资源', '', 0, status, visibility);
+			sqlite
+				.prepare('UPDATE items SET category_id=?,type=? WHERE id=?')
+				.run(category, category === 6 ? 'post' : 'site', id);
+		}
+		const pages = await Promise.all(
+			[1, 2, 3].map((page) => searchContent(database, '共同资源', page, 'site:tools'))
+		);
+		expect(pages.map((page) => page.items.length)).toEqual([24, 24, 13]);
+		expect(pages.every((page) => page.total === 61 && page.category === 'site:tools')).toBe(true);
+		expect(new Set(pages.flatMap((page) => page.items.map((item) => item.slug))).size).toBe(61);
+		expect(pages[0].categories.find((option) => option.value === 'site:deep')?.label).toBe(
+			'网址 · 工具 / 前端 / 深层'
+		);
+		expect(pages[0].categories.some((option) => option.value === 'site:hidden')).toBe(false);
+		expect((await searchContent(database, '共同资源', 1, 'site:other')).total).toBe(1);
+		expect((await searchContent(database, '共同资源', 1, 'post:articles')).total).toBe(1);
+		expect((await searchContent(database, '共同资源', 999, 'site:tools')).page).toBe(3);
+	});
+	it.each(['site:hidden', 'site:deleted', "site:' OR 1=1 --"])(
+		'never broadens an unavailable category %s into an unfiltered search',
+		async (category) => {
+			const { database, sqlite, insert } = fixture();
+			insert('共同资源');
+			sqlite.exec("INSERT INTO categories(name,slug,is_visible) VALUES('隐藏分类','hidden',0)");
+			expect(await searchContent(database, '共同资源', 8, category)).toMatchObject({
+				total: 0,
+				page: 1,
+				items: [],
+				categoryUnavailable: true,
+				category
+			});
+		}
+	);
+	it('supports large descendant branches without exceeding the D1 parameter limit and terminates cycles', async () => {
+		const { database, sqlite, insert } = fixture();
+		sqlite.exec("INSERT INTO categories(id,name,slug,parent_id) VALUES(1,'根分类','root',NULL)");
+		const category = sqlite.prepare(
+			'INSERT INTO categories(id,name,slug,parent_id) VALUES(?,?,?,?)'
+		);
+		for (let id = 2; id <= 120; id++) category.run(id, '分类' + id, 'category-' + id, id - 1);
+		sqlite.exec('UPDATE categories SET parent_id=120 WHERE id=1');
+		const id = insert('深层资源');
+		sqlite.prepare('UPDATE items SET category_id=120 WHERE id=?').run(id);
+		expect((await searchContent(database, '深层资源', 1, 'site:root')).total).toBe(1);
+	});
+	it('preserves the category in fallback and route load, and handles an unavailable shared link', async () => {
+		expect(
+			searchFallback('工具', 1, 'site:dev-tools').items.every(
+				(item) => item.type === 'site' && item.category === '开发工具'
+			)
+		).toBe(true);
+		expect(searchFallback('工具', 1, 'site:deleted')).toMatchObject({
+			categoryUnavailable: true,
+			total: 0
+		});
+	});
 	it.each(['0', '-1', '1.5', '01', 'Infinity', '9007199254740992', 'abc', null])(
 		'normalizes an invalid page %s',
 		(value) => {

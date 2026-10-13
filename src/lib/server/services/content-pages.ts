@@ -9,6 +9,7 @@ import { countItems, listItems } from '$lib/server/services/items';
 import { normalizeSearchQuery, searchPagination, searchRank } from '$lib/search';
 import { toNavigationItem } from '$lib/server/services/navigation';
 import { listTags } from '$lib/server/services/tags';
+import { searchCategoryKey, searchCategoryOptions } from '$lib/search-categories';
 import { categoryBranch } from '$lib/category-tree';
 
 export type ContentPageData = {
@@ -19,13 +20,27 @@ export type ContentPageData = {
 	source: 'database' | 'fallback';
 };
 
-export async function searchContent(database: Database, input: string, requestedPage = 1) {
+export async function searchContent(
+	database: Database,
+	input: string,
+	requestedPage = 1,
+	category = ''
+) {
 	const query = normalizeSearchQuery(input);
-	const total = query ? await countItems(database, { search: query }) : 0;
+	const categories = await listCategories(database);
+	const selected = category
+		? categories.find((value) => searchCategoryKey(value) === category)
+		: undefined;
+	const categoryUnavailable = Boolean(category && !selected);
+	const filters = {
+		search: query,
+		...(selected ? { categoryBranchId: selected.id, type: selected.type } : {})
+	};
+	const total = query && !categoryUnavailable ? await countItems(database, filters) : 0;
 	const pagination = searchPagination(total, requestedPage);
 	const items = total
 		? await listItems(database, {
-				search: query,
+				...filters,
 				order: 'relevance',
 				limit: pagination.pageSize,
 				offset: (pagination.page - 1) * pagination.pageSize
@@ -33,6 +48,9 @@ export async function searchContent(database: Database, input: string, requested
 		: [];
 	return {
 		query,
+		category,
+		categoryUnavailable,
+		categories: searchCategoryOptions(categories),
 		...pagination,
 		title: query ? `“${query}”的搜索结果` : '站内搜索',
 		description: query ? `找到 ${total} 条相关内容` : '输入关键词搜索站内收藏。',
@@ -42,20 +60,38 @@ export async function searchContent(database: Database, input: string, requested
 	};
 }
 
-export function searchFallback(input: string, requestedPage = 1) {
+export function searchFallback(input: string, requestedPage = 1, category = '') {
 	const query = normalizeSearchQuery(input);
-	const matches = query
-		? fallbackItems
-				.map((item, index) => ({ item, index, rank: searchRank(item, query) }))
-				.filter((entry) => entry.rank !== null)
-				.sort((a, b) => a.rank! - b.rank! || a.index - b.index)
-				.map((entry) => entry.item)
-		: [];
+	const categories = fallbackCategories.map((value, index) => ({
+		...value,
+		id: value.id ?? index + 1,
+		parentId: value.parentId ?? null,
+		type: value.type ?? ('site' as const)
+	}));
+	const selected = category
+		? categories.find((value) => searchCategoryKey(value) === category)
+		: undefined;
+	const categoryUnavailable = Boolean(category && !selected);
+	const branch = selected
+		? new Set(categoryBranch(categories, selected).map((value) => `${value.type}:${value.name}`))
+		: null;
+	const matches =
+		query && !categoryUnavailable
+			? fallbackItems
+					.filter((item) => !branch || branch.has(`${item.type}:${item.category}`))
+					.map((item, index) => ({ item, index, rank: searchRank(item, query) }))
+					.filter((entry) => entry.rank !== null)
+					.sort((a, b) => a.rank! - b.rank! || a.index - b.index)
+					.map((entry) => entry.item)
+			: [];
 	const pagination = searchPagination(matches.length, requestedPage);
 	const start = (pagination.page - 1) * pagination.pageSize;
 	const items = matches.slice(start, start + pagination.pageSize);
 	return {
 		query,
+		category,
+		categoryUnavailable,
+		categories: searchCategoryOptions(categories),
 		...pagination,
 		title: query ? `“${query}”的搜索结果` : '站内搜索',
 		description: query ? `找到 ${pagination.total} 条相关内容` : '输入关键词搜索站内收藏。',

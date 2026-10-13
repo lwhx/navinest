@@ -44,7 +44,9 @@ describe('homepage content rendering', () => {
 	it('makes the dense title and purpose one native detail target without nesting the visit link', () => {
 		const item = navigationItems[0];
 		const { body } = render(NavigationCard, { props: { item, dense: true, compact: true } });
-		const detailTarget = body.match(/<a class="card-title-link card-body-link"[\s\S]*?<\/a>/)?.[0];
+		const detailTarget = body
+			.match(/<a class="card-title-link card-body-link"[\s\S]*?<\/a>/)?.[0]
+			?.replace(/<!--[\s\S]*?-->/g, '');
 		expect(detailTarget).toContain(`href="/sites/${item.slug}"`);
 		expect(detailTarget).toContain(`<h3>${item.title}</h3>`);
 		expect(detailTarget).toContain('class="card-summary"');

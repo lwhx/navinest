@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const storageKey = 'navinest.search-engine';
-function fixtures() {
+export function prepareSearchDiscoveryFixtures() {
 	const path = join(tmpdir(), 'navinest-search-fixtures.json');
 	const sources = [
 		'src/lib/components/search-experience.spec.ts',
@@ -71,14 +71,129 @@ export async function checkSearchDiscovery(page, baseUrl, screenshots) {
 	assert.equal(await page.locator('.search-pagination').count(), 0);
 	await page.getByRole('searchbox', { name: '搜索关键词' }).fill('GitHub');
 	await page.locator('.public-search-form button[type="submit"]').click();
-	await page.waitForURL('**/search?q=GitHub');
+	await page.waitForURL('**/search?q=GitHub*');
 	assert.equal(
 		new URL(page.url()).searchParams.has('page'),
 		false,
 		'A new query resets pagination'
 	);
 
+	// Exercise actual hydrated search filters, literal marks and history restoration.
+	await page
+		.getByRole('combobox', { name: '分类范围', exact: true })
+		.selectOption('site:dev-tools');
+	await page.locator('.public-search-form button[type="submit"]').click();
+	await page.waitForURL((url) => url.searchParams.get('category') === 'site:dev-tools');
+	assert.equal(new URL(page.url()).searchParams.get('q'), 'GitHub');
+	await page.locator('.results-cards h3 mark').waitFor();
+	assert.equal(await page.locator('.results-cards h3 mark').textContent(), 'GitHub');
+	await page.reload({ waitUntil: 'networkidle' });
+	assert.equal(
+		await page.getByRole('combobox', { name: '分类范围', exact: true }).inputValue(),
+		'site:dev-tools'
+	);
+	await page.locator('.results-cards h3 a.card-title-link').click();
+	await page.waitForURL('**/sites/github');
+	await page.goBack({ waitUntil: 'networkidle' });
+	assert.equal(
+		await page.getByRole('combobox', { name: '分类范围', exact: true }).inputValue(),
+		'site:dev-tools'
+	);
+	assert.equal(await page.getByRole('searchbox', { name: '搜索关键词' }).inputValue(), 'GitHub');
+	await page.goto(new URL('/search?q=GitHub&category=site%3Adeleted', baseUrl).href, {
+		waitUntil: 'networkidle'
+	});
+	assert.equal(await page.locator('.results-cards .benchmark-card').count(), 0);
+	assert.ok(
+		(await page.locator('.search-filter-error[role=alert]').textContent()).includes('分类不可用')
+	);
+
+	await page.locator('.public-search-form button[type="submit"]').click();
+	await page.waitForURL((url) => url.searchParams.get('category') === 'site:deleted');
+	assert.equal(
+		await page.locator('.results-cards .benchmark-card').count(),
+		0,
+		'Submitting an unavailable category must not silently broaden the search'
+	);
+	await page.getByRole('link', { name: '查看全部分类', exact: true }).click();
+	await page.waitForURL((url) => url.pathname === '/search' && !url.searchParams.has('category'));
+	assert.equal(new URL(page.url()).searchParams.get('q'), 'GitHub');
+	for (const width of [320, 375, 1366, 1920])
+		for (const dark of [false, true]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.goto(new URL('/search?q=GitHub&category=site%3Adev-tools', baseUrl).href, {
+				waitUntil: 'networkidle'
+			});
+			await page.evaluate(
+				(dark) => (document.documentElement.dataset.theme = dark ? 'dark' : 'light'),
+				dark
+			);
+			const sample = await page.evaluate(() => {
+				const mark = document.querySelector('.results-cards mark');
+				const select = document.querySelector('.search-category-field select');
+				return {
+					overflow: document.documentElement.scrollWidth - innerWidth,
+					titleWidth: document.querySelector('.search-listing-hero > div').getBoundingClientRect()
+						.width,
+					height: select.getBoundingClientRect().height,
+					foreground: getComputedStyle(mark).color,
+					background: getComputedStyle(mark).backgroundColor,
+					selectText: getComputedStyle(select).color,
+					selectBackground: getComputedStyle(select).backgroundColor
+				};
+			});
+			const luminance = (color) => {
+				const values = color
+					.match(/[\d.]+/g)
+					.slice(0, 3)
+					.map(Number)
+					.map((v) => {
+						v /= 255;
+						return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+					});
+				return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+			};
+			const contrast = (a, b) => {
+				const values = [luminance(a), luminance(b)].sort((a, b) => b - a);
+				return (values[0] + 0.05) / (values[1] + 0.05);
+			};
+			assert.ok(sample.overflow <= 1, 'Filtered search must fit the viewport');
+			assert.ok(sample.titleWidth >= 120, 'Search title must retain readable width');
+			assert.ok(sample.height >= 44, 'Category select must remain touchable');
+			assert.ok(
+				contrast(sample.foreground, sample.background) >= 4.5,
+				'Search marks must remain readable'
+			);
+			assert.ok(
+				contrast(sample.selectText, sample.selectBackground) >= 4.5,
+				'Category choices must remain readable'
+			);
+			if (screenshots)
+				await page.screenshot({
+					path: join(screenshots, `search-category-${width}-${dark ? 'dark' : 'light'}.png`)
+				});
+		}
+
 	const browser = page.context().browser();
+
+	const nativeContext = await browser.newContext({ javaScriptEnabled: false });
+	try {
+		const nativePage = await nativeContext.newPage();
+		await nativePage.goto(new URL('/search?q=GitHub&page=9', baseUrl).href);
+		await nativePage
+			.getByRole('combobox', { name: '分类范围', exact: true })
+			.selectOption('site:dev-tools');
+		await nativePage.locator('.public-search-form button[type="submit"]').click();
+		await nativePage.waitForURL((url) => url.searchParams.get('category') === 'site:dev-tools');
+		assert.equal(
+			new URL(nativePage.url()).searchParams.has('page'),
+			false,
+			'Native category submission resets pagination'
+		);
+		assert.equal(await nativePage.locator('.results-cards h3 mark').textContent(), 'GitHub');
+	} finally {
+		await nativeContext.close();
+	}
 	const blockedContext = await browser.newContext();
 	try {
 		await blockedContext.addInitScript((key) => {
@@ -109,7 +224,7 @@ export async function checkSearchDiscovery(page, baseUrl, screenshots) {
 	await page.goto(baseUrl, { waitUntil: 'networkidle' });
 	await page.evaluate((key) => localStorage.removeItem(key), storageKey);
 
-	const fixture = fixtures();
+	const fixture = prepareSearchDiscoveryFixtures();
 	await page.goto(new URL('/search?q=GitHub', baseUrl).href, { waitUntil: 'networkidle' });
 	const head = await page.locator('head').innerHTML();
 	// Keep the real app styles, but use native SSR links with no hydration on fixture pages.
@@ -136,6 +251,7 @@ export async function checkSearchDiscovery(page, baseUrl, screenshots) {
 		assert.equal(await page.locator('.results-cards .benchmark-card').count(), 13);
 		assert.ok((await page.locator('.search-pagination p').textContent()).includes('第 3 / 3 页'));
 		assert.equal(new URL(page.url()).searchParams.get('q'), fixture.query);
+		assert.equal(new URL(page.url()).searchParams.get('category'), 'site:tools');
 		await page.goBack({ waitUntil: 'networkidle' });
 		assert.ok((await page.locator('.search-pagination p').textContent()).includes('第 2 / 3 页'));
 		for (const width of [320, 375, 1366, 1920]) {
@@ -233,6 +349,6 @@ export async function checkSearchDiscovery(page, baseUrl, screenshots) {
 			await page.screenshot({ path: join(screenshots, `search-admin-${width}.png`) });
 	}
 	console.log(
-		'Search preference, literal queries, native pagination and 18 Chinese layout cases passed. Large datasets use actual Svelte SSR fixtures; D1 search is covered by SQLite integration tests.'
+		'Search preference, literal queries, native pagination category filters, history restoration, safe highlights and 26 Chinese layout cases passed. Large datasets use actual Svelte SSR fixtures; D1 search is covered by SQLite integration tests.'
 	);
 }

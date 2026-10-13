@@ -31,8 +31,9 @@ export function searchPageNumbers(page: number, pageCount: number): Array<number
 	);
 }
 
-export function searchPageUrl(query: string, page: number) {
+export function searchPageUrl(query: string, page: number, category = '') {
 	const params = new URLSearchParams({ q: query });
+	if (category) params.set('category', category);
 	if (page > 1) params.set('page', String(page));
 	return '/search?' + params.toString();
 }
@@ -66,4 +67,29 @@ export function searchRecommendations(value: unknown): string[] {
 			)
 		)
 	].slice(0, SEARCH_RECOMMENDATION_LIMIT);
+}
+
+/** ASCII folding mirrors SQLite LIKE without changing string offsets or interpreting HTML/regex. */
+export function searchTextParts(
+	text: string,
+	query: string
+): Array<{ text: string; match: boolean }> {
+	const term = normalizeSearchQuery(query);
+	if (!term) return [{ text, match: false }];
+	const fold = (value: string) => value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+	const haystack = fold(text),
+		needle = fold(term);
+	const parts: Array<{ text: string; match: boolean }> = [];
+	let offset = 0;
+	for (
+		let index = haystack.indexOf(needle, offset);
+		index !== -1;
+		index = haystack.indexOf(needle, offset)
+	) {
+		if (index > offset) parts.push({ text: text.slice(offset, index), match: false });
+		parts.push({ text: text.slice(index, index + term.length), match: true });
+		offset = index + term.length;
+	}
+	if (offset < text.length) parts.push({ text: text.slice(offset), match: false });
+	return parts.length ? parts : [{ text, match: false }];
 }
