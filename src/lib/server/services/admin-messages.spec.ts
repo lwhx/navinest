@@ -5,12 +5,26 @@ import {
 	listMessageBatches,
 	listMessageRecipients,
 	messageStats,
-	sendAdminMessage,
+	sendAdminMessage as deliverAdminMessage,
+	previewAdminMessage,
+	loadMessageBatches,
+	getMessageBatch,
+	type AdminMessageInput,
 	validateAdminMessageInput,
 	withdrawMessageBatch
 } from '$lib/server/services/admin-messages';
 
 const connections: DatabaseSync[] = [];
+async function sendAdminMessage(db: Database, sender: number, input: AdminMessageInput) {
+	return deliverAdminMessage(db, sender, input, await previewAdminMessage(db, sender, input));
+}
+const broadcast: AdminMessageInput = {
+	scope: 'all',
+	userId: null,
+	type: 'system',
+	title: '完整群发',
+	content: '正文'
+};
 
 function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
@@ -93,7 +107,7 @@ describe('administrator message validation', () => {
 describe('administrator message batches', () => {
 	it('lists active recipients with administrators first', async () => {
 		const { db } = fixture();
-		expect(await listMessageRecipients(db)).toEqual([
+		expect((await listMessageRecipients(db)).recipients).toEqual([
 			{ id: 1, username: 'admin', displayName: 'Admin', role: 'admin' },
 			{ id: 2, username: 'blackice', displayName: 'Black Ice', role: 'user' }
 		]);
@@ -144,7 +158,7 @@ describe('administrator message batches', () => {
 				title: '停用账号',
 				content: null
 			})
-		).rejects.toMatchObject({ status: 404, field: 'userId' });
+		).rejects.toMatchObject({ status: 409, field: 'userId' });
 	});
 
 	it('groups batches with read progress and keeps system messages out', async () => {
@@ -177,11 +191,160 @@ describe('administrator message batches', () => {
 		await expect(withdrawMessageBatch(db, 'batch-1')).resolves.toBe(2);
 		expect(
 			sqlite.prepare('SELECT COUNT(*) count FROM messages WHERE batch_id=?').get('batch-1')
-		).toEqual({ count: 0 });
+		).toEqual({ count: 2 });
 		expect(
 			sqlite.prepare("SELECT COUNT(*) count FROM messages WHERE type='submission_review'").get()
 		).toEqual({ count: 1 });
-		await expect(withdrawMessageBatch(db, 'batch-1')).rejects.toMatchObject({ status: 404 });
+		await expect(withdrawMessageBatch(db, 'batch-1')).resolves.toBe(2);
+		expect((await getMessageBatch(db, 'batch-1'))?.withdrawnAt).toBeTruthy();
+		await expect(withdrawMessageBatch(db, 'missing')).rejects.toMatchObject({ status: 404 });
 		await expect(withdrawMessageBatch(db, '  ')).rejects.toMatchObject({ status: 400 });
+	});
+});
+
+describe('message delivery recovery and full history', () => {
+	it('requires a valid preview, rejects changed content and audience', async () => {
+		const { db, sqlite } = fixture(),
+			proof = await previewAdminMessage(db, 1, broadcast);
+		await expect(deliverAdminMessage(db, 1, broadcast, null)).rejects.toThrow('预览');
+		await expect(
+			deliverAdminMessage(db, 1, { ...broadcast, title: '修改' }, proof)
+		).rejects.toMatchObject({ status: 409 });
+		sqlite.exec("UPDATE users SET status='disabled' WHERE id=2");
+		await expect(deliverAdminMessage(db, 1, broadcast, proof)).rejects.toMatchObject({
+			status: 409
+		});
+		expect(sqlite.prepare('SELECT COUNT(*) n FROM messages').get()).toEqual({ n: 3 });
+	});
+	it('sends beyond 1000 recipients with one insert and supports replay after withdrawal', async () => {
+		const { db, sqlite } = fixture();
+		for (let id = 4; id < 1104; id++)
+			sqlite
+				.prepare("INSERT INTO users VALUES(?,?,?,'user','active')")
+				.run(id, 'user' + id, '用户' + id);
+		const proof = await previewAdminMessage(db, 1, broadcast);
+		expect(proof.recipients).toBe(1102);
+		const [a, b] = await Promise.all([
+			deliverAdminMessage(db, 1, broadcast, proof),
+			deliverAdminMessage(db, 1, broadcast, proof)
+		]);
+		expect(a.batchId).toBe(b.batchId);
+		expect(
+			sqlite.prepare('SELECT COUNT(*) n FROM messages WHERE batch_id=?').get(proof.batchId)
+		).toEqual({ n: 1102 });
+		await withdrawMessageBatch(db, proof.batchId);
+		const replay = await deliverAdminMessage(db, 1, broadcast, proof);
+		expect(replay.withdrawnAt).toBeTruthy();
+		expect(replay.repeated).toBe(true);
+		expect((await messageStats(db)).system).toBe(0);
+	});
+	it('rolls back every recipient if a later insert fails', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(
+			"CREATE TRIGGER fail_second BEFORE INSERT ON messages WHEN NEW.user_id=2 AND NEW.type='system' BEGIN SELECT RAISE(ABORT,'injected failure'); END"
+		);
+		const proof = await previewAdminMessage(db, 1, broadcast);
+		await expect(deliverAdminMessage(db, 1, broadcast, proof)).rejects.toThrow('injected failure');
+		expect(await getMessageBatch(db, proof.batchId)).toBeNull();
+	});
+	it('rejects audience changes at the final insert and recovers a lost committed reply', async () => {
+		const { db, sqlite } = fixture();
+		let change = true,
+			lose = false;
+		const wrapped: Database = {
+			prepare(query) {
+				const statement = db.prepare(query);
+				let values: DatabaseValue[] = [];
+				const proxy: DatabaseStatement = {
+					bind(...next) {
+						values = next;
+						return proxy;
+					},
+					async all<T>() {
+						if (query.startsWith('INSERT INTO messages')) {
+							if (change) {
+								change = false;
+								sqlite.exec("UPDATE users SET display_name='变更' WHERE id=2");
+							}
+							const result = await statement.bind(...values).all<T>();
+							if (lose) {
+								lose = false;
+								throw new Error('reply lost');
+							}
+							return result;
+						}
+						return statement.bind(...values).all<T>();
+					}
+				};
+				return proxy;
+			}
+		};
+		let proof = await previewAdminMessage(wrapped, 1, broadcast);
+		await expect(deliverAdminMessage(wrapped, 1, broadcast, proof)).rejects.toMatchObject({
+			status: 409
+		});
+		expect(await getMessageBatch(db, proof.batchId)).toBeNull();
+		proof = await previewAdminMessage(wrapped, 1, broadcast);
+		lose = true;
+		await expect(deliverAdminMessage(wrapped, 1, broadcast, proof)).rejects.toThrow('reply lost');
+		expect((await deliverAdminMessage(wrapped, 1, broadcast, proof)).repeated).toBe(true);
+	});
+	it('paginates all batches, escapes wildcard search and clamps pages', async () => {
+		const { db, sqlite } = fixture();
+		const insert = sqlite.prepare(
+			"INSERT INTO messages(user_id,sender_id,type,title,content,batch_id) VALUES(2,1,'system',?,? ,?)"
+		);
+		for (let n = 0; n < 225; n++)
+			insert.run('批次' + n, n === 0 ? '100%_完整' : '正文', 'page-' + n);
+		const all = await loadMessageBatches(db, new URLSearchParams('page=999'));
+		expect(all.total).toBe(226);
+		expect(all.filters.page).toBe(12);
+		expect(all.batches).toHaveLength(6);
+		const match = await loadMessageBatches(db, new URLSearchParams('q=%25_'));
+		expect(match.total).toBe(1);
+		await withdrawMessageBatch(db, 'page-0');
+		expect((await loadMessageBatches(db, new URLSearchParams('status=withdrawn'))).total).toBe(1);
+	});
+	it('rejects expired proofs and keeps personal search bounded without hiding exact matches', async () => {
+		const { db, sqlite } = fixture(),
+			proof = await previewAdminMessage(db, 1, broadcast);
+		await expect(
+			deliverAdminMessage(db, 1, broadcast, { ...proof, createdAt: Date.now() - 16 * 60 * 1000 })
+		).rejects.toMatchObject({ status: 409 });
+		for (let id = 4; id < 30; id++)
+			sqlite
+				.prepare("INSERT INTO users VALUES(?,?,?,'user','active')")
+				.run(id, 'exact' + id, '用户' + id);
+		expect((await listMessageRecipients(db)).hasMore).toBe(true);
+		expect((await listMessageRecipients(db, 'exact29')).recipients.map((r) => r.id)).toEqual([29]);
+	});
+});
+
+describe('historical withdrawal payloads', () => {
+	it('withdraws arrays, scalar JSON and malformed JSON safely', async () => {
+		const { db, sqlite } = fixture();
+		for (const data of ['[]', 'null', '"scalar"', '{bad']) {
+			sqlite.prepare("UPDATE messages SET data_json=? WHERE batch_id='batch-1'").run(data);
+			await withdrawMessageBatch(db, 'batch-1');
+			expect((await getMessageBatch(db, 'batch-1'))?.withdrawnAt).toBeTruthy();
+		}
+	});
+});
+
+describe('legacy message schema compatibility', () => {
+	it('loads, sends, replays and withdraws without the historical batch column', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec('ALTER TABLE messages DROP COLUMN batch_id');
+		const history = await loadMessageBatches(db, new URLSearchParams());
+		expect(history.total).toBe(0);
+		expect((await messageStats(db)).batches).toBe(0);
+		const proof = await previewAdminMessage(db, 1, broadcast);
+		const sent = await deliverAdminMessage(db, 1, broadcast, proof);
+		expect(sent.recipients).toBe(2);
+		expect((await loadMessageBatches(db, new URLSearchParams())).total).toBe(1);
+		await withdrawMessageBatch(db, sent.batchId);
+		expect((await deliverAdminMessage(db, 1, broadcast, proof)).withdrawnAt).toBeTruthy();
+		sqlite.exec('ALTER TABLE messages ADD COLUMN batch_id TEXT');
+		expect((await loadMessageBatches(db, new URLSearchParams())).total).toBe(1);
 	});
 });
