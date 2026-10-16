@@ -1,9 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
 import {
 	exportSiteBackup,
 	restoreSiteBackup,
+	previewSiteBackup,
 	validateSiteBackup
 } from '$lib/server/services/site-backup';
 const connections: DatabaseSync[] = [];
@@ -128,4 +129,230 @@ describe('site backup', () => {
 			count: 1
 		});
 	});
+});
+
+describe('reviewed backup restoration', () => {
+	it('returns exact changes without modifying data or exposing configuration values', async () => {
+		const { db, sqlite } = fixture(),
+			backup = await exportSiteBackup(db);
+		backup.items[0].title = '修改后';
+		backup.settings.theme = { secret: '不得在预览返回的配置值' };
+		backup.tags = [];
+		backup.items[0].tags = [];
+		backup.categories.push({
+			...backup.categories[0],
+			slug: 'new',
+			name: '新增分类',
+			parent: { type: 'site', slug: 'dev' }
+		});
+		sqlite.exec(
+			"INSERT INTO items(type,title,slug,status,visibility) VALUES('site','备份之外','outside','published','private')"
+		);
+		const before = sqlite.prepare('SELECT * FROM items').all(),
+			preview = await previewSiteBackup(db, backup);
+		expect(sqlite.prepare('SELECT * FROM items').all()).toEqual(before);
+		expect(preview.groups.find((g) => g.key === 'items')?.counts).toMatchObject({
+			updated: 1,
+			preserved: 1
+		});
+		expect(preview.groups.find((g) => g.key === 'tags')?.counts).toMatchObject({ preserved: 1 });
+		expect(preview.groups.find((g) => g.key === 'settings')?.counts.updated).toBe(1);
+		expect(
+			preview.changes.find((r) => r.group === 'items' && r.action === 'updated')?.fields
+		).toEqual(['标题', '标签关系']);
+		expect(JSON.stringify(preview)).not.toContain('不得在预览返回的配置值');
+		expect(preview.backupDigest).toMatch(/^[a-f0-9]{64}$/);
+	});
+	it('rejects null records, wrong field types, missing refs, cycles, cross-type refs and duplicate hot slugs without throwing', async () => {
+		const { db } = fixture(),
+			original = await exportSiteBackup(db);
+		const cases: Array<(b: typeof original) => void> = [
+			(b) => b.categories.push(null as never),
+			(b) => b.items.push(null as never),
+			(b) => {
+				b.items[0].tags = {} as never;
+			},
+			(b) => {
+				b.categories[0].parent = { type: 'site', slug: 'dev' };
+			},
+			(b) => {
+				b.categories.push({ ...b.categories[0], type: 'post', slug: 'post' });
+				b.items[0].category = { type: 'post', slug: 'post' };
+			},
+			(b) => {
+				b.items[0].meta.bad = {} as never;
+			},
+			(b) => {
+				b.categories[0].isVisible = 1 as never;
+			},
+			(b) => {
+				b.hotSources = [{ name: '坏来源', type: 'rss', url: 'http://127.0.0.1/feed' } as never];
+			}
+		];
+		for (const change of cases) {
+			const backup = structuredClone(original);
+			change(backup);
+			expect(() => validateSiteBackup(backup)).not.toThrow();
+			expect(validateSiteBackup(backup)).toMatchObject({ valid: false });
+		}
+	});
+	it('recognizes semantic no-ops, accepts HTML sources, and does not rebuild identical groups', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(
+			`INSERT INTO home_modules(type,title,config_json,sort_order,is_enabled) VALUES('search','搜索','{"x":1,"y":2}',0,1)`
+		);
+		const backup = await exportSiteBackup(db),
+			id = sqlite.prepare('SELECT id FROM home_modules').get();
+		backup.homeModules[0].config = { y: 2, x: 1 };
+		expect((await previewSiteBackup(db, backup)).hasChanges).toBe(false);
+		expect(await restoreSiteBackup(db, backup)).toMatchObject({ unchanged: true, changed: 0 });
+		expect(sqlite.prepare('SELECT id FROM home_modules').get()).toEqual(id);
+		backup.hotSources = [
+			{
+				name: 'HTML 热榜',
+				type: 'html',
+				url: 'https://example.com/hot',
+				headers: {},
+				parser: { itemSelector: '.item' },
+				cacheTtl: 900,
+				isEnabled: true,
+				slug: 'html-hot'
+			}
+		];
+		expect(validateSiteBackup(backup).valid).toBe(true);
+		await restoreSiteBackup(db, backup);
+		expect(sqlite.prepare('SELECT type FROM hot_sources').get()).toMatchObject({ type: 'html' });
+	});
+	it('resets a restored root parent, keeps unlisted content, IDs, owners, media and private relations', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(
+			"INSERT INTO categories(id,type,name,slug,sort_order,is_visible) VALUES(2,'site','Parent','parent',0,1); UPDATE categories SET parent_id=2 WHERE id=1; UPDATE items SET icon_file_id=123,cover_file_id=456 WHERE id=1"
+		);
+		const backup = await exportSiteBackup(db);
+		backup.categories[0].parent = null;
+		backup.items[0].title = '更新';
+		const proof = await previewSiteBackup(db, backup);
+		await restoreSiteBackup(db, backup, proof);
+		expect(sqlite.prepare('SELECT parent_id FROM categories WHERE id=1').get()).toMatchObject({
+			parent_id: null
+		});
+		expect(
+			sqlite.prepare('SELECT id,author_id,icon_file_id,cover_file_id FROM items WHERE id=1').get()
+		).toEqual({ id: 1, author_id: 1, icon_file_id: 123, cover_file_id: 456 });
+		expect(sqlite.prepare('SELECT COUNT(*) n FROM favorites').get()).toEqual({ n: 1 });
+		await expect(restoreSiteBackup(db, backup, proof)).rejects.toMatchObject({ status: 409 });
+	});
+	it('rejects a changed file or stale site preview before writes', async () => {
+		const { db, sqlite } = fixture(),
+			backup = await exportSiteBackup(db);
+		backup.items[0].title = '恢复值';
+		const proof = await previewSiteBackup(db, backup),
+			changed = structuredClone(backup);
+		changed.items[0].title = '其他文件';
+		await expect(restoreSiteBackup(db, changed, proof)).rejects.toMatchObject({ status: 409 });
+		sqlite.exec("UPDATE items SET title='管理员刚刚编辑' WHERE id=1");
+		await expect(restoreSiteBackup(db, backup, proof)).rejects.toMatchObject({ status: 409 });
+		expect(sqlite.prepare('SELECT title FROM items WHERE id=1').get()).toEqual({
+			title: '管理员刚刚编辑'
+		});
+	});
+	it('atomically rejects state changes between preflight and the write batch', async () => {
+		const { db, sqlite } = fixture(),
+			backup = await exportSiteBackup(db);
+		backup.items[0].title = '不能覆盖并发编辑';
+		const proof = await previewSiteBackup(db, backup);
+		const race = {
+			prepare: db.prepare.bind(db),
+			async batch(statements: DatabaseStatement[]) {
+				sqlite.exec("UPDATE categories SET name='晚到的修改' WHERE id=1");
+				return db.batch(statements);
+			}
+		};
+		await expect(restoreSiteBackup(race, backup, proof)).rejects.toMatchObject({ status: 409 });
+		expect(sqlite.prepare('SELECT title FROM items WHERE id=1').get()).toEqual({ title: 'GitHub' });
+		expect(sqlite.prepare('SELECT name FROM categories WHERE id=1').get()).toEqual({
+			name: '晚到的修改'
+		});
+	});
+	it('rolls the whole restore back if a later write fails, and keeps an ambiguous commit protected from repeat', async () => {
+		const { db, sqlite } = fixture(),
+			backup = await exportSiteBackup(db);
+		backup.categories[0].name = '应回滚';
+		backup.items[0].title = '写入故障';
+		sqlite.exec(
+			"CREATE TRIGGER injected_failure BEFORE INSERT ON items BEGIN SELECT RAISE(ABORT,'injected write failure'); END;"
+		);
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			await expect(restoreSiteBackup(db, backup)).rejects.toMatchObject({ uncertain: true });
+			expect(sqlite.prepare('SELECT name FROM categories WHERE id=1').get()).toEqual({
+				name: 'Dev'
+			});
+			sqlite.exec('DROP TRIGGER injected_failure');
+			const proof = await previewSiteBackup(db, backup),
+				lost = {
+					prepare: db.prepare.bind(db),
+					async batch(s: DatabaseStatement[]) {
+						await db.batch(s);
+						throw new Error('response lost');
+					}
+				};
+			await expect(restoreSiteBackup(lost, backup, proof)).rejects.toMatchObject({
+				uncertain: true
+			});
+			expect(sqlite.prepare('SELECT title FROM items WHERE id=1').get()).toEqual({
+				title: '写入故障'
+			});
+			await expect(restoreSiteBackup(db, backup, proof)).rejects.toMatchObject({ status: 409 });
+			expect((await previewSiteBackup(db, backup)).hasChanges).toBe(false);
+		} finally {
+			log.mockRestore();
+		}
+	});
+	it('restores hundreds of records within a bounded statement and binding budget', async () => {
+		const { db, sqlite } = fixture(),
+			backup = await exportSiteBackup(db);
+		for (let n = 0; n < 225; n++)
+			backup.items.push({ ...backup.items[0], slug: 'bulk-' + n, title: '批量恢复 ' + n });
+		let statements = 0;
+		const bounded = {
+			prepare: db.prepare.bind(db),
+			async batch(s: DatabaseStatement[]) {
+				statements = s.length;
+				return db.batch(s);
+			}
+		};
+		await restoreSiteBackup(bounded, backup);
+		expect(statements).toBeLessThanOrEqual(38);
+		expect(sqlite.prepare('SELECT COUNT(*) n FROM items').get()).toEqual({ n: 226 });
+	});
+});
+
+it('restores the order of replacement groups even when their field values are identical', async () => {
+	const { db, sqlite } = fixture();
+	sqlite.exec(
+		"INSERT INTO search_engines(group_key,name,key,url_template,sort_order,is_enabled) VALUES('global','First','first','https://example.com/?q={query}',0,1),('global','Second','second','https://example.com/?q={query}',0,1)"
+	);
+	const backup = await exportSiteBackup(db);
+	backup.searchEngines.reverse();
+	const preview = await previewSiteBackup(db, backup);
+	expect(preview.groups.find((g) => g.key === 'searchEngines')?.counts.updated).toBe(2);
+	expect(
+		preview.changes
+			.filter((c) => c.group === 'searchEngines')
+			.every((c) => c.fields.includes('组内顺序'))
+	).toBe(true);
+	await restoreSiteBackup(db, backup, preview);
+	expect((await exportSiteBackup(db)).searchEngines.map((s) => s.key)).toEqual(['second', 'first']);
+	expect((await previewSiteBackup(db, backup)).hasChanges).toBe(false);
+});
+
+it('round-trips the built-in site search template', async () => {
+	const { db, sqlite } = fixture();
+	sqlite.exec(
+		"INSERT INTO search_engines(group_key,name,key,url_template,sort_order,is_enabled) VALUES('site','站内搜索','site','/search?q={query}',0,1)"
+	);
+	const backup = await exportSiteBackup(db);
+	expect(validateSiteBackup(backup).valid).toBe(true);
+	expect((await previewSiteBackup(db, backup)).hasChanges).toBe(false);
 });

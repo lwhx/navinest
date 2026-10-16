@@ -11,6 +11,7 @@ import { checkSubmissionReview } from './submission-review-checks.mjs';
 import { checkContributionFlow } from './contribution-flow-checks.mjs';
 import { checkMediaLibrary } from './media-library-checks.mjs';
 import { checkUserSubmissions } from './user-submission-checks.mjs';
+import { checkBackupRestore } from './backup-restore-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -1135,6 +1136,14 @@ try {
 		adminToken
 	});
 	layouts += await checkUserSubmissions({ browser, baseUrl, command, screenshots, userToken });
+	layouts += await checkBackupRestore({
+		browser,
+		baseUrl,
+		command,
+		screenshots,
+		adminToken,
+		userToken
+	});
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
 		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
@@ -1168,7 +1177,8 @@ try {
 						'keyboard table scroll',
 						'submission review pagination, reconciliation and native forms',
 						'website/article contributions, category paths, AI preservation and native submission',
-						'owned submission history, full pagination, private details, feedback, native revisions and duplicate protection'
+						'owned submission history, full pagination, private details, feedback, native revisions and duplicate protection',
+						'backup validation, full diff preview, stale-state guards, atomic restore and uncertain results'
 					]
 				},
 				null,
