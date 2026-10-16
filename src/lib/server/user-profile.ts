@@ -52,7 +52,7 @@ async function validateOwnedFile(
 	if (!id) return;
 	const row = (
 		await database
-			.prepare('SELECT id FROM files WHERE id=? AND user_id=? LIMIT 1')
+			.prepare("SELECT id FROM files WHERE id=? AND user_id=? AND bucket='FILES' LIMIT 1")
 			.bind(id, userId)
 			.all<{ id: number }>()
 	).results[0];
@@ -68,12 +68,29 @@ export async function updateUserProfile(
 		validateOwnedFile(database, userId, input.coverFileId, 'coverFileId')
 	]);
 	try {
-		await database
-			.prepare(
-				'UPDATE users SET display_name=?,email=?,avatar_file_id=?,cover_file_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?'
-			)
-			.bind(input.displayName, input.email, input.avatarFileId, input.coverFileId, userId)
-			.all();
+		const saved = (
+			await database
+				.prepare(
+					`UPDATE users SET display_name=?,email=?,avatar_file_id=?,cover_file_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?
+            AND (? IS NULL OR EXISTS(SELECT 1 FROM files WHERE id=? AND user_id=? AND bucket='FILES'))
+            AND (? IS NULL OR EXISTS(SELECT 1 FROM files WHERE id=? AND user_id=? AND bucket='FILES')) RETURNING id`
+				)
+				.bind(
+					input.displayName,
+					input.email,
+					input.avatarFileId,
+					input.coverFileId,
+					userId,
+					input.avatarFileId,
+					input.avatarFileId,
+					userId,
+					input.coverFileId,
+					input.coverFileId,
+					userId
+				)
+				.all<{ id: number }>()
+		).results[0];
+		if (!saved) throw new UserProfileError('所选图片已失效，请重新选择后保存。');
 	} catch (error) {
 		if (error instanceof Error && /UNIQUE constraint/i.test(error.message))
 			throw new UserProfileError('邮箱已被其他用户使用。', 'email', 409);

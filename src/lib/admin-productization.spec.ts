@@ -13,7 +13,7 @@ describe('administrator productization', () => {
 		const page = read('src/routes/admin/files/+page.svelte');
 		expect(page).toContain('/api/admin/files/[id]');
 		expect(page).toContain('file.references');
-		expect(page).toContain("reference.usage === 'icon'");
+		expect(page).toContain('referenceUsage(reference.usage)');
 		expect(page).toContain('file.references.length === 0');
 	});
 	it('provides a searchable hierarchical category workbench', () => {

@@ -12,7 +12,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,target_item_id INTEGER,type TEXT NOT NULL,title TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`
+		`CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); CREATE TABLE submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,target_item_id INTEGER,type TEXT NOT NULL,title TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`
 	);
 	const database: Database = {
 		prepare(query) {
@@ -100,6 +100,28 @@ describe('user submissions', () => {
 			}
 		]);
 	});
+	it('does not save a dangling icon when it is removed after validation', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec("INSERT INTO files VALUES(1,7,'FILES','image/png')");
+		const concurrent: Database = {
+			prepare(query) {
+				if (query.startsWith('INSERT INTO submissions'))
+					sqlite.exec('DELETE FROM files WHERE id=1');
+				return database.prepare(query);
+			}
+		};
+		await expect(
+			createSubmission(concurrent, 7, {
+				type: 'site',
+				title: '图片竞争',
+				url: 'https://example.com',
+				summary: null,
+				content: null,
+				iconFileId: 1
+			})
+		).rejects.toMatchObject({ field: 'iconFileId' });
+		expect(sqlite.prepare('SELECT COUNT(*) n FROM submissions').get()).toEqual({ n: 0 });
+	});
 	it('rejects unsupported types, unsafe URLs and missing required URLs', async () => {
 		const { database } = fixture();
 		await expect(
@@ -155,7 +177,7 @@ describe('user submissions', () => {
 	it('stores valid user category and owned icon while rejecting cross-type or foreign relations', async () => {
 		const { database, sqlite } = fixture();
 		sqlite.exec(
-			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER,parent_id INTEGER,name TEXT); CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); INSERT INTO categories VALUES(10,'site',1,NULL,'开发'),(11,'app',1,NULL,'历史软件'); INSERT INTO files VALUES(20,7,'FILES','image/png'),(21,8,'FILES','image/png')"
+			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER,parent_id INTEGER,name TEXT); CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); INSERT INTO categories VALUES(10,'site',1,NULL,'开发'),(11,'app',1,NULL,'历史软件'); INSERT INTO files VALUES(20,7,'FILES','image/png'),(21,8,'FILES','image/png')"
 		);
 		const id = await createSubmission(database, 7, {
 			type: 'site',

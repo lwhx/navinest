@@ -3,15 +3,24 @@ import { getDatabase, requireDatabase } from '$lib/server/db';
 import {
 	AdminFileError,
 	deleteAdminFile,
-	listAdminFiles,
+	loadMediaPage,
 	storeAdminFile
 } from '$lib/server/services/admin-files';
+import { MEDIA_PAGE_SIZE, mediaFilters, mediaQuery } from '$lib/media-library';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ platform }) => {
+export const load: PageServerLoad = async ({ platform, url }) => {
 	const database = getDatabase(platform);
 	return {
-		files: database ? await listAdminFiles(database) : [],
+		...(database
+			? await loadMediaPage(database, url.searchParams)
+			: {
+					files: [],
+					filters: mediaFilters(url.searchParams),
+					total: 0,
+					pageCount: 1,
+					pageSize: MEDIA_PAGE_SIZE
+				}),
 		source: database ? ('database' as const) : ('fallback' as const),
 		storageAvailable: Boolean(platform?.env?.FILES)
 	};
@@ -25,7 +34,7 @@ function actionError(error: unknown) {
 }
 
 export const actions: Actions = {
-	upload: async ({ platform, request, locals }) => {
+	upload: async ({ platform, request, locals, url }) => {
 		const formData = await request.formData();
 		const file = formData.get('file');
 		if (!(file instanceof File))
@@ -42,9 +51,9 @@ export const actions: Actions = {
 		} catch (error) {
 			return actionError(error);
 		}
-		redirect(303, '/admin/files?uploaded=1');
+		redirect(303, `/admin/files?${mediaQuery(mediaFilters(url.searchParams))}`);
 	},
-	delete: async ({ platform, request }) => {
+	delete: async ({ platform, request, url }) => {
 		const formData = await request.formData();
 		const id = Number(formData.get('id'));
 		if (!Number.isInteger(id) || id <= 0)
@@ -56,6 +65,6 @@ export const actions: Actions = {
 		} catch (error) {
 			return actionError(error);
 		}
-		redirect(303, '/admin/files?deleted=1');
+		redirect(303, `/admin/files?${mediaQuery(mediaFilters(url.searchParams))}`);
 	}
 };

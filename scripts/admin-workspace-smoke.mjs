@@ -9,6 +9,7 @@ import { chromium } from 'playwright';
 import { checkHomeSubcategories } from './home-subcategory-checks.mjs';
 import { checkSubmissionReview } from './submission-review-checks.mjs';
 import { checkContributionFlow } from './contribution-flow-checks.mjs';
+import { checkMediaLibrary } from './media-library-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -1124,6 +1125,14 @@ try {
 	await page.waitForFunction(() => document.querySelector('.admin-table-wrap').scrollLeft > 0);
 	layouts += await checkSubmissionReview({ page, baseUrl, command, screenshots, userToken });
 	layouts += await checkContributionFlow({ browser, baseUrl, command, screenshots, userToken });
+	layouts += await checkMediaLibrary({
+		browser,
+		baseUrl,
+		command,
+		screenshots,
+		userToken,
+		adminToken
+	});
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
 		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`

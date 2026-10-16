@@ -539,7 +539,9 @@
 					<p class="eyebrow">内容编辑</p>
 					<h2 id="item-editor-title">{editingItem ? `编辑：${editingItem.title}` : '新增内容'}</h2>
 				</div>
-				<button type="button" aria-label="关闭编辑窗口" onclick={closeEditor}>×</button>
+				<button type="button" aria-label="关闭编辑窗口" disabled={editorBusy} onclick={closeEditor}
+					>×</button
+				>
 			</div>
 			<div class="content-modal-body">
 				<AdminItemForm

@@ -196,12 +196,20 @@ export async function createSubmission(database: Database, userId: number, input
 	const row = (
 		await database
 			.prepare(
-				"INSERT INTO submissions(user_id,target_item_id,type,title,payload_json,status) VALUES(?,NULL,?,?,?,'pending') RETURNING id"
+				"INSERT INTO submissions(user_id,target_item_id,type,title,payload_json,status) SELECT ?,NULL,?,?,?,'pending' WHERE ? IS NULL OR EXISTS(SELECT 1 FROM files WHERE id=? AND user_id=? AND bucket='FILES' AND mime_type LIKE 'image/%') RETURNING id"
 			)
-			.bind(userId, data.type, data.title, JSON.stringify(data.payload))
+			.bind(
+				userId,
+				data.type,
+				data.title,
+				JSON.stringify(data.payload),
+				data.payload.iconFileId,
+				data.payload.iconFileId,
+				userId
+			)
 			.all<{ id: number }>()
 	).results[0];
-	if (!row) throw new SubmissionError('投稿创建失败。');
+	if (!row) throw new SubmissionError('所选图标已失效，请重新选择后提交。', 'iconFileId');
 	return row.id;
 }
 export async function listUserSubmissions(database: Database, userId: number) {

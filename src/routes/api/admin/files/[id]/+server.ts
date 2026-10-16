@@ -8,7 +8,7 @@ export const GET: RequestHandler = async ({ platform, params }) => {
 	if (!Number.isInteger(id) || id <= 0) return json({ error: 'Invalid file ID' }, { status: 400 });
 	if (!platform?.env?.FILES) return json({ error: 'File storage unavailable' }, { status: 503 });
 	const file = await getAdminFile(requireDatabase(platform), id);
-	if (!file) return json({ error: 'File not found' }, { status: 404 });
+	if (!file || file.bucket !== 'FILES') return json({ error: 'File not found' }, { status: 404 });
 	const object = await platform.env.FILES.get(file.objectKey);
 	if (!object) return json({ error: 'File object not found' }, { status: 404 });
 	const type = file.mimeType?.startsWith('image/') ? file.mimeType : 'application/octet-stream';
@@ -34,6 +34,6 @@ export const DELETE: RequestHandler = async ({ platform, params }) => {
 		if (error instanceof AdminFileError)
 			return json({ error: error.message }, { status: error.status });
 		console.error('Administrator file deletion API failed', error);
-		return json({ error: 'Internal server error' }, { status: 500 });
+		return json({ error: '图片删除失败，请刷新核对后重试。' }, { status: 500 });
 	}
 };
