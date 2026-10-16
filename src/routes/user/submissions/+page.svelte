@@ -52,8 +52,6 @@
 								rel="external noopener noreferrer">查看目标</a
 							>{/if}
 					</li>{/each}
-			</ul>{:else}<p class="account-empty">
-				尚未提交内容。你可以推荐优质网址、文章、应用或书籍。
-			</p>{/if}
+			</ul>{:else}<p class="account-empty">尚未提交内容。你可以推荐优质网址或分享文章。</p>{/if}
 	</section>
 </AccountShell>

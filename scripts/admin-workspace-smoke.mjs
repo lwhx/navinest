@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { checkHomeSubcategories } from './home-subcategory-checks.mjs';
 import { checkSubmissionReview } from './submission-review-checks.mjs';
+import { checkContributionFlow } from './contribution-flow-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -1122,6 +1123,7 @@ try {
 	await page.keyboard.press('ArrowRight');
 	await page.waitForFunction(() => document.querySelector('.admin-table-wrap').scrollLeft > 0);
 	layouts += await checkSubmissionReview({ page, baseUrl, command, screenshots, userToken });
+	layouts += await checkContributionFlow({ browser, baseUrl, command, screenshots, userToken });
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
 		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
@@ -1153,7 +1155,8 @@ try {
 						'config preservation',
 						'menu focus',
 						'keyboard table scroll',
-						'submission review pagination, reconciliation and native forms'
+						'submission review pagination, reconciliation and native forms',
+						'website/article contributions, category paths, AI preservation and native submission'
 					]
 				},
 				null,

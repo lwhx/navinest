@@ -155,7 +155,7 @@ describe('user submissions', () => {
 	it('stores valid user category and owned icon while rejecting cross-type or foreign relations', async () => {
 		const { database, sqlite } = fixture();
 		sqlite.exec(
-			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER); CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); INSERT INTO categories VALUES(10,'site',1),(11,'app',1); INSERT INTO files VALUES(20,7,'FILES','image/png'),(21,8,'FILES','image/png')"
+			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER,parent_id INTEGER,name TEXT); CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); INSERT INTO categories VALUES(10,'site',1,NULL,'开发'),(11,'app',1,NULL,'历史软件'); INSERT INTO files VALUES(20,7,'FILES','image/png'),(21,8,'FILES','image/png')"
 		);
 		const id = await createSubmission(database, 7, {
 			type: 'site',
@@ -197,5 +197,66 @@ describe('user submissions', () => {
 				iconFileId: 21
 			})
 		).rejects.toThrow('图标');
+	});
+
+	it('rejects retired new-submission types even with a valid public URL', async () => {
+		const { database, sqlite } = fixture();
+		for (const type of ['app', 'book', 'bulletin']) {
+			await expect(
+				createSubmission(database, 7, {
+					type,
+					title: '旧类型',
+					summary: null,
+					content: '内容',
+					url: 'https://example.com'
+				})
+			).rejects.toMatchObject({ field: 'type' });
+		}
+		expect(sqlite.prepare('SELECT COUNT(*) AS n FROM submissions').get()).toMatchObject({ n: 0 });
+	});
+
+	it('allows original articles without URLs and requires their body', async () => {
+		const { database } = fixture();
+		await createSubmission(database, 7, {
+			type: 'post',
+			title: '原创文章',
+			summary: '摘要',
+			content: '  完整文章正文  ',
+			url: ''
+		});
+		expect((await listUserSubmissions(database, 7))[0].payload).toMatchObject({
+			content: '完整文章正文',
+			url: null
+		});
+		await expect(
+			createSubmission(database, 7, {
+				type: 'post',
+				title: '空正文',
+				summary: null,
+				content: '  ',
+				url: null
+			})
+		).rejects.toMatchObject({ field: 'content' });
+	});
+
+	it('requires a visible same-type category path and rejects malformed category IDs', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"CREATE TABLE categories(id INTEGER PRIMARY KEY,type TEXT,is_visible INTEGER,parent_id INTEGER,name TEXT); INSERT INTO categories VALUES(1,'site',1,NULL,'一级'),(2,'site',1,1,'二级'),(3,'site',0,NULL,'隐藏'),(4,'site',1,3,'隐藏子类'),(5,'post',1,NULL,'文章'),(6,'site',1,5,'跨类型'),(7,'site',1,8,'循环一'),(8,'site',1,7,'循环二')"
+		);
+		const input = {
+			type: 'site',
+			title: '资源',
+			summary: null,
+			content: null,
+			url: 'https://example.com'
+		};
+		await createSubmission(database, 7, { ...input, userCategoryId: 2 });
+		for (const userCategoryId of [4, 5, 6, 7, 999, -1, 1.5, Number.NaN]) {
+			await expect(
+				createSubmission(database, 7, { ...input, userCategoryId })
+			).rejects.toMatchObject({ field: 'userCategoryId' });
+		}
+		expect(sqlite.prepare('SELECT COUNT(*) AS n FROM submissions').get()).toMatchObject({ n: 1 });
 	});
 });

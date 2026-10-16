@@ -13,7 +13,8 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	if (!(await loadSiteSettings(requireDatabase(platform))).submissionsOpen)
 		return json({ error: '投稿通道已关闭。' }, { status: 403 });
 	try {
-		const body = (await request.json()) as Record<string, unknown>;
+		const body = record(await request.json());
+		if (!body) return json({ error: '投稿内容格式无效。' }, { status: 400 });
 		const web = record(body.webSnapshot),
 			ai = record(body.aiSuggestion),
 			id = await createSubmission(requireDatabase(platform), locals.user.id, {
@@ -22,7 +23,10 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 				summary: body.summary === null ? null : String(body.summary ?? ''),
 				content: body.content === null ? null : String(body.content ?? ''),
 				url: body.url === null ? null : String(body.url ?? ''),
-				userCategoryId: body.userCategoryId === null ? null : Number(body.userCategoryId),
+				userCategoryId:
+					body.userCategoryId == null || body.userCategoryId === ''
+						? null
+						: Number(body.userCategoryId),
 				iconFileId: body.iconFileId === null ? null : Number(body.iconFileId),
 				iconSource:
 					body.iconSource === 'auto' || body.iconSource === 'manual' ? body.iconSource : null,
@@ -55,6 +59,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			});
 		return json({ id, status: 'pending' }, { status: 201 });
 	} catch (error) {
+		if (error instanceof SyntaxError) return json({ error: '投稿内容格式无效。' }, { status: 400 });
 		if (error instanceof SubmissionError)
 			return json({ error: error.message, field: error.field ?? null }, { status: 400 });
 		console.error('Submission API failed', error);
