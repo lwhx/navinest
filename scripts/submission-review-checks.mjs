@@ -91,6 +91,14 @@ export async function checkSubmissionReview({ page, baseUrl, command, screenshot
 	}
 	await page.setViewportSize({ width: 1366, height: 900 });
 	await open(2220);
+	await ready();
+	assert.equal(await field('categoryId').inputValue(), '1');
+	assert.match(await field('categoryId').locator('option:checked').textContent(), /开发工具/);
+	await field('summary').fill('审核前的中文简介');
+	assert.equal(
+		await field('categoryId').evaluate((select) => new FormData(select.form).get('categoryId')),
+		'1'
+	);
 	assert.equal(await page.locator('.review-list > a').count(), 20);
 	assert.equal((await page.locator('.review-queue-head').innerText()).includes('221 条'), true);
 	assert.match(await page.locator('.review-pagination').innerText(), /第 1 \/ 12 页/);
@@ -293,6 +301,7 @@ export async function checkSubmissionReview({ page, baseUrl, command, screenshot
 		await native.addCookies(await context.cookies());
 		const tab = await native.newPage();
 		await tab.goto(queueUrl(2215));
+		assert.equal(await field('categoryId', tab).inputValue(), '1');
 		await field('title', tab).fill('审核回归原生失败保留标题');
 		await tab.getByRole('button', { name: '拒绝投稿', exact: true }).click();
 		await tab.locator('#review-error-message').waitFor();
@@ -331,6 +340,27 @@ export async function checkSubmissionReview({ page, baseUrl, command, screenshot
 	} finally {
 		await author.close();
 	}
+	// User choice takes precedence; AI defaults and manual choices survive form updates.
+	execute(
+		"UPDATE submissions SET payload_json=json_set(payload_json,'$.aiSuggestion',json_object('categoryId',7,'categoryName','代码托管')) WHERE id=2212"
+	);
+	await open(2212);
+	await ready();
+	assert.equal(await field('categoryId').inputValue(), '1');
+	execute(
+		"UPDATE submissions SET payload_json=json_remove(payload_json,'$.userCategoryId') WHERE id=2212"
+	);
+	await open(2212);
+	await ready();
+	assert.equal(await field('categoryId').inputValue(), '7');
+	assert.equal(await field('categoryId').locator('option:checked').textContent(), '代码托管');
+	await field('categoryId').selectOption('9');
+	await field('summary').fill('保留手动分类的简介');
+	assert.equal(await field('categoryId').inputValue(), '9');
+	await page.reload({ waitUntil: 'networkidle' });
+	await ready();
+	assert.equal(await field('categoryId').inputValue(), '7');
+
 	execute(
 		"UPDATE submissions SET payload_json=json_set(payload_json,'$.userCategoryId',999) WHERE id=2213"
 	);

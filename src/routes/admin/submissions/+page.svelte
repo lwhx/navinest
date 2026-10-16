@@ -869,7 +869,7 @@
 										>{#if draft?.categoryId && !data.categories.some((category) => String(category.id) === draft?.categoryId && category.type === selected?.type)}<option
 												value={draft.categoryId}>原分类已不可用，请重新选择</option
 											>{/if}{#each data.categories.filter((category) => category.type === selected?.type) as category (category.id)}<option
-												value={category.id}>{category.name}</option
+												value={String(category.id)}>{category.name}</option
 											>{/each}</select
 									><small
 										>{selected.payload.userCategoryId
