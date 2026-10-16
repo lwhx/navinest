@@ -12,6 +12,8 @@ describe('administrator item media form', () => {
 		const form = readFileSync('src/lib/components/admin/AdminItemForm.svelte', 'utf8');
 		expect(form).toContain('name="iconFileId"');
 		expect(form).toContain('name="coverFileId"');
-		expect(form).toContain("resolve('/api/admin/files')");
+		const browser = readFileSync('src/lib/components/admin/MediaBrowser.svelte', 'utf8');
+		expect(browser).toContain('/api/admin/files?');
+		expect(form).toContain('<MediaPicker');
 	});
 });

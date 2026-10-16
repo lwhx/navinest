@@ -72,13 +72,15 @@ describe('owned user files', () => {
 		const { database, bucket } = fixture();
 		await expect(deleteOwnedFile(database, bucket, 7, 2)).rejects.toBeInstanceOf(UserFileError);
 	});
-	it('blocks files referenced by content or pending submissions', async () => {
+	it('blocks files referenced by content, pending and reviewing submissions', async () => {
 		const { database, sqlite, bucket } = fixture();
 		sqlite.exec('INSERT INTO items VALUES(1,1,NULL)');
 		await expect(deleteOwnedFile(database, bucket, 7, 1)).rejects.toMatchObject({ status: 409 });
 		sqlite.exec(
 			"DELETE FROM items; INSERT INTO submissions VALUES(1,'pending','{\"iconFileId\":1}')"
 		);
+		await expect(deleteOwnedFile(database, bucket, 7, 1)).rejects.toMatchObject({ status: 409 });
+		sqlite.exec("UPDATE submissions SET status='reviewing'");
 		await expect(deleteOwnedFile(database, bucket, 7, 1)).rejects.toMatchObject({ status: 409 });
 	});
 });

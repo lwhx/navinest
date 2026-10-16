@@ -1,4 +1,6 @@
-import type { Database } from '$lib/server/db';
+import type { Database, DatabaseValue } from '$lib/server/db';
+import { MEDIA_PAGE_SIZE, mediaFilters, type MediaFilters } from '$lib/media-library';
+import { FILE_REFERENCES, fileReferenceCondition } from './file-references';
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
 const MIME_EXTENSIONS = new Map([
@@ -31,7 +33,21 @@ export type AdminFileRecord = {
 	width: number | null;
 	height: number | null;
 	createdAt: string;
-	references: Array<{ itemId: number; title: string; usage: 'icon' | 'cover' }>;
+	references: FileReference[];
+};
+
+export type FileReference = {
+	kind: 'item' | 'user' | 'submission';
+	id: number;
+	title: string;
+	usage: 'icon' | 'cover' | 'avatar' | 'profileCover' | 'submission';
+};
+export type MediaPage = {
+	files: AdminFileRecord[];
+	filters: MediaFilters;
+	total: number;
+	pageCount: number;
+	pageSize: number;
 };
 
 type FileRow = {
@@ -93,30 +109,89 @@ function toRecord(row: FileRow): AdminFileRecord {
 	};
 }
 
-export async function listAdminFiles(database: Database): Promise<AdminFileRecord[]> {
-	const { results } = await database
-		.prepare(
-			'SELECT id, user_id, bucket, object_key, public_url, mime_type, size, width, height, created_at FROM files ORDER BY created_at DESC, id DESC LIMIT 200'
-		)
-		.all<FileRow>();
-	const files = results.map(toRecord);
-	if (files.length === 0) return files;
-	const { results: references } = await database
-		.prepare(
-			`SELECT id AS item_id, title, icon_file_id AS file_id, 'icon' AS usage FROM items WHERE icon_file_id IS NOT NULL
-			 UNION ALL
-			 SELECT id AS item_id, title, cover_file_id AS file_id, 'cover' AS usage FROM items WHERE cover_file_id IS NOT NULL
-			 ORDER BY item_id, usage DESC`
-		)
-		.all<{ item_id: number; title: string; file_id: number; usage: 'icon' | 'cover' }>();
-	const byFile = new Map<number, AdminFileRecord['references']>();
-	for (const reference of references) {
-		const group = byFile.get(reference.file_id) ?? [];
-		group.push({ itemId: reference.item_id, title: reference.title, usage: reference.usage });
-		byFile.set(reference.file_id, group);
+export async function loadMediaPage(
+	database: Database,
+	params = new URLSearchParams(),
+	imagesOnly = false
+): Promise<MediaPage> {
+	const filters = mediaFilters(params),
+		clauses = ["f.bucket='FILES'"],
+		values: DatabaseValue[] = [];
+	if (imagesOnly) clauses.push("f.mime_type LIKE 'image/%'");
+	if (filters.q) {
+		clauses.push(
+			'(instr(lower(f.object_key),lower(?))>0 OR CAST(f.id AS TEXT)=? OR EXISTS(SELECT 1 FROM refs r WHERE r.file_id=f.id AND instr(lower(r.title),lower(?))>0))'
+		);
+		values.push(filters.q, filters.q.replace(/^#/, ''), filters.q);
 	}
-	for (const file of files) file.references = byFile.get(file.id) ?? [];
-	return files;
+	const types: Record<string, string[]> = {
+		png: ['image/png'],
+		jpeg: ['image/jpeg'],
+		webp: ['image/webp'],
+		gif: ['image/gif'],
+		svg: ['image/svg+xml'],
+		ico: ['image/x-icon', 'image/vnd.microsoft.icon']
+	};
+	if (filters.kind !== 'all') {
+		const kinds = filters.kind === 'other' ? Object.values(types).flat() : types[filters.kind];
+		clauses.push(
+			`COALESCE(f.mime_type,'') ${filters.kind === 'other' ? 'NOT IN' : 'IN'} (${kinds.map(() => '?').join(',')})`
+		);
+		values.push(...kinds);
+	}
+	if (filters.usage !== 'all')
+		clauses.push(`${filters.usage === 'unused' ? 'NOT ' : ''}${fileReferenceCondition('f.id')}`);
+	if (filters.from) {
+		clauses.push('date(f.created_at)>=?');
+		values.push(filters.from);
+	}
+	if (filters.to) {
+		clauses.push('date(f.created_at)<=?');
+		values.push(filters.to);
+	}
+	const prefix = `WITH refs AS (${FILE_REFERENCES})`,
+		where = clauses.join(' AND ');
+	const total =
+		(
+			await database
+				.prepare(`${prefix} SELECT COUNT(*) AS n FROM files f WHERE ${where}`)
+				.bind(...values)
+				.all<{ n: number }>()
+		).results[0]?.n ?? 0;
+	const pageCount = Math.max(1, Math.ceil(total / MEDIA_PAGE_SIZE));
+	filters.page = Math.min(filters.page, pageCount);
+	const order =
+		filters.order === 'oldest'
+			? 'f.created_at ASC,f.id ASC'
+			: filters.order === 'size'
+				? 'f.size DESC,f.id DESC'
+				: 'f.created_at DESC,f.id DESC';
+	const files = (
+		await database
+			.prepare(
+				`${prefix} SELECT f.* FROM files f WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`
+			)
+			.bind(...values, MEDIA_PAGE_SIZE, (filters.page - 1) * MEDIA_PAGE_SIZE)
+			.all<FileRow>()
+	).results.map(toRecord);
+	if (files.length) {
+		const refs = (
+			await database
+				.prepare(
+					`${prefix} SELECT * FROM refs WHERE file_id IN (${files.map(() => '?').join(',')}) ORDER BY kind,id,usage`
+				)
+				.bind(...files.map((f) => f.id))
+				.all<FileReference & { file_id: number }>()
+		).results;
+		for (const file of files)
+			file.references = refs
+				.filter((r) => r.file_id === file.id)
+				.map(({ kind, id, title, usage }) => ({ kind, id, title, usage }));
+	}
+	return { files, filters, total, pageCount, pageSize: MEDIA_PAGE_SIZE };
+}
+export async function listAdminFiles(database: Database) {
+	return (await loadMediaPage(database)).files;
 }
 
 export async function getAdminFile(
@@ -164,15 +239,51 @@ export async function storeAdminFile(options: {
 	}
 }
 
-export async function deleteAdminFile(database: Database, bucket: FileBucket, id: number) {
+export async function deleteAdminFile(
+	database: Database,
+	bucket: Pick<FileBucket, 'delete'>,
+	id: number,
+	ownerId?: number
+) {
 	const file = await getAdminFile(database, id);
-	if (!file) throw new AdminFileError('文件不存在。', 404);
-	const { results } = await database
-		.prepare('SELECT id FROM items WHERE cover_file_id = ? OR icon_file_id = ? LIMIT 1')
-		.bind(id, id)
-		.all<{ id: number }>();
-	if (results[0]) throw new AdminFileError('文件正在被内容引用，不能删除。', 409);
-
-	await bucket.delete(file.objectKey);
-	await database.prepare('DELETE FROM files WHERE id = ?').bind(id).all();
+	if (!file || (ownerId !== undefined && file.userId !== ownerId))
+		throw new AdminFileError('文件不存在。', 404);
+	if (file.bucket !== 'FILES') throw new AdminFileError('该文件不属于可管理的图片存储。', 409);
+	// The reference check and index removal are one D1 statement. A late reference wins over deletion.
+	const removed = (
+		await database
+			.prepare(
+				`DELETE FROM files WHERE id=? AND bucket='FILES' ${ownerId === undefined ? '' : 'AND user_id=?'} AND NOT ${fileReferenceCondition('files.id')} RETURNING id`
+			)
+			.bind(id, ...(ownerId === undefined ? [] : [ownerId]))
+			.all<{ id: number }>()
+	).results[0];
+	if (!removed)
+		throw new AdminFileError(
+			'文件正在被内容、用户资料或待处理投稿引用，或状态已变化，请刷新核对。',
+			409
+		);
+	try {
+		await bucket.delete(file.objectKey);
+	} catch (error) {
+		// Retain a retryable index when storage deletion fails; never clear references to force deletion.
+		await database
+			.prepare(
+				'INSERT INTO files(id,user_id,bucket,object_key,public_url,mime_type,size,width,height,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)'
+			)
+			.bind(
+				file.id,
+				file.userId,
+				file.bucket,
+				file.objectKey,
+				file.publicUrl,
+				file.mimeType,
+				file.size,
+				file.width,
+				file.height,
+				file.createdAt
+			)
+			.all();
+		throw error;
+	}
 }

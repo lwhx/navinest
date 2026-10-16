@@ -10,7 +10,6 @@
 	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { Category, Item, Tag } from '$lib/types/content';
-	import type { AdminFileRecord } from '$lib/server/services/admin-files';
 
 	type FormState = {
 		message?: string;
@@ -79,19 +78,7 @@
 	);
 	let selectedIcon = $state(untrack(() => value('iconFileId', String(item?.iconFileId ?? ''))));
 	let selectedCover = $state(untrack(() => value('coverFileId', String(item?.coverFileId ?? ''))));
-	let availableFiles = $state<AdminFileRecord[]>([]),
-		mediaLoadFailed = $state(false);
-	const imageFiles = $derived(availableFiles.filter((file) => file.mimeType?.startsWith('image/')));
-	onMount(async () => {
-		try {
-			const response = await fetch(resolve('/api/admin/files'));
-			if (!response.ok) throw new Error('Media listing failed');
-			const body = (await response.json()) as { data?: AdminFileRecord[] };
-			availableFiles = body.data ?? [];
-		} catch {
-			mediaLoadFailed = true;
-		}
-	});
+	let mediaBusy = $state(false);
 	const availableTags = $derived(tags.filter((tag) => !selectedType || tag.type === selectedType));
 
 	function tagChecked(tag: Tag): boolean {
@@ -308,21 +295,26 @@
 		</fieldset>
 		<details class="editor-extra">
 			<summary>图标与封面</summary>
-			{#if mediaLoadFailed}<p class="field-error">
-					媒体列表加载失败，已选图片保留，其他字段仍可保存。
-				</p>{/if}
 			<div class="admin-form-grid">
 				<MediaPicker
 					onchange={() => (dirty = true)}
 					name="iconFileId"
 					label="内容图标"
-					files={imageFiles}
+					disabled={busy}
+					onbusy={(active) => {
+						mediaBusy = active;
+						busy = active;
+					}}
 					bind:value={selectedIcon}
 				/><MediaPicker
 					onchange={() => (dirty = true)}
 					name="coverFileId"
 					label="内容封面"
-					files={imageFiles}
+					disabled={busy}
+					onbusy={(active) => {
+						mediaBusy = active;
+						busy = active;
+					}}
 					bind:value={selectedCover}
 				/>
 			</div>
@@ -436,9 +428,15 @@
 	</fieldset>
 	<div class="admin-form-actions editor-savebar">
 		<span class="admin-form-hint" role="status"
-			>{busy ? '正在保存…' : dirty ? '有未保存的修改' : '请核对后保存'}</span
+			>{mediaBusy
+				? '正在上传图片，请稍候…'
+				: busy
+					? '正在保存…'
+					: dirty
+						? '有未保存的修改'
+						: '请核对后保存'}</span
 		><button class="admin-primary-button" type="submit" disabled={busy}
-			>{busy ? '保存中…' : '保存内容'}</button
+			>{mediaBusy ? '图片上传中…' : busy ? '保存中…' : '保存内容'}</button
 		>{#if onCancel}<button
 				class="admin-secondary-button"
 				type="button"
