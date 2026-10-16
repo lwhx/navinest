@@ -1,30 +1,33 @@
 import { json } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
-import { restoreSiteBackup, validateSiteBackup } from '$lib/server/services/site-backup';
+import { readBackupRequest } from '$lib/server/backup-request';
+import { restoreSiteBackup, BackupRestoreError } from '$lib/server/services/site-backup';
 import type { RequestHandler } from './$types';
-const MAX = 2 * 1024 * 1024;
-export const POST: RequestHandler = async ({ platform, request }) => {
-	const length = Number(request.headers.get('content-length') ?? 0);
-	if (length > MAX) return json({ error: 'Backup exceeds 2 MiB limit' }, { status: 413 });
-	const text = await request.text();
-	if (new TextEncoder().encode(text).byteLength > MAX)
-		return json({ error: 'Backup exceeds 2 MiB limit' }, { status: 413 });
-	let value: unknown;
+export const POST: RequestHandler = async (event) => {
 	try {
-		value = JSON.parse(text);
-	} catch {
-		return json({ error: 'Invalid JSON backup' }, { status: 400 });
-	}
-	const checked = validateSiteBackup(value);
-	if (!checked.valid)
-		return json({ error: 'Invalid backup', details: checked.errors }, { status: 400 });
-	try {
+		const backup = await readBackupRequest(event),
+			backupDigest = event.request.headers.get('x-backup-digest') ?? '',
+			stateDigest = event.request.headers.get('x-backup-state') ?? '';
+		if (
+			!/^[a-f0-9]{64}$/.test(backupDigest) ||
+			!/^[a-f0-9]{64}$/.test(stateDigest) ||
+			event.request.headers.get('x-backup-confirmed') !== 'yes'
+		)
+			throw new BackupRestoreError('请先检查预览，并确认恢复范围。', 428);
 		return json({
 			success: true,
-			restored: await restoreSiteBackup(requireDatabase(platform), checked.data)
+			restored: await restoreSiteBackup(requireDatabase(event.platform), backup, {
+				backupDigest,
+				stateDigest
+			})
 		});
 	} catch (error) {
-		console.error('Backup restore failed', error);
-		return json({ error: 'Restore failed' }, { status: 500 });
+		if (error instanceof BackupRestoreError)
+			return json(
+				{ error: error.message, details: error.details, uncertain: error.uncertain },
+				{ status: error.status }
+			);
+		console.error('Backup restore preparation failed', error);
+		return json({ error: '无法准备恢复，请重新检查预览后再试。' }, { status: 503 });
 	}
 };
