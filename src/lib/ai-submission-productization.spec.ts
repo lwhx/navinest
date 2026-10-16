@@ -12,7 +12,7 @@ describe('AI-assisted submission workflow', () => {
 		expect(page).toContain('webSnapshot: snapshot');
 		expect(page).toContain('aiSuggestion');
 		expect(page).toContain('采用全部可用建议');
-		expect(page).toContain('bind:value={categoryId}');
+		expect(page).toContain('bind:value={draft.categoryId}');
 		expect(page).toContain("fetch('/api/submissions/icon'");
 		expect(page).toContain('uploadIcon');
 		expect(page).toContain('duplicate-warning');

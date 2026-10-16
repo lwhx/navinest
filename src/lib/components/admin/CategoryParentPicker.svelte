@@ -70,6 +70,7 @@
 					id={`${id}-level-${index}`}
 					aria-labelledby={`${id}-label-${index}`}
 					aria-describedby={`${id}-hint`}
+					aria-invalid={error ? true : undefined}
 					disabled={!mounted}
 					value={index === 0 && invalidParent ? value : String(path?.[index]?.id ?? '')}
 					onchange={(event) => choose(index, event.currentTarget.value)}
@@ -143,7 +144,7 @@
 	}
 	.parent-selection-path {
 		margin: 8px 0 0;
-		color: var(--admin-muted);
+		color: var(--admin-muted, var(--ui-muted));
 		font-size: 13px;
 		line-height: 1.6;
 		overflow-wrap: anywhere;

@@ -163,7 +163,7 @@
 				<li>
 					<div>
 						<strong>内容贡献</strong>
-						<p>提交优质网址、文章、应用或书籍。</p>
+						<p>推荐优质网址，分享值得收藏的文章。</p>
 					</div>
 					<a href={resolve('/contribute')}>立即投稿</a>
 				</li>

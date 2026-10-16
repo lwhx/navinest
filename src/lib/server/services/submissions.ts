@@ -1,8 +1,9 @@
 import type { Database } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
 import type { WebSnapshot } from '$lib/server/services/web-enrichment';
+import { isContributionType } from '$lib/contribution-types';
+import { categoryParentPath, type ParentCategory } from '$lib/category-parent-selection';
 
-const TYPES = new Set(['site', 'post', 'app', 'book']);
 export type SubmissionInput = {
 	type: string;
 	title: string;
@@ -123,15 +124,22 @@ function ai(value: SubmissionInput['aiSuggestion']) {
 	};
 }
 function normalize(input: SubmissionInput) {
-	if (!TYPES.has(input.type)) throw new SubmissionError('投稿类型无效。', 'type');
+	if (!isContributionType(input.type))
+		throw new SubmissionError('新投稿仅支持网址和文章。', 'type');
 	const title = input.title.trim();
 	if (!title) throw new SubmissionError('标题不能为空。', 'title');
 	if (title.length > 160) throw new SubmissionError('标题不能超过 160 个字符。', 'title');
 	const summary = optional(input.summary, 500, 'summary'),
 		content = optional(input.content, 20_000, 'content');
 	let url = optional(input.url, 2_048, 'url');
-	if ((input.type === 'site' || input.type === 'app') && !url)
+	if (input.type === 'site' && !url)
 		throw new SubmissionError('该投稿类型必须填写目标网址。', 'url');
+	if (input.type === 'post' && !content) throw new SubmissionError('请填写文章正文。', 'content');
+	if (
+		input.userCategoryId != null &&
+		(!Number.isSafeInteger(input.userCategoryId) || input.userCategoryId <= 0)
+	)
+		throw new SubmissionError('请选择有效的投稿分类。', 'userCategoryId');
 	if (url) {
 		const result = validateExternalTarget(url);
 		if (!result.valid) throw new SubmissionError(result.reason, 'url');
@@ -163,13 +171,15 @@ function normalize(input: SubmissionInput) {
 export async function createSubmission(database: Database, userId: number, input: SubmissionInput) {
 	const data = normalize(input);
 	if (data.payload.userCategoryId) {
-		const category = (
+		const categories = (
 			await database
-				.prepare('SELECT id FROM categories WHERE id=? AND type=? AND is_visible=1 LIMIT 1')
-				.bind(data.payload.userCategoryId, data.type)
-				.all<{ id: number }>()
-		).results[0];
-		if (!category)
+				.prepare(
+					'SELECT id,type,parent_id AS parentId,name FROM categories WHERE type=? AND is_visible=1'
+				)
+				.bind(data.type)
+				.all<ParentCategory>()
+		).results;
+		if (!categoryParentPath(categories, String(data.payload.userCategoryId)))
 			throw new SubmissionError('分类不存在、不可见或内容类型不一致。', 'userCategoryId');
 	}
 	if (data.payload.iconFileId) {
