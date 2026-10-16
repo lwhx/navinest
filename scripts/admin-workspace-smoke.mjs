@@ -11,6 +11,7 @@ import { checkSubmissionReview } from './submission-review-checks.mjs';
 import { checkContributionFlow } from './contribution-flow-checks.mjs';
 import { checkMediaLibrary } from './media-library-checks.mjs';
 import { checkUserSubmissions } from './user-submission-checks.mjs';
+import { checkMessageWorkflow } from './message-workflow-checks.mjs';
 import { checkBackupRestore } from './backup-restore-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
@@ -1136,6 +1137,14 @@ try {
 		adminToken
 	});
 	layouts += await checkUserSubmissions({ browser, baseUrl, command, screenshots, userToken });
+	layouts += await checkMessageWorkflow({
+		browser,
+		baseUrl,
+		command,
+		screenshots,
+		adminToken,
+		userToken
+	});
 	layouts += await checkBackupRestore({
 		browser,
 		baseUrl,
