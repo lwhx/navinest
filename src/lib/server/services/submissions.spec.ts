@@ -12,7 +12,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); CREATE TABLE submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,target_item_id INTEGER,type TEXT NOT NULL,title TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reviewer_id INTEGER,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`
+		`CREATE TABLE files(id INTEGER PRIMARY KEY,user_id INTEGER,bucket TEXT,mime_type TEXT); CREATE TABLE submissions(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,target_item_id INTEGER,type TEXT NOT NULL,title TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',reviewer_id INTEGER,review_token TEXT,review_message TEXT,reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`
 	);
 	const database: Database = {
 		prepare(query) {

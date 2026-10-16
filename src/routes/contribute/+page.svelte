@@ -50,9 +50,12 @@
 			url: values.url ?? '',
 			categoryId: values.userCategoryId ?? '',
 			tagInput: values.tagInput ?? '',
-			iconFileId: null,
-			iconSource: null,
-			iconPreviewUrl: '',
+			iconFileId: Number(values.iconFileId) || null,
+			iconSource:
+				values.iconSource === 'auto' || values.iconSource === 'manual' ? values.iconSource : null,
+			iconPreviewUrl: Number(values.iconFileId)
+				? resolve(`/api/user/files/${Number(values.iconFileId)}` as '/')
+				: '',
 			snapshot: null,
 			suggestion: null,
 			ai: { available: false },
@@ -62,10 +65,41 @@
 	}
 	let drafts = $state<Record<ContributionType, Draft>>(
 		untrack(() => ({
-			site: blank(form?.values?.type === 'site' ? form.values : undefined),
-			post: blank(form?.values?.type === 'post' ? form.values : undefined)
+			site: blank(
+				form?.values?.type === 'site'
+					? form.values
+					: data.resubmission?.draft?.type === 'site'
+						? data.resubmission.draft
+						: undefined
+			),
+			post: blank(
+				form?.values?.type === 'post'
+					? form.values
+					: data.resubmission?.draft?.type === 'post'
+						? data.resubmission.draft
+						: undefined
+			)
 		}))
 	);
+	let sourceId = $derived(data.resubmission?.source.id ?? null);
+	let initialSourceId = $state(untrack(() => sourceId));
+	$effect(() => {
+		const current = sourceId;
+		if (untrack(() => initialSourceId) !== current)
+			untrack(() => {
+				drafts = {
+					site: blank(
+						data.resubmission?.draft?.type === 'site' ? data.resubmission.draft : undefined
+					),
+					post: blank(
+						data.resubmission?.draft?.type === 'post' ? data.resubmission.draft : undefined
+					)
+				};
+				message = '';
+				fields = {};
+				initialSourceId = current;
+			});
+	});
 	let type = $derived(data.contributionType);
 	let draft = $derived(drafts[type]);
 	let availableCategories = $derived(data.categories.filter((category) => category.type === type));
@@ -226,6 +260,7 @@
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
+					sourceSubmissionId: sourceId,
 					type,
 					title: draft.title,
 					summary: draft.summary,
@@ -245,7 +280,9 @@
 				throw new Error(body.error ?? '投稿失败。');
 			}
 			submitted = true;
-			location.href = resolve('/user/submissions');
+			location.href = sourceId
+				? resolve(`/user/submissions?submission=${body.id}#submission-detail` as '/')
+				: resolve('/user/submissions');
 		} catch (error) {
 			message = error instanceof Error ? error.message : '提交结果未确认，请先查看投稿记录核对。';
 			submitting = false;
@@ -267,23 +304,43 @@
 		: '分享你的经验与发现，填写正文后提交审核。'}
 	eyebrow="CONTRIBUTE"
 >
-	{#if data.submissionsOpen}
-		<div class="contribution-types" role="group" aria-label="投稿类型">
-			{#each [{ value: 'site', label: '网址', description: '收录网站与在线工具' }, { value: 'post', label: '文章', description: '分享正文与阅读内容' }] as option (option.value)}
+	{#if data.resubmission}<section class="account-card resubmission-note" aria-label="修改重投说明">
+			<h2>修改投稿 #{data.resubmission.source.id}</h2>
+			<p>审核意见：{data.resubmission.source.reviewMessage || '暂无审核意见。'}</p>
+			{#if data.resubmission.draft}<p>原内容已带入。修改后会生成新投稿，原记录和审核意见保留。</p>
+				{#if data.resubmission.source.categoryId && !data.resubmission.source.categoryPath}<p>
+						原分类已不可用，已清空，请重新选择。
+					</p>{/if}
+				{#if data.resubmission.source.iconFileId && !data.resubmission.source.iconAvailable}<p>
+						原图标已不可用，已移除，可重新上传。
+					</p>{/if}
+			{:else}<p>这条投稿当前不可重投，或已经生成了修改后的投稿。</p>{/if}
+			<div class="account-actions">
 				<a
-					href={resolve(`/contribute?type=${option.value}`)}
-					aria-current={type === option.value ? 'page' : undefined}
-					aria-disabled={busy || undefined}
-					onclick={(event) => {
-						if (busy) event.preventDefault();
-						else {
-							message = '';
-							fields = {};
-						}
-					}}><strong>{option.label}</strong><span>{option.description}</span></a
-				>
-			{/each}
-		</div>
+					class="account-button secondary"
+					href={resolve(
+						`/user/submissions?submission=${data.resubmission.source.childId ?? data.resubmission.source.id}#submission-detail` as '/'
+					)}>{data.resubmission.source.childId ? '查看重投记录' : '返回原投稿'}</a
+				><a class="account-button secondary" href={resolve('/contribute')}>新建其他投稿</a>
+			</div>
+		</section>{/if}
+	{#if data.submissionsOpen && (!data.resubmission || data.resubmission.draft)}
+		{#if !data.resubmission}<div class="contribution-types" role="group" aria-label="投稿类型">
+				{#each [{ value: 'site', label: '网址', description: '收录网站与在线工具' }, { value: 'post', label: '文章', description: '分享正文与阅读内容' }] as option (option.value)}
+					<a
+						href={resolve(`/contribute?type=${option.value}`)}
+						aria-current={type === option.value ? 'page' : undefined}
+						aria-disabled={busy || undefined}
+						onclick={(event) => {
+							if (busy) event.preventDefault();
+							else {
+								message = '';
+								fields = {};
+							}
+						}}><strong>{option.label}</strong><span>{option.description}</span></a
+					>
+				{/each}
+			</div>{/if}
 		<form
 			class="contribute-flow"
 			method="POST"
@@ -294,6 +351,9 @@
 			}}
 		>
 			<input type="hidden" name="type" value={type} />
+			<input type="hidden" name="sourceSubmissionId" value={sourceId ?? ''} />
+			<input type="hidden" name="iconFileId" value={draft.iconFileId ?? ''} />
+			<input type="hidden" name="iconSource" value={draft.iconSource ?? ''} />
 			<fieldset class="flow-fields" disabled={submitting}>
 				<legend class="sr-only">{type === 'site' ? '网址投稿内容' : '文章投稿内容'}</legend>
 				{#if message}<p class="contribution-message" role="alert">{message}</p>{/if}
@@ -514,7 +574,7 @@
 				</div>
 			</fieldset>
 		</form>
-	{:else}<section class="account-card">
+	{:else if !data.submissionsOpen}<section class="account-card">
 			<h2>投稿暂未开放</h2>
 			<p>管理员已暂停接收新的投稿，请稍后再来。</p>
 		</section>{/if}
@@ -561,6 +621,28 @@
 {/snippet}
 
 <style>
+	.resubmission-note {
+		color: var(--ui-text);
+		background: var(--ui-surface);
+		border-color: var(--ui-line);
+		overflow-wrap: anywhere;
+	}
+	.resubmission-note h2 {
+		color: var(--ui-heading);
+		font-size: 18px;
+	}
+	.resubmission-note p {
+		font-size: 15px;
+		line-height: 1.8;
+		white-space: pre-wrap;
+	}
+	.resubmission-note .account-button {
+		min-height: 44px;
+		font-size: 13px;
+		color: var(--ui-text);
+		background: var(--ui-soft);
+		border-color: var(--ui-line);
+	}
 	.contribute-flow,
 	.flow-fields {
 		min-width: 0;

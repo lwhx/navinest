@@ -1,3 +1,4 @@
+import { resubmissionSourceCondition } from './submission-resubmission';
 import type { Database } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
 import type { WebSnapshot } from '$lib/server/services/web-enrichment';
@@ -5,6 +6,7 @@ import { isContributionType } from '$lib/contribution-types';
 import { categoryParentPath, type ParentCategory } from '$lib/category-parent-selection';
 
 export type SubmissionInput = {
+	sourceSubmissionId?: number | null;
 	type: string;
 	title: string;
 	summary: string | null;
@@ -170,6 +172,24 @@ function normalize(input: SubmissionInput) {
 }
 export async function createSubmission(database: Database, userId: number, input: SubmissionInput) {
 	const data = normalize(input);
+	const sourceId = input.sourceSubmissionId ?? null;
+	if (sourceId !== null) {
+		if (!Number.isSafeInteger(sourceId) || sourceId <= 0)
+			throw new SubmissionError('原投稿编号无效。', 'sourceSubmissionId');
+		const source = (
+			await database
+				.prepare(
+					`SELECT source.id FROM submissions source WHERE source.id=? AND source.user_id=? AND source.type=? AND ${resubmissionSourceCondition}`
+				)
+				.bind(sourceId, userId, data.type)
+				.all<{ id: number }>()
+		).results[0];
+		if (!source)
+			throw new SubmissionError(
+				'原投稿不可重投，或已有修改后的投稿。请返回投稿记录核对。',
+				'sourceSubmissionId'
+			);
+	}
 	if (data.payload.userCategoryId) {
 		const categories = (
 			await database
@@ -196,20 +216,32 @@ export async function createSubmission(database: Database, userId: number, input
 	const row = (
 		await database
 			.prepare(
-				"INSERT INTO submissions(user_id,target_item_id,type,title,payload_json,status) SELECT ?,NULL,?,?,?,'pending' WHERE ? IS NULL OR EXISTS(SELECT 1 FROM files WHERE id=? AND user_id=? AND bucket='FILES' AND mime_type LIKE 'image/%') RETURNING id"
+				`INSERT INTO submissions(user_id,target_item_id,type,title,payload_json,status) SELECT ?,NULL,?,?,?,'pending'
+				 WHERE (? IS NULL OR EXISTS(SELECT 1 FROM files WHERE id=? AND user_id=? AND bucket='FILES' AND mime_type LIKE 'image/%'))
+				 AND (? IS NULL OR EXISTS(SELECT 1 FROM submissions source WHERE source.id=? AND source.user_id=? AND source.type=? AND ${resubmissionSourceCondition})) RETURNING id`
 			)
 			.bind(
 				userId,
 				data.type,
 				data.title,
-				JSON.stringify(data.payload),
+				JSON.stringify({ ...data.payload, ...(sourceId ? { sourceSubmissionId: sourceId } : {}) }),
 				data.payload.iconFileId,
 				data.payload.iconFileId,
-				userId
+				userId,
+				sourceId,
+				sourceId,
+				userId,
+				data.type
 			)
 			.all<{ id: number }>()
 	).results[0];
-	if (!row) throw new SubmissionError('所选图标已失效，请重新选择后提交。', 'iconFileId');
+	if (!row)
+		throw new SubmissionError(
+			sourceId
+				? '原投稿或图标状态已改变，请返回投稿记录核对后重试。'
+				: '所选图标已失效，请重新选择后提交。',
+			sourceId ? 'sourceSubmissionId' : 'iconFileId'
+		);
 	return row.id;
 }
 export async function listUserSubmissions(database: Database, userId: number) {

@@ -1,18 +1,29 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import { listCategories } from '$lib/server/services/categories';
 import { loadSiteSettings } from '$lib/server/services/site-settings';
 import { isContributionType } from '$lib/contribution-types';
+import { loadResubmission } from '$lib/server/services/user-submissions';
+import { submissionId } from '$lib/user-submissions';
 import { createSubmission, SubmissionError } from '$lib/server/services/submissions';
 import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	if (!locals.user) redirect(303, '/login');
 	const database = getDatabase(platform);
+	const requested = url.searchParams.get('resubmit');
+	const resubmission =
+		requested && database
+			? await loadResubmission(database, locals.user.id, submissionId(requested) ?? 0)
+			: null;
+	if (requested && !resubmission) error(404, '找不到这条投稿。');
 	return {
+		resubmission,
 		user: locals.user,
-		contributionType: isContributionType(url.searchParams.get('type'))
-			? (url.searchParams.get('type') as 'site' | 'post')
-			: ('site' as const),
+		contributionType:
+			resubmission?.draft?.type ??
+			(isContributionType(url.searchParams.get('type'))
+				? (url.searchParams.get('type') as 'site' | 'post')
+				: ('site' as const)),
 		submissionsOpen: (await loadSiteSettings(database)).submissionsOpen,
 		categories: database
 			? (await listCategories(database, { visibleOnly: true })).filter((category) =>
@@ -27,10 +38,17 @@ export const actions: Actions = {
 		if (!locals.user) redirect(303, '/login');
 		const form = await request.formData();
 		const values: Record<string, string> = Object.fromEntries(
-			['type', 'title', 'summary', 'content', 'url', 'tagInput'].map((name) => [
-				name,
-				String(form.get(name) ?? '')
-			])
+			[
+				'type',
+				'title',
+				'summary',
+				'content',
+				'url',
+				'tagInput',
+				'iconFileId',
+				'iconSource',
+				'sourceSubmissionId'
+			].map((name) => [name, String(form.get(name) ?? '')])
 		);
 		values.userCategoryId = String(form.get('categoryId') ?? '');
 		const database = requireDatabase(platform);
@@ -40,8 +58,13 @@ export const actions: Actions = {
 				fields: {} as Record<string, string>,
 				values
 			});
+		let id: number;
 		try {
-			await createSubmission(database, locals.user.id, {
+			id = await createSubmission(database, locals.user.id, {
+				sourceSubmissionId: values.sourceSubmissionId ? Number(values.sourceSubmissionId) : null,
+				iconFileId: values.iconFileId ? Number(values.iconFileId) : null,
+				iconSource:
+					values.iconSource === 'auto' || values.iconSource === 'manual' ? values.iconSource : null,
 				type: values.type,
 				title: values.title,
 				summary: values.summary,
@@ -58,6 +81,11 @@ export const actions: Actions = {
 				values
 			});
 		}
-		redirect(303, '/user/submissions');
+		redirect(
+			303,
+			values.sourceSubmissionId
+				? `/user/submissions?submission=${id}#submission-detail`
+				: '/user/submissions'
+		);
 	}
 };
