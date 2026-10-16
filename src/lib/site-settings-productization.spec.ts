@@ -36,7 +36,7 @@ describe('site settings productization', () => {
 
 	it('gates contributions on the submissions switch', () => {
 		expect(read('src/routes/contribute/+page.server.ts')).toContain('submissionsOpen');
-		expect(read('src/routes/contribute/+page.svelte')).toContain('{#if data.submissionsOpen}');
+		expect(read('src/routes/contribute/+page.svelte')).toContain('{#if data.submissionsOpen');
 		for (const path of [
 			'src/routes/api/submissions/+server.ts',
 			'src/routes/api/submissions/enrich/+server.ts'

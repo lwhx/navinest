@@ -18,6 +18,10 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 		const web = record(body.webSnapshot),
 			ai = record(body.aiSuggestion),
 			id = await createSubmission(requireDatabase(platform), locals.user.id, {
+				sourceSubmissionId:
+					body.sourceSubmissionId == null || body.sourceSubmissionId === ''
+						? null
+						: Number(body.sourceSubmissionId),
 				type: String(body.type ?? ''),
 				title: String(body.title ?? ''),
 				summary: body.summary === null ? null : String(body.summary ?? ''),
