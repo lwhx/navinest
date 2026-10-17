@@ -1,5 +1,7 @@
 import type { Database, DatabaseStatement } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
+import { validateHotSourceFetchInput } from './hot-source-config';
+import { hotErrorDetail, type HotErrorCode } from '$lib/hot-health';
 import { assertPublicFetchTarget } from '$lib/server/services/web-enrichment';
 
 export type HotItem = {
@@ -33,7 +35,8 @@ type SourceRow = {
 export class HotNewsError extends Error {
 	constructor(
 		message: string,
-		public readonly status = 400
+		public readonly status = 400,
+		public readonly code?: HotErrorCode
 	) {
 		super(message);
 		this.name = 'HotNewsError';
@@ -42,7 +45,10 @@ export class HotNewsError extends Error {
 const maxResponseBytes = 2 * 1024 * 1024;
 async function responseText(response: Response) {
 	const declared = Number(response.headers.get('content-length') ?? 0);
-	if (declared > maxResponseBytes) throw new HotNewsError('热点订阅响应过大。', 502);
+	if (declared > maxResponseBytes) {
+		await response.body?.cancel();
+		throw new HotNewsError('热点订阅响应过大。', 502, 'too_large');
+	}
 	if (!response.body) return '';
 	const reader = response.body.getReader(),
 		chunks: Uint8Array[] = [];
@@ -53,7 +59,7 @@ async function responseText(response: Response) {
 		size += value.byteLength;
 		if (size > maxResponseBytes) {
 			await reader.cancel();
-			throw new HotNewsError('热点订阅响应过大。', 502);
+			throw new HotNewsError('热点订阅响应过大。', 502, 'too_large');
 		}
 		chunks.push(value);
 	}
@@ -204,6 +210,7 @@ async function safeFetch(
 		const response = await fetcher(current, { headers, redirect: 'manual', signal });
 		if (response.status < 300 || response.status >= 400) return response;
 		const location = response.headers.get('location');
+		await response.body?.cancel();
 		if (!location) throw new HotNewsError('热榜重定向缺少目标地址。', 502);
 		const next = validateExternalTarget(new URL(location, current).toString());
 		if (!next.valid) throw new HotNewsError('热榜重定向目标不安全。', 502);
@@ -222,7 +229,7 @@ function elementPattern(selector: string) {
 	const tag = match[1]?.toLowerCase(),
 		classes = match[2] ? match[2].slice(1).split('.') : [],
 		guards = classes.map((name) => `(?=[^>]*class=["'][^"']*\\b${escapeRegExp(name)}\\b)`).join('');
-	const open = tag ? `<${tag}\\b${guards}[^>]*>` : `(?<tag>[a-z][a-z0-9-]*)\\b${guards}[^>]*>`,
+	const open = tag ? `<${tag}\\b${guards}[^>]*>` : `<(?<tag>[a-z][a-z0-9-]*)\\b${guards}[^>]*>`,
 		close = tag ? `<\\/${tag}>` : '</\\k<tag>>';
 	return new RegExp(`(?<open>${open})(?<body>[\\s\\S]*?)${close}`, 'gi');
 }
@@ -288,6 +295,94 @@ export function parseHotHtml(html: string, config: HtmlParserConfig = {}) {
 	if (!items.length) throw new HotNewsError('HTML 页面未解析到有效条目。');
 	return items.map((item, index) => ({ ...item, rank: index + 1 }));
 }
+export type HotFetchInput = {
+	type: string;
+	url: string;
+	headers: Record<string, string>;
+	parser: Record<string, string>;
+};
+export async function inspectHotSource(
+	input: HotFetchInput,
+	fetcher: typeof fetch = fetch,
+	resolveHost?: (host: string) => Promise<string[]>
+) {
+	const validation = validateHotSourceFetchInput({
+		type: input.type,
+		url: input.url,
+		headersJson: JSON.stringify(input.headers),
+		parserJson: JSON.stringify(input.parser)
+	});
+	if (!validation.valid)
+		throw new HotNewsError(Object.values(validation.errors).join(' '), 422, 'configuration');
+	const controller = new AbortController(),
+		timer = setTimeout(() => controller.abort(), 20000),
+		started = Date.now();
+	try {
+		const response = await safeFetch(
+			input.url,
+			input.headers,
+			fetcher,
+			resolveHost,
+			controller.signal
+		);
+		if (!response.ok) {
+			await response.body?.cancel();
+			throw new HotNewsError(`热榜请求失败：HTTP ${response.status}`, 502, 'http');
+		}
+		const contentType = (response.headers.get('content-type') ?? '未提供')
+				.split(';')[0]
+				.slice(0, 100),
+			body = await responseText(response);
+		let items: HotItem[];
+		if (input.type === 'rss' && /^\s*(?:<!doctype\s+html|<html)/i.test(body))
+			throw new HotNewsError(
+				'订阅返回了网页，未检测到 RSS/Atom 内容，请核对地址及上游状态。',
+				422,
+				'parse'
+			);
+		try {
+			items =
+				input.type === 'json'
+					? parseHotJson(JSON.parse(body), input.parser)
+					: input.type === 'html'
+						? parseHotHtml(body, input.parser)
+						: parseHotRss(body);
+		} catch (error) {
+			if (error instanceof HotNewsError) throw new HotNewsError(error.message, 422, 'parse');
+			throw new HotNewsError(
+				'响应内容无法按所选格式解析，请检查订阅类型与字段配置。',
+				422,
+				'parse'
+			);
+		}
+		if (!items.length)
+			throw new HotNewsError('热榜没有有效条目，请检查标题、链接字段及上游内容。', 422, 'empty');
+		return {
+			items,
+			count: items.length,
+			contentType,
+			latencyMs: Date.now() - started,
+			checkedAt: new Date().toISOString()
+		};
+	} catch (error) {
+		if (error instanceof HotNewsError) throw error;
+		if (controller.signal.aborted)
+			throw new HotNewsError('热榜请求超时，请稍后重试。', 504, 'timeout');
+		if (error instanceof Error && /私网|保留地址|不安全|公网|凭据/.test(error.message))
+			throw new HotNewsError(error.message, 400, 'unsafe');
+		throw new HotNewsError('无法获取订阅内容，请检查地址和源站可用性。', 502, 'network');
+	} finally {
+		clearTimeout(timer);
+	}
+}
+export function hotFailure(error: unknown) {
+	const message =
+		error instanceof HotNewsError ? error.message : '缓存写入失败，请稍后重试并核对结果。';
+	return {
+		error: message,
+		...hotErrorDetail(message, error instanceof HotNewsError ? error.code : 'storage')
+	};
+}
 export async function refreshHotSource(
 	database: Database,
 	id: number,
@@ -299,65 +394,80 @@ export async function refreshHotSource(
 	const lease = (
 		await database
 			.prepare(
-				"UPDATE hot_sources SET refresh_token=?,refresh_started_at=CURRENT_TIMESTAMP WHERE id=? AND (refresh_token IS NULL OR refresh_started_at<datetime('now','-5 minutes')) RETURNING id"
+				"UPDATE hot_sources SET refresh_token=?,refresh_started_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),last_fetch_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND (refresh_token IS NULL OR refresh_started_at IS NULL OR unixepoch(refresh_started_at)<unixepoch('now')-300) RETURNING id"
 			)
 			.bind(token, id)
 			.all<{ id: number }>()
 	).results[0];
-	if (!lease) throw new HotNewsError('该榜单正在刷新，请稍后重试。', 409);
-	const controller = new AbortController(),
-		timeout = setTimeout(() => controller.abort(), 20_000);
+	if (!lease) throw new HotNewsError('该榜单正在刷新，请稍后重试。', 409, 'conflict');
 	try {
-		const headers = JSON.parse(row.headers_json) as Record<string, string>;
-		const response = await safeFetch(row.url, headers, fetcher, resolveHost, controller.signal);
-		if (!response.ok) throw new HotNewsError(`热榜请求失败：HTTP ${response.status}`, 502);
-		const body = await responseText(response);
-		const items =
-			row.type === 'json'
-				? parseHotJson(JSON.parse(body), JSON.parse(row.parser_json))
-				: row.type === 'html'
-					? parseHotHtml(body, JSON.parse(row.parser_json))
-					: parseHotRss(body);
-		if (!items.length) throw new HotNewsError('热榜没有有效条目。');
-		const currentLease = (
-			await database
-				.prepare('SELECT id FROM hot_sources WHERE id=? AND refresh_token=? LIMIT 1')
-				.bind(id, token)
-				.all<{ id: number }>()
-		).results[0];
-		if (!currentLease) throw new HotNewsError('刷新租约已失效，请重试。', 409);
-		const statements: DatabaseStatement[] = [
-			database.prepare('DELETE FROM hot_items WHERE source_id=?').bind(id),
-			...items.map((item) =>
-				database
-					.prepare(
-						'INSERT INTO hot_items(source_id,rank,title,url,hot_value,extra_json) VALUES(?,?,?,?,?,?)'
-					)
-					.bind(id, item.rank, item.title, item.url, item.hotValue, JSON.stringify(item.extra))
-			),
-			database
-				.prepare(
-					'UPDATE hot_sources SET last_fetch_at=CURRENT_TIMESTAMP,last_success_at=CURRENT_TIMESTAMP,last_error=NULL,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND refresh_token=?'
-				)
-				.bind(id, token)
-		];
+		let headers: Record<string, string>, parser: Record<string, string>;
+		try {
+			headers = JSON.parse(row.headers_json);
+			parser = JSON.parse(row.parser_json);
+			if (
+				!headers ||
+				typeof headers !== 'object' ||
+				Array.isArray(headers) ||
+				!parser ||
+				typeof parser !== 'object' ||
+				Array.isArray(parser)
+			)
+				throw new Error();
+		} catch {
+			throw new HotNewsError(
+				'请求头或解析配置不是有效 JSON 对象，请编辑修正。',
+				422,
+				'configuration'
+			);
+		}
+		const { items } = await inspectHotSource(
+			{ type: row.type, url: row.url, headers, parser },
+			fetcher,
+			resolveHost
+		);
 		const batched = database as Database & {
 			batch?: (statements: DatabaseStatement[]) => Promise<unknown>;
 		};
-		if (batched.batch) await batched.batch(statements);
-		else for (const statement of statements) await statement.all();
+		if (!batched.batch)
+			throw new HotNewsError('当前数据库不支持原子刷新，旧缓存已保留。', 503, 'storage');
+		const current =
+			'id=? AND refresh_token=? AND type=? AND url=? AND headers_json=? AND parser_json=? AND is_enabled=?';
+		await batched.batch([
+			database
+				.prepare(
+					`SELECT CASE WHEN EXISTS(SELECT 1 FROM hot_sources WHERE ${current}) THEN 1 ELSE json('HOT_SOURCE_CHANGED') END`
+				)
+				.bind(id, token, row.type, row.url, row.headers_json, row.parser_json, row.is_enabled),
+			database.prepare('DELETE FROM hot_items WHERE source_id=?').bind(id),
+			database
+				.prepare(
+					"INSERT INTO hot_items(source_id,rank,title,url,hot_value,extra_json) SELECT ?,value->>'$.rank',value->>'$.title',value->>'$.url',value->>'$.hotValue',value->>'$.extraJson' FROM json_each(?)"
+				)
+				.bind(
+					id,
+					JSON.stringify(items.map((item) => ({ ...item, extraJson: JSON.stringify(item.extra) })))
+				),
+			database
+				.prepare(
+					"UPDATE hot_sources SET last_success_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),last_error=NULL,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND refresh_token=?"
+				)
+				.bind(id, token)
+		]);
 		return { sourceId: id, count: items.length };
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const normalized =
+			error instanceof Error && /HOT_SOURCE_CHANGED|malformed JSON/i.test(error.message)
+				? new HotNewsError('配置或刷新状态已变化，请重新读取后重试。', 409, 'conflict')
+				: error;
+		const message = hotFailure(normalized).error;
 		await database
 			.prepare(
 				'UPDATE hot_sources SET last_error=?,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND refresh_token=?'
 			)
-			.bind(message.slice(0, 500), id, token)
+			.bind(message, id, token)
 			.all();
-		throw error;
-	} finally {
-		clearTimeout(timeout);
+		throw normalized;
 	}
 }
 export async function refreshEnabledHotSources(
@@ -372,22 +482,21 @@ export async function refreshEnabledHotSources(
 			)
 			.all<{ id: number; is_due: number }>()
 	).results;
-	return Promise.all(
-		rows.map(async ({ id, is_due }) => {
-			if (is_due !== 1)
-				return { ok: true as const, sourceId: id, count: 0, skipped: true as const };
-			try {
-				return {
-					ok: true as const,
-					...(await refreshHotSource(database, id, fetcher, resolveHost))
-				};
-			} catch (error) {
-				return {
-					ok: false as const,
-					sourceId: id,
-					error: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})
-	);
+	const results = [];
+	// Bound concurrency: one source cannot fan out a batch of requests or row-by-row writes.
+	for (const { id, is_due } of rows) {
+		if (is_due !== 1) {
+			results.push({ ok: true as const, sourceId: id, count: 0, skipped: true as const });
+			continue;
+		}
+		try {
+			results.push({
+				ok: true as const,
+				...(await refreshHotSource(database, id, fetcher, resolveHost))
+			});
+		} catch (error) {
+			results.push({ ok: false as const, sourceId: id, error: hotFailure(error).error });
+		}
+	}
+	return results;
 }

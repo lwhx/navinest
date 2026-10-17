@@ -61,7 +61,14 @@ export async function listHotNews(database: Database) {
 					title: item.title,
 					url: item.url,
 					hotValue: item.hot_value,
-					extra: JSON.parse(item.extra_json),
+					extra: (() => {
+						try {
+							const value = JSON.parse(item.extra_json);
+							return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+						} catch {
+							return {};
+						}
+					})(),
 					fetchedAt: item.fetched_at
 				}))
 			};

@@ -1,5 +1,5 @@
 import type { Database } from '$lib/server/db';
-import { sendAlertWebhook, type CronAlert } from '$lib/server/services/alert-webhook';
+import { reportHotAlerts } from './hot-health-alerts';
 
 export type RefreshResult =
 	| { ok: true; sourceId: number; count: number; skipped?: boolean }
@@ -10,9 +10,7 @@ export type CronAlertOptions = {
 	runId?: number;
 	alertWebhookUrl?: string;
 	fetcher?: typeof fetch;
-	staleAfterHours?: number;
 };
-export const DEFAULT_STALE_HOURS = 48;
 type RunRow = {
 	id: number;
 	cron: string;
@@ -43,31 +41,6 @@ export async function alertActiveAdmins(
 		)
 		.bind(title, content, JSON.stringify(data))
 		.all();
-}
-/** Enabled boards whose last success is older than the threshold, i.e. boards that silently stopped updating. */
-async function staleEnabledSources(database: Database, hours: number) {
-	const rows = (
-		await database
-			.prepare(
-				"SELECT id,name,last_success_at FROM hot_sources WHERE is_enabled=1 AND (last_success_at IS NULL OR unixepoch(last_success_at)<=unixepoch('now')-?) ORDER BY id"
-			)
-			.bind(Math.max(1, Math.trunc(hours)) * 3600)
-			.all<{ id: number; name: string; last_success_at: string | null }>()
-	).results;
-	return rows.map((row) => ({
-		sourceId: row.id,
-		name: row.name,
-		lastSuccessAt: row.last_success_at
-	}));
-}
-/** External webhook delivery is best effort: it must never fail the cron run itself. */
-async function notify(options: CronAlertOptions, alert: CronAlert) {
-	if (!options.alertWebhookUrl) return;
-	try {
-		await sendAlertWebhook(options.alertWebhookUrl, alert, options.fetcher);
-	} catch {
-		// ignored on purpose
-	}
 }
 export async function executeMonitoredHotnewsCron(
 	database: Database,
@@ -101,49 +74,21 @@ export async function executeMonitoredHotnewsCron(
 				)
 				.bind(status, results.length, succeeded, failed, JSON.stringify(results), inserted.id)
 				.all();
-		if (failed > 0) {
-			const failures = results
-				.filter((x): x is Extract<RefreshResult, { ok: false }> => !x.ok)
-				.map((x) => ({ sourceId: x.sourceId, error: cleanError(x.error) }));
-			const staleSources = await staleEnabledSources(
-				database,
-				options.staleAfterHours ?? DEFAULT_STALE_HOURS
-			);
-			await alertActiveAdmins(
-				database,
-				'热榜定时刷新异常',
-				`${failed} 个热榜源刷新失败，请在后台定时任务页面查看详情。${staleSources.length ? `当前有 ${staleSources.length} 个榜单长时间未成功更新。` : ''}`,
-				{ cronRunId: inserted.id, scheduledAt, failures, staleSources }
-			);
-			await notify(options, {
-				title: `热榜定时刷新异常（${failed} 个源失败）`,
-				content: `${failed} 个热榜源刷新失败，请在后台定时任务页面查看详情。\n${failures.map((failure) => `#${failure.sourceId} ${failure.error}`).join('\n')}`,
-				data: { cronRunId: inserted.id, cron, scheduledAt, status, failures, staleSources }
-			});
-		} else {
-			const staleSources = await staleEnabledSources(
-				database,
-				options.staleAfterHours ?? DEFAULT_STALE_HOURS
-			);
-			if (staleSources.length)
-				await notify(options, {
-					title: `热榜榜单长时间未更新（${staleSources.length} 个）`,
-					content: `以下榜单超过 ${options.staleAfterHours ?? DEFAULT_STALE_HOURS} 小时没有成功更新：\n${staleSources
-						.map(
-							(source) =>
-								`#${source.sourceId} ${source.name}（最后成功：${source.lastSuccessAt ?? '从未'}）`
-						)
-						.join('\n')}`,
-					data: { cronRunId: inserted.id, cron, scheduledAt, status, staleSources }
-				});
-		}
+		const alert = await reportHotAlerts(database, `run:${inserted.id}`, {
+			alertWebhookUrl: options.alertWebhookUrl,
+			fetcher: options.fetcher,
+			taskObserved: true,
+			context: { cronRunId: inserted.id, scheduledAt, cron, status }
+		});
+
 		return {
 			runId: inserted.id,
 			status,
 			totalSources: results.length,
 			succeededSources: succeeded,
 			failedSources: failed,
-			results
+			results,
+			alertWarning: alert.warning
 		};
 	} catch (error) {
 		const message = cleanError(error);
@@ -154,17 +99,14 @@ export async function executeMonitoredHotnewsCron(
 				)
 				.bind(message, inserted.id)
 				.all();
-		await alertActiveAdmins(
-			database,
-			'热榜定时任务失败',
-			'热榜定时任务未能完成，请在后台定时任务页面查看详情。',
-			{ cronRunId: inserted.id, scheduledAt, error: message }
-		);
-		await notify(options, {
-			title: '热榜定时任务失败',
-			content: `热榜定时任务未能完成：${message}`,
-			data: { cronRunId: inserted.id, cron, scheduledAt, error: message }
+		await reportHotAlerts(database, `run:${inserted.id}`, {
+			fatal: message,
+			alertWebhookUrl: options.alertWebhookUrl,
+			fetcher: options.fetcher,
+			taskObserved: true,
+			context: { cronRunId: inserted.id, scheduledAt, cron, status: 'failed' }
 		});
+
 		throw error;
 	}
 }
