@@ -1,29 +1,32 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import PublicShell from '$lib/components/PublicShell.svelte';
+	import { hotHealth, hotDate } from '$lib/hot-health';
 	import { appConfig } from '$lib/config';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	let total = $derived(data.sources.reduce((sum, source) => sum + source.items.length, 0));
-	function age(value: string | null) {
-		if (!value) return '等待首次更新';
-		return new Intl.DateTimeFormat('zh-CN', {
-			month: '2-digit',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		}).format(new Date(value.replace(' ', 'T') + (value.includes('Z') ? '' : 'Z')));
-	}
+	const age = hotDate;
 	function boardStatus(source: (typeof data.sources)[number]) {
-		if (source.hasError) return { kind: 'error', label: '更新异常', detail: '显示上次成功数据' };
-		const updatedAt = source.lastSuccessAt ?? source.lastFetchAt;
-		if (!updatedAt) return { kind: 'waiting', label: '等待更新', detail: '尚无成功数据' };
-		const timestamp = new Date(updatedAt.replace(' ', 'T') + (updatedAt.includes('Z') ? '' : 'Z'));
-		if (Date.now() - timestamp.getTime() > 36 * 60 * 60 * 1000)
-			return { kind: 'stale', label: '数据较旧', detail: '等待下一次更新' };
-		return { kind: 'healthy', label: '更新正常', detail: '数据已缓存' };
+		const state = hotHealth({
+			lastSuccessAt: source.lastSuccessAt,
+			hasError: source.hasError,
+			itemCount: source.items.length
+		});
+		return {
+			...state,
+			kind: state.kind === 'failed' ? 'error' : state.kind,
+			label: state.kind === 'failed' ? '更新异常' : state.label,
+			detail:
+				state.kind === 'failed'
+					? source.items.length
+						? '显示上次成功数据'
+						: '尚无可用缓存'
+					: state.detail
+		};
 	}
+
 	function accentColors(hex: string) {
 		const channels = [1, 3, 5].map(
 				(index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255
@@ -88,7 +91,7 @@
 						<div class="hot-board-meta">
 							<span class={`board-status ${boardStatus(source).kind}`}
 								>{boardStatus(source).label}</span
-							><time>{age(source.lastSuccessAt ?? source.lastFetchAt)}</time>
+							><time>{age(source.lastSuccessAt)}</time>
 						</div>
 					</header>
 					{#if source.items.length}<ol class="hot-board-rank">
@@ -107,8 +110,12 @@
 									{#if item.hotValue}<strong class="hot-value">{item.hotValue}</strong>{/if}
 								</li>{/each}
 						</ol>{:else}<div class="board-empty">
-							<strong>等待首次刷新</strong>
-							<p>刷新订阅后将在这里显示热点。</p>
+							<strong>{source.hasError ? '暂无可用缓存' : '等待首次刷新'}</strong>
+							<p>
+								{source.hasError
+									? '当前订阅尚未成功更新，请稍后再试。'
+									: '刷新订阅后将在这里显示热点。'}
+							</p>
 						</div>{/if}
 					<footer>
 						<span>{boardStatus(source).detail}</span><span

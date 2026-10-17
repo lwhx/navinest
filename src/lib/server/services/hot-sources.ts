@@ -1,5 +1,6 @@
 import type { Database, DatabaseStatement } from '$lib/server/db';
-import { validateExternalTarget } from '$lib/server/safe-target';
+import { validateHotSourceFetchInput } from './hot-source-config';
+export { validateHotSourceFetchInput } from './hot-source-config';
 
 export type HotSourceInput = {
 	name: string;
@@ -20,17 +21,6 @@ export type HotSourceInput = {
 	showDescription: boolean;
 };
 type Raw = Record<string, unknown>;
-const forbidden = new Set(['authorization', 'cookie', 'proxy-authorization', 'x-api-key']);
-function objectJson(value: unknown, field: string, errors: Record<string, string>) {
-	try {
-		const parsed = JSON.parse(typeof value === 'string' && value.trim() ? value : '{}');
-		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
-		return parsed as Record<string, unknown>;
-	} catch {
-		errors[field] = '请输入有效的 JSON 对象。';
-		return {};
-	}
-}
 export function validateHotSourceInput(
 	input: Raw
 ): { valid: true; data: HotSourceInput } | { valid: false; errors: Record<string, string> } {
@@ -57,54 +47,11 @@ export function validateHotSourceInput(
 	}
 	const accentColor = color(input.accentColor, '#e5484d', 'accentColor'),
 		surfaceColor = color(input.surfaceColor, '#fff7f7', 'surfaceColor');
-	const type =
-		input.type === 'rss'
-			? 'rss'
-			: input.type === 'json'
-				? 'json'
-				: input.type === 'html'
-					? 'html'
-					: null;
-	if (!type) errors.type = '类型必须是 JSON、RSS 或 HTML。';
-	const url = typeof input.url === 'string' ? input.url.trim() : '';
-	const target = validateExternalTarget(url);
-	if (!target.valid) errors.url = '请输入有效的公网 HTTP/HTTPS 地址。';
-	const rawHeaders = objectJson(input.headersJson, 'headersJson', errors),
-		headers: Record<string, string> = {};
-	for (const [key, value] of Object.entries(rawHeaders)) {
-		if (
-			forbidden.has(key.toLowerCase()) ||
-			typeof value !== 'string' ||
-			key.length > 100 ||
-			value.length > 1000
-		) {
-			errors.headersJson = '请求头不能包含凭据，且键值必须为字符串。';
-			break;
-		}
-		headers[key] = value;
-	}
-	const rawParser = objectJson(input.parserJson, 'parserJson', errors),
-		parser: Record<string, string> = {};
-	const parserKeys =
-		type === 'html'
-			? ['itemSelector', 'titleSelector', 'hotSelector', 'baseUrl']
-			: ['itemsPath', 'titleField', 'urlField', 'hotField'];
-	for (const [key, value] of Object.entries(rawParser)) {
-		if (
-			!parserKeys.includes(key) ||
-			typeof value !== 'string' ||
-			value.length > (key === 'baseUrl' ? 200 : 100)
-		) {
-			errors.parserJson =
-				type === 'html'
-					? 'HTML 解析配置仅支持 itemSelector、titleSelector、hotSelector 与 baseUrl。'
-					: '解析配置字段无效。';
-			break;
-		}
-		if (value) parser[key] = value;
-	}
-	if (type === 'html' && !parser.itemSelector)
-		errors.parserJson = 'HTML 榜单必须配置 itemSelector。';
+	const connection = validateHotSourceFetchInput(input);
+	if (!connection.valid) Object.assign(errors, connection.errors);
+	const { type, url, headers, parser } = connection.valid
+		? connection.data
+		: { type: 'json' as const, url: '', headers: {}, parser: {} };
 	const cacheTtl = Number(input.cacheTtl ?? 900);
 	if (!Number.isInteger(cacheTtl) || cacheTtl < 60 || cacheTtl > 86400)
 		errors.cacheTtl = '缓存时间必须为 60 到 86400 秒。';
@@ -121,7 +68,7 @@ export function validateHotSourceInput(
 	const data: HotSourceInput = {
 		name,
 		type: type ?? 'json',
-		url: target.valid ? target.target : url,
+		url,
 		headers,
 		parser,
 		cacheTtl,
@@ -150,11 +97,22 @@ export class HotSourceWriteError extends Error {
 		this.name = 'HotSourceWriteError';
 	}
 }
+function isObject(raw: string) {
+	try {
+		const value = JSON.parse(raw);
+		return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+	} catch {
+		return false;
+	}
+}
+function safeObject(raw: string): Record<string, string> {
+	return isObject(raw) ? JSON.parse(raw) : {};
+}
 export async function listHotSources(database: Database, enabledOnly = false) {
 	const rows = (
 		await database
 			.prepare(
-				`SELECT id,name,type,url,headers_json,parser_json,cache_ttl,is_enabled,last_fetch_at,slug,description,icon,accent_color,surface_color,display_limit,layout,sort_order,show_description,last_error,last_success_at FROM hot_sources ${enabledOnly ? 'WHERE is_enabled=1' : ''} ORDER BY sort_order,id`
+				`SELECT id,name,type,url,headers_json,parser_json,cache_ttl,is_enabled,last_fetch_at,slug,description,icon,accent_color,surface_color,display_limit,layout,sort_order,show_description,last_error,last_success_at,refresh_token,refresh_started_at,(SELECT COUNT(*) FROM hot_items WHERE source_id=hot_sources.id) item_count FROM hot_sources ${enabledOnly ? 'WHERE is_enabled=1' : ''} ORDER BY sort_order,id`
 			)
 			.all<{
 				id: number;
@@ -177,6 +135,9 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 				show_description: number;
 				last_error: string | null;
 				last_success_at: string | null;
+				refresh_token: string | null;
+				refresh_started_at: string | null;
+				item_count: number;
 			}>()
 	).results;
 	return rows.map((row) => ({
@@ -184,8 +145,11 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 		name: row.name,
 		type: row.type,
 		url: row.url,
-		headers: JSON.parse(row.headers_json),
-		parser: JSON.parse(row.parser_json),
+		headers: safeObject(row.headers_json),
+		parser: safeObject(row.parser_json),
+		headersJson: row.headers_json,
+		parserJson: row.parser_json,
+		configInvalid: !isObject(row.headers_json) || !isObject(row.parser_json),
 		cacheTtl: row.cache_ttl,
 		isEnabled: row.is_enabled === 1,
 		lastFetchAt: row.last_fetch_at,
@@ -199,7 +163,10 @@ export async function listHotSources(database: Database, enabledOnly = false) {
 		sortOrder: row.sort_order,
 		showDescription: row.show_description === 1,
 		lastError: row.last_error,
-		lastSuccessAt: row.last_success_at
+		lastSuccessAt: row.last_success_at,
+		isRefreshing: Boolean(row.refresh_token),
+		refreshStartedAt: row.refresh_started_at,
+		itemCount: Number(row.item_count)
 	}));
 }
 export async function createHotSource(database: Database, input: HotSourceInput) {
@@ -235,7 +202,7 @@ export async function updateHotSource(database: Database, id: number, input: Hot
 	const row = (
 		await database
 			.prepare(
-				'UPDATE hot_sources SET name=?,type=?,url=?,headers_json=?,parser_json=?,cache_ttl=?,is_enabled=?,slug=?,description=?,icon=?,accent_color=?,surface_color=?,display_limit=?,layout=?,sort_order=?,show_description=?,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id'
+				'UPDATE hot_sources SET name=?,type=?,url=?,headers_json=?,parser_json=?,cache_ttl=?,is_enabled=?,slug=?,description=?,icon=?,accent_color=?,surface_color=?,display_limit=?,layout=?,sort_order=?,show_description=?,last_success_at=CASE WHEN type<>? OR url<>? OR headers_json<>? OR parser_json<>? THEN NULL ELSE last_success_at END,last_error=CASE WHEN type<>? OR url<>? OR headers_json<>? OR parser_json<>? THEN NULL ELSE last_error END,refresh_token=NULL,refresh_started_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id'
 			)
 			.bind(
 				input.name,
@@ -254,6 +221,12 @@ export async function updateHotSource(database: Database, id: number, input: Hot
 				input.layout,
 				input.sortOrder,
 				input.showDescription ? 1 : 0,
+				...Array.from({ length: 2 }, () => [
+					input.type,
+					input.url,
+					JSON.stringify(input.headers),
+					JSON.stringify(input.parser)
+				]).flat(),
 				id
 			)
 			.all<{ id: number }>()

@@ -46,6 +46,7 @@ export type ScheduledJobResult =
 			totalSources: number;
 			succeededSources: number;
 			failedSources: number;
+			alertWarning?: string;
 			results: import('$lib/server/services/cron-health').RefreshResult[];
 	  }
 	| { job: 'backup'; key: string; bytes: number; pruned: string[] }
@@ -77,7 +78,8 @@ async function executeTask(
 			totalSources: run.totalSources,
 			succeededSources: run.succeededSources,
 			results: run.results,
-			failedSources: run.failedSources
+			failedSources: run.failedSources,
+			alertWarning: run.alertWarning
 		};
 	}
 	if (cron === BACKUP_CRON) {
@@ -139,7 +141,7 @@ export async function runScheduledJob(
 				id,
 				{
 					status: result.status,
-					summary: `来源 ${result.totalSources} · 成功 ${result.succeededSources} · 失败 ${result.failedSources}`,
+					summary: `来源 ${result.totalSources} · 成功 ${result.succeededSources} · 失败 ${result.failedSources}${result.alertWarning ? ` · ${result.alertWarning}` : ''}`,
 					sources: result.results,
 					total: result.totalSources,
 					succeeded: result.succeededSources,

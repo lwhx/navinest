@@ -6,8 +6,11 @@ import {
 	parseHotJson,
 	parseHotRss,
 	refreshEnabledHotSources,
-	refreshHotSource
+	refreshHotSource,
+	inspectHotSource
 } from '$lib/server/services/hotnews';
+
+import { listHotSources, updateHotSource, validateHotSourceInput } from './hot-sources';
 
 const connections: DatabaseSync[] = [];
 const publicDns = async () => ['93.184.216.34'];
@@ -15,7 +18,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
+		`CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,type TEXT,url TEXT,headers_json TEXT DEFAULT '{}',parser_json TEXT DEFAULT '{}',cache_ttl INTEGER DEFAULT 900,is_enabled INTEGER DEFAULT 1,last_fetch_at TEXT,last_success_at TEXT,last_error TEXT,refresh_token TEXT,refresh_started_at TEXT,slug TEXT DEFAULT '',description TEXT DEFAULT '',icon TEXT DEFAULT '热',accent_color TEXT DEFAULT '#e5484d',surface_color TEXT DEFAULT '#fff7f7',display_limit INTEGER DEFAULT 20,layout TEXT DEFAULT 'list',sort_order INTEGER DEFAULT 0,show_description INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE hot_items(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id INTEGER,rank INTEGER,title TEXT,url TEXT,hot_value TEXT,extra_json TEXT DEFAULT '{}',fetched_at TEXT DEFAULT CURRENT_TIMESTAMP);INSERT INTO hot_sources(id,name,type,url,parser_json) VALUES(1,'JSON','json','https://example.com/data','{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}'),(2,'RSS','rss','https://example.com/feed','{}');INSERT INTO hot_items(source_id,rank,title,url) VALUES(1,1,'Old','https://old.example.com');`
 	);
 	const database: Database & { batch(s: DatabaseStatement[]): Promise<void> } = {
 		prepare(query) {
@@ -343,5 +346,197 @@ describe('hot html parsing', () => {
 		const items = parseHotHtml(many, { itemSelector: 'li.row' });
 		expect(items).toHaveLength(100);
 		expect(items.at(-1)).toMatchObject({ rank: 100, url: 'https://example.com/99' });
+	});
+});
+
+describe('hot inspection and snapshot boundaries', () => {
+	const fresh = () =>
+		new Response(
+			JSON.stringify({ data: { list: [{ name: 'Fresh', link: 'https://example.com/fresh' }] } })
+		);
+	it('previews configured parsing without acquiring a lease or touching database state', async () => {
+		const { database, sqlite } = fixture();
+		const before = sqlite.prepare('SELECT * FROM hot_sources').all();
+		const preview = await inspectHotSource(
+			{
+				type: 'json',
+				url: 'https://example.com/data',
+				headers: {},
+				parser: { itemsPath: 'data.list', titleField: 'name', urlField: 'link' }
+			},
+			async () => fresh(),
+			publicDns
+		);
+		expect(preview).toMatchObject({
+			count: 1,
+			items: [{ title: 'Fresh' }],
+			checkedAt: expect.any(String)
+		});
+		expect(sqlite.prepare('SELECT * FROM hot_sources').all()).toEqual(before);
+		expect((await listHotSources(database))[0].itemCount).toBe(1);
+	});
+	it('bounds a hundred-item snapshot to four atomic statements', async () => {
+		const { database, sqlite } = fixture();
+		const batch = database.batch.bind(database);
+		let statements = 0;
+		database.batch = async (items) => {
+			statements = items.length;
+			await batch(items);
+		};
+		await refreshHotSource(
+			database,
+			1,
+			async () =>
+				new Response(
+					JSON.stringify({
+						data: {
+							list: Array.from({ length: 100 }, (_, i) => ({
+								name: 'Item ' + i,
+								link: 'https://example.com/' + i
+							}))
+						}
+					})
+				),
+			publicDns
+		);
+		expect(statements).toBe(4);
+		expect(
+			sqlite.prepare('SELECT COUNT(*) n,MAX(rank) rank FROM hot_items WHERE source_id=1').get()
+		).toEqual({ n: 100, rank: 100 });
+	});
+	it('rolls back deletion and success markers if a later cache insert fails', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET last_success_at='2026-01-01T00:00:00Z' WHERE id=1; CREATE TRIGGER reject_cache BEFORE INSERT ON hot_items BEGIN SELECT RAISE(ABORT,'injected storage failure'); END"
+		);
+		await expect(refreshHotSource(database, 1, async () => fresh(), publicDns)).rejects.toThrow(
+			'injected'
+		);
+		expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toEqual({
+			title: 'Old'
+		});
+		expect(
+			sqlite
+				.prepare('SELECT last_success_at,refresh_token,last_fetch_at FROM hot_sources WHERE id=1')
+				.get()
+		).toEqual({
+			last_success_at: '2026-01-01T00:00:00Z',
+			refresh_token: null,
+			last_fetch_at: expect.any(String)
+		});
+	});
+	it.each(['url', 'lease'])(
+		'rejects a late %s change without overwriting another snapshot',
+		async (field) => {
+			const { database, sqlite } = fixture();
+			await expect(
+				refreshHotSource(
+					database,
+					1,
+					async () => {
+						sqlite.exec(
+							field === 'url'
+								? "UPDATE hot_sources SET url='https://example.com/changed',refresh_token=NULL WHERE id=1"
+								: "UPDATE hot_sources SET refresh_token='new-owner' WHERE id=1"
+						);
+						return fresh();
+					},
+					publicDns
+				)
+			).rejects.toMatchObject({ status: 409 });
+			expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toEqual({
+				title: 'Old'
+			});
+			expect(
+				sqlite
+					.prepare('SELECT refresh_token,last_error,last_success_at FROM hot_sources WHERE id=1')
+					.get()
+			).toEqual({
+				refresh_token: field === 'url' ? null : 'new-owner',
+				last_error: null,
+				last_success_at: null
+			});
+		}
+	);
+	it('lists and diagnoses malformed stored configuration without fetching or losing old items', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec("UPDATE hot_sources SET parser_json='{' WHERE id=1");
+		let fetched = false;
+		expect((await listHotSources(database))[0]).toMatchObject({
+			configInvalid: true,
+			parserJson: '{',
+			itemCount: 1
+		});
+		await expect(
+			refreshHotSource(
+				database,
+				1,
+				async () => {
+					fetched = true;
+					return fresh();
+				},
+				publicDns
+			)
+		).rejects.toMatchObject({ code: 'configuration' });
+		expect(fetched).toBe(false);
+		expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toEqual({
+			title: 'Old'
+		});
+	});
+	it('resets verification only for retrieval changes and preserves the old cache', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"UPDATE hot_sources SET last_success_at='2026-01-01T00:00:00Z',last_error='HTTP 502' WHERE id=1"
+		);
+		const validation = validateHotSourceInput({
+			name: 'JSON',
+			slug: 'json',
+			type: 'json',
+			url: 'https://example.com/data',
+			headersJson: '{}',
+			parserJson:
+				'{"itemsPath":"data.list","titleField":"name","urlField":"link","hotField":"score"}',
+			isEnabled: true
+		});
+		if (!validation.valid) throw new Error('Invalid fixture');
+		await updateHotSource(database, 1, { ...validation.data, name: 'Renamed' });
+		expect(
+			sqlite.prepare('SELECT last_success_at,last_error FROM hot_sources WHERE id=1').get()
+		).toEqual({ last_success_at: '2026-01-01T00:00:00Z', last_error: 'HTTP 502' });
+		await updateHotSource(database, 1, { ...validation.data, url: 'https://example.com/new' });
+		expect(
+			sqlite.prepare('SELECT last_success_at,last_error FROM hot_sources WHERE id=1').get()
+		).toEqual({ last_success_at: null, last_error: null });
+		expect(sqlite.prepare('SELECT title FROM hot_items WHERE source_id=1').get()).toEqual({
+			title: 'Old'
+		});
+	});
+	it('distinguishes an HTML error page, HTTP errors and a capped stream', async () => {
+		const input = { type: 'rss', url: 'https://example.com/feed', headers: {}, parser: {} };
+		await expect(
+			inspectHotSource(
+				input,
+				async () => new Response('<!doctype html><title>Unavailable</title>'),
+				publicDns
+			)
+		).rejects.toMatchObject({ code: 'parse' });
+		await expect(
+			inspectHotSource(input, async () => new Response('', { status: 503 }), publicDns)
+		).rejects.toMatchObject({ code: 'http' });
+		await expect(
+			inspectHotSource(
+				input,
+				async () =>
+					new Response(
+						new ReadableStream({
+							start(c) {
+								c.enqueue(new Uint8Array(2097153));
+								c.close();
+							}
+						})
+					),
+				publicDns
+			)
+		).rejects.toMatchObject({ code: 'too_large' });
 	});
 });

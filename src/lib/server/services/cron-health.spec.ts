@@ -7,7 +7,7 @@ function fixture() {
 	const sqlite = new DatabaseSync(':memory:');
 	connections.push(sqlite);
 	sqlite.exec(
-		`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,status TEXT);CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,sender_id INTEGER,type TEXT,title TEXT,content TEXT,data_json TEXT,is_read INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE cron_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,cron TEXT,scheduled_at TEXT,started_at TEXT DEFAULT CURRENT_TIMESTAMP,finished_at TEXT,status TEXT,total_sources INTEGER DEFAULT 0,succeeded_sources INTEGER DEFAULT 0,failed_sources INTEGER DEFAULT 0,result_json TEXT,error_message TEXT);CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,url TEXT,is_enabled INTEGER DEFAULT 1,last_success_at TEXT,cache_ttl INTEGER DEFAULT 900);INSERT INTO users VALUES(1,'admin','active'),(2,'admin','disabled'),(3,'user','active');`
+		`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,status TEXT);CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,sender_id INTEGER,type TEXT,title TEXT,content TEXT,data_json TEXT,is_read INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE cron_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,cron TEXT,scheduled_at TEXT,started_at TEXT DEFAULT CURRENT_TIMESTAMP,finished_at TEXT,status TEXT,total_sources INTEGER DEFAULT 0,succeeded_sources INTEGER DEFAULT 0,failed_sources INTEGER DEFAULT 0,result_json TEXT,error_message TEXT);CREATE TABLE hot_sources(id INTEGER PRIMARY KEY,name TEXT,url TEXT,is_enabled INTEGER DEFAULT 1,last_success_at TEXT,last_error TEXT,cache_ttl INTEGER DEFAULT 900);INSERT INTO users VALUES(1,'admin','active'),(2,'admin','disabled'),(3,'user','active');`
 	);
 	const db: Database = {
 		prepare(query) {
@@ -54,6 +54,9 @@ describe('cron health', () => {
 	});
 	it('records partial failure and alerts only active administrators', async () => {
 		const { db, sqlite } = fixture();
+		sqlite.exec(
+			"INSERT INTO hot_sources(id,name,last_error,last_success_at) VALUES(4,'正常源',NULL,CURRENT_TIMESTAMP),(5,'失败源','HTTP 500',CURRENT_TIMESTAMP)"
+		);
 		await executeMonitoredHotnewsCron(
 			db,
 			'15 1 * * *',
@@ -93,7 +96,7 @@ describe('cron health', () => {
 	it('pushes failures and stale boards to the external webhook', async () => {
 		const { db, sqlite } = fixture();
 		sqlite.exec(
-			"INSERT INTO hot_sources(id,name,is_enabled,last_success_at) VALUES(4,'百度热点',1,'2020-01-01 00:00:00'),(5,'微博热搜',1,CURRENT_TIMESTAMP),(6,'停用榜',0,'2020-01-01 00:00:00')"
+			"INSERT INTO hot_sources(id,name,is_enabled,last_success_at) VALUES(4,'百度热点',1,'2020-01-01 00:00:00'),(5,'微博热搜',1,CURRENT_TIMESTAMP),(6,'停用榜',0,'2020-01-01 00:00:00'); UPDATE hot_sources SET last_error='HTTP 500' WHERE id=4"
 		);
 		const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
 		await executeMonitoredHotnewsCron(
@@ -138,11 +141,11 @@ describe('cron health', () => {
 				}) as typeof fetch
 			}
 		);
-		expect(sqlite.prepare('SELECT COUNT(*) count FROM messages').get()).toMatchObject({ count: 0 });
+		expect(sqlite.prepare('SELECT COUNT(*) count FROM messages').get()).toMatchObject({ count: 1 });
 		expect(bodies[0]).toMatchObject({
 			event: 'navinest.alert',
 			data: {
-				staleSources: [{ sourceId: 4, name: '百度热点', lastSuccessAt: '2020-01-01 00:00:00' }]
+				_hotHealth: { issues: [{ sourceId: 4, name: '百度热点', kind: 'stale' }] }
 			}
 		});
 	});
