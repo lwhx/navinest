@@ -24,6 +24,7 @@ export type SearchEngine = {
 	name: string;
 	key: string;
 	urlTemplate: string;
+	placeholder?: string | null;
 };
 
 export const categories: NavigationCategory[] = [

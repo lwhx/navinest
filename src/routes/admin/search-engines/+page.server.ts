@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import {
 	configurationFormInput,
@@ -7,56 +7,126 @@ import {
 	parsePositiveId
 } from '$lib/server/admin-mutations';
 import { validateSearchEngineInput } from '$lib/server/admin-validation';
-import {
-	fallbackAdminSearchEngines,
-	loadAdminSearchEngines
-} from '$lib/server/services/admin-data';
+import { fallbackAdminSearchEngines } from '$lib/server/services/admin-data';
 import {
 	AdminWriteError,
 	createSearchEngine,
 	deleteSearchEngine,
 	updateSearchEngine
 } from '$lib/server/services/admin-write';
+import {
+	searchSourceView,
+	searchSourceWorkspace,
+	reorderSearchSource,
+	setSearchSourceEnabled
+} from '$lib/server/services/search-source-workspace';
+import { searchSourceListUrl, searchSourcePreview } from '$lib/search-source';
 import type { Actions, PageServerLoad } from './$types';
-
 export const load: PageServerLoad = async ({ platform, url }) => {
-	const database = getDatabase(platform);
-	const data = database ? await loadAdminSearchEngines(database) : fallbackAdminSearchEngines();
-	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
+	const database = getDatabase(platform),
+		workspace = database
+			? await searchSourceWorkspace(database, url.searchParams)
+			: searchSourceView(fallbackAdminSearchEngines().searchEngines, url.searchParams);
 	return {
-		...data,
-		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
-		editing: editId ? (data.searchEngines.find((entry) => entry.id === editId) ?? null) : null
+		...workspace,
+		source: database ? ('database' as const) : ('fallback' as const),
+		listUrl: searchSourceListUrl(
+			new URLSearchParams({ ...workspace.filters, page: String(workspace.page) })
+		)
 	};
 };
-
+function returnTo(form: FormData) {
+	try {
+		return searchSourceListUrl(
+			new URL(String(form.get('returnTo') ?? ''), 'https://navinest.invalid').searchParams
+		);
+	} catch {
+		return '/admin/search-engines';
+	}
+}
+async function mutate(platform: App.Platform | undefined, request: Request, update: boolean) {
+	const form = await request.formData(),
+		validation = validateSearchEngineInput(configurationFormInput(form));
+	if (!validation.valid) return invalidAction(validation, form);
+	const id = parsePositiveId(String(form.get('id') ?? ''));
+	if (update && !id) return mutationActionError(new AdminWriteError('搜索源 ID 无效。'), form);
+	try {
+		if (update) await updateSearchEngine(requireDatabase(platform), id!, validation.data);
+		else await createSearchEngine(requireDatabase(platform), validation.data);
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			/UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE/i.test(error.message)
+		)
+			return fail(409, {
+				success: false,
+				message: '唯一标识已被其他搜索源使用，请修改后重试。',
+				errors: { key: '此标识已存在。' },
+				values: Object.fromEntries(form)
+			});
+		return mutationActionError(error, form);
+	}
+	redirect(303, returnTo(form));
+}
 export const actions: Actions = {
-	create: async ({ platform, request }) => mutate(platform, request, null),
-	update: async ({ platform, request }) => mutate(platform, request, 'update'),
+	create: ({ platform, request }) => mutate(platform, request, false),
+	update: ({ platform, request }) => mutate(platform, request, true),
+	preview: async ({ request }) => {
+		const form = await request.formData(),
+			values = Object.fromEntries(form),
+			preview = searchSourcePreview(
+				String(form.get('urlTemplate') ?? ''),
+				String(form.get('sampleQuery') ?? '')
+			);
+		return preview.valid
+			? { success: true, message: '链接预览已生成，配置尚未保存。', values, preview }
+			: fail(400, {
+					success: false,
+					message: preview.error,
+					errors: { urlTemplate: preview.error },
+					values
+				});
+	},
+	toggle: async ({ platform, request }) => {
+		const form = await request.formData(),
+			id = parsePositiveId(String(form.get('id') ?? '')),
+			expected = form.get('expected');
+		if (!id || !['0', '1'].includes(String(expected)))
+			return mutationActionError(new AdminWriteError('状态参数无效。'), form);
+		try {
+			await setSearchSourceEnabled(requireDatabase(platform), id, expected === '1');
+		} catch (error) {
+			return mutationActionError(error, form);
+		}
+		redirect(303, returnTo(form));
+	},
+	move: async ({ platform, request }) => {
+		const form = await request.formData(),
+			id = parsePositiveId(String(form.get('id') ?? '')),
+			direction = form.get('direction');
+		if (!id || !['up', 'down', 'first'].includes(String(direction)))
+			return mutationActionError(new AdminWriteError('排序参数无效。'), form);
+		try {
+			await reorderSearchSource(
+				requireDatabase(platform),
+				id,
+				direction as 'up' | 'down' | 'first'
+			);
+		} catch (error) {
+			return mutationActionError(error, form);
+		}
+		redirect(303, returnTo(form));
+	},
 	delete: async ({ platform, request }) => {
-		const formData = await request.formData();
-		const id = parsePositiveId(String(formData.get('id') ?? ''));
-		if (!id) return mutationActionError(new AdminWriteError('搜索源 ID 无效。'), formData);
+		const form = await request.formData(),
+			id = parsePositiveId(String(form.get('id') ?? ''));
+		if (!id || form.get('confirmed') !== 'yes')
+			return mutationActionError(new AdminWriteError('请先确认删除该搜索源。'), form);
 		try {
 			await deleteSearchEngine(requireDatabase(platform), id);
 		} catch (error) {
-			return mutationActionError(error, formData);
+			return mutationActionError(error, form);
 		}
-		redirect(303, '/admin/search-engines?deleted=1');
+		redirect(303, returnTo(form));
 	}
 };
-
-async function mutate(platform: App.Platform | undefined, request: Request, mode: 'update' | null) {
-	const formData = await request.formData();
-	const validation = validateSearchEngineInput(configurationFormInput(formData));
-	if (!validation.valid) return invalidAction(validation, formData);
-	const id = parsePositiveId(String(formData.get('id') ?? ''));
-	if (mode && !id) return mutationActionError(new AdminWriteError('搜索源 ID 无效。'), formData);
-	try {
-		if (mode) await updateSearchEngine(requireDatabase(platform), id!, validation.data);
-		else await createSearchEngine(requireDatabase(platform), validation.data);
-	} catch (error) {
-		return mutationActionError(error, formData);
-	}
-	redirect(303, `/admin/search-engines?${mode ? 'updated' : 'created'}=1`);
-}

@@ -1,3 +1,4 @@
+import { searchSourcePreview } from '$lib/search-source';
 import { validateExternalTarget } from '$lib/server/safe-target';
 import type { ContentType } from '$lib/types/content';
 import {
@@ -342,14 +343,8 @@ export function validateSearchEngineInput(input: InputRecord): ValidationResult<
 	if (key && !KEY_PATTERN.test(key)) errors.key = 'Key 只能包含小写字母、数字和单个连字符。';
 	const urlTemplate = text(input, 'urlTemplate', errors, { required: true, maximum: 2_000 }) ?? '';
 	if (urlTemplate) {
-		const target = validateExternalTarget(urlTemplate.replace('{query}', 'test'));
-		if (
-			urlTemplate !== '/search?q={query}' &&
-			(!urlTemplate.includes('{query}') || !target.valid)
-		) {
-			errors.urlTemplate =
-				'请输入站内 /search?q={query} 或包含 {query} 的有效公网 HTTP/HTTPS 地址。';
-		}
+		const preview = searchSourcePreview(urlTemplate, '导航巢');
+		if (!preview.valid) errors.urlTemplate = preview.error;
 	}
 	const data: SearchEngineInput = {
 		groupKey: text(input, 'groupKey', errors, { required: true, maximum: 80 }) ?? '',

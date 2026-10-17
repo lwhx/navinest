@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { readHomeSubcategories, homeSubcategoryUrl } from '$lib/home-subcategory-state';
 	import { normalizeSearchQuery } from '$lib/search';
+	import { searchSourcePreview, INTERNAL_SEARCH_TEMPLATE } from '$lib/search-source';
 	import {
 		readSearchEnginePreference,
 		saveSearchEnginePreference
@@ -28,7 +29,12 @@
 	);
 	let engine = $derived(
 		home.searchEngines.find((x) => x.key === engineKey) ??
-			home.searchEngines[0] ?? { name: '站内', key: 'site', urlTemplate: '/search?q={query}' }
+			home.searchEngines[0] ?? {
+				name: '站内',
+				key: 'site',
+				urlTemplate: '/search?q={query}',
+				placeholder: null
+			}
 	);
 	onMount(() => {
 		engineKey = readSearchEnginePreference(home.searchEngines.map((item) => item.key));
@@ -63,7 +69,10 @@
 	function search() {
 		const value = normalizeSearchQuery(query);
 		if (value) {
-			const target = engine.urlTemplate.replace('{query}', encodeURIComponent(value));
+			const preview = searchSourcePreview(engine.urlTemplate, value);
+			const target = preview.valid
+				? preview.target
+				: INTERNAL_SEARCH_TEMPLATE.replace('{query}', encodeURIComponent(value));
 			location.href = target.startsWith('/') ? resolve(target as '/search') : target;
 		}
 	}
@@ -97,11 +106,12 @@
 								onclick={() => chooseEngine(item.key)}>{item.name}</button
 							>{/each}
 					</div>
+					<noscript><p>未启用 JavaScript，搜索将使用站内搜索。</p></noscript>
 					<SearchForm
 						bind:value={query}
 						variant="hero"
 						label={`${engine?.name ?? '站内'}搜索`}
-						placeholder={`使用 ${engine?.name ?? '站内'} 搜索`}
+						placeholder={engine.placeholder?.trim() || `使用 ${engine?.name ?? '站内'} 搜索`}
 						onSearch={search}
 					/>
 					{#if module.recommendedSearches?.length}<div class="search-hotwords">
