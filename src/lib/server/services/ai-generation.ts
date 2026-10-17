@@ -1,3 +1,4 @@
+import type { AiFailureCode } from '$lib/ai-service-status';
 import {
 	assertPublicFetchTarget,
 	type WebSnapshot,
@@ -25,7 +26,10 @@ export type SubmissionSuggestion = {
 export type SubmissionCategoryCandidate = { id: number; name: string; description: string | null };
 
 export class AiGenerationError extends Error {
-	constructor(message: string) {
+	constructor(
+		message: string,
+		public code: AiFailureCode = 'invalid_response'
+	) {
 		super(message);
 		this.name = 'AiGenerationError';
 	}
@@ -79,14 +83,15 @@ async function postWithSafeRedirects(
 	for (let redirects = 0; redirects <= 3; redirects++) {
 		current = await assertPublicFetchTarget(current, resolveHost);
 		if (new URL(current).origin !== originalOrigin)
-			throw new AiGenerationError('AI 服务不允许跨站重定向。');
+			throw new AiGenerationError('AI 服务不允许跨站重定向。', 'address');
 		const response = await fetcher(current, { ...init, redirect: 'manual' });
 		if (response.status < 300 || response.status >= 400) return response;
 		const location = response.headers.get('location');
-		if (!location || redirects === 3) throw new AiGenerationError('AI 服务重定向无效或次数过多。');
+		if (!location || redirects === 3)
+			throw new AiGenerationError('AI 服务重定向无效或次数过多。', 'address');
 		current = new URL(location, current).href;
 	}
-	throw new AiGenerationError('AI 服务重定向次数过多。');
+	throw new AiGenerationError('AI 服务重定向次数过多。', 'address');
 }
 
 function completionUrl(baseUrl: string): string {
@@ -267,28 +272,36 @@ export async function generateSubmissionSuggestion(
 	};
 	try {
 		response = await request(true);
-		if (response.status === 400 || response.status === 422) response = await request(false);
-	} catch (error) {
-		if (error instanceof AiGenerationError) throw error;
-		if (error instanceof WebFetchError) throw new AiGenerationError(error.message);
-		throw new AiGenerationError('AI 服务请求失败或超时。');
-	} finally {
-		clearTimeout(timer);
-	}
-	if (response.status === 429)
-		throw new AiGenerationError('AI 上游服务触发限流或配额不足，请稍后重试或检查账户余额。');
-	if (!response.ok) throw new AiGenerationError(`AI 服务返回了 ${response.status} 状态。`);
-	let body: unknown;
-	try {
-		body = await readLimitedJson(
+		if (response.status === 400 || response.status === 422) {
+			await response.body?.cancel();
+			response = await request(false);
+		}
+		if (response.status === 401 || response.status === 403)
+			throw new AiGenerationError('AI 服务拒绝了当前密钥或模型访问权限。', 'authentication');
+		if (response.status === 404)
+			throw new AiGenerationError('AI 服务地址或模型不存在（HTTP 404）。', 'address');
+		if (response.status === 408 || response.status === 504)
+			throw new AiGenerationError('AI 服务请求超时。', 'timeout');
+		if (response.status === 429)
+			throw new AiGenerationError(
+				'AI 上游服务触发限流或配额不足，请稍后重试或检查账户余额。',
+				'rate_limit'
+			);
+		if (!response.ok)
+			throw new AiGenerationError(`AI 服务返回了 ${response.status} 状态。`, 'upstream');
+		const body = await readLimitedJson(
 			response,
 			Math.max(1024, Math.min(options.maxResponseBytes ?? 2_000_000, 2_000_000))
 		);
+		const content = contentOf(body);
+		if (!content) throw new AiGenerationError('AI 服务没有返回可用内容。');
+		return parseSuggestion(content, categories);
 	} catch (error) {
+		if (controller.signal.aborted) throw new AiGenerationError('AI 服务请求超时。', 'timeout');
 		if (error instanceof AiGenerationError) throw error;
-		throw new AiGenerationError('AI 服务返回了无法解析的响应。');
+		if (error instanceof WebFetchError) throw new AiGenerationError(error.message, 'address');
+		throw new AiGenerationError('AI 服务网络连接失败。', 'network');
+	} finally {
+		clearTimeout(timer);
 	}
-	const content = contentOf(body);
-	if (!content) throw new AiGenerationError('AI 服务没有返回可用内容。');
-	return parseSuggestion(content, categories);
 }

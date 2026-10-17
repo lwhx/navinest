@@ -1,3 +1,5 @@
+import { listAiCalls } from '$lib/server/services/ai-call-history';
+import { POST as testSavedProvider } from '../../api/admin/ai-providers/[id]/test/+server';
 import { fail, redirect } from '@sveltejs/kit';
 import { getDatabase, requireDatabase } from '$lib/server/db';
 import { parsePositiveId } from '$lib/server/admin-mutations';
@@ -39,7 +41,24 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	const database = getDatabase(platform),
 		providers = database ? await listAiProviders(database) : [],
 		editId = parsePositiveId(url.searchParams.get('edit') ?? '');
+	const historyRequested = url.searchParams.get('tab') === 'history';
+	let history: Awaited<ReturnType<typeof listAiCalls>> | null = null;
+	let historyError = '';
+	if (historyRequested) {
+		if (!database) historyError = '数据库暂不可用，无法读取调用记录。';
+		else
+			try {
+				history = await listAiCalls(database, url.searchParams);
+			} catch {
+				historyError =
+					'调用记录暂不可用。请确认已应用 0021_ai_service_calls 数据库迁移，或稍后重试。';
+				console.error('AI call history read failed');
+			}
+	}
 	return {
+		history,
+		historyRequested,
+		historyError,
 		providers,
 		source: database ? ('database' as const) : ('fallback' as const),
 		secretConfigured: Boolean(platform?.env?.AI_CONFIG_ENCRYPTION_KEY),
@@ -58,11 +77,14 @@ async function mutate(platform: App.Platform | undefined, request: Request, upda
 			message: '服务器尚未配置AI密钥加密主密钥。',
 			values: values(form)
 		});
+	let savedId: number;
 	try {
 		const id = parsePositiveId(String(form.get('id') ?? ''));
 		if (update && !id) throw new AiProviderError('AI 服务 ID 无效。');
-		if (update) await updateAiProvider(requireDatabase(platform), masterKey, id!, input(form));
-		else await createAiProvider(requireDatabase(platform), masterKey, input(form));
+		if (update) {
+			await updateAiProvider(requireDatabase(platform), masterKey, id!, input(form));
+			savedId = id!;
+		} else savedId = await createAiProvider(requireDatabase(platform), masterKey, input(form));
 	} catch (error) {
 		return fail(400, {
 			success: false,
@@ -70,10 +92,25 @@ async function mutate(platform: App.Platform | undefined, request: Request, upda
 			values: values(form)
 		});
 	}
-	redirect(303, `/admin/ai-providers?${update ? 'updated' : 'created'}=1`);
+	redirect(303, `/admin/ai-providers?edit=${savedId}&${update ? 'updated' : 'created'}=1`);
 }
 
 export const actions: Actions = {
+	test: async (event) => {
+		const id = String((await event.request.formData()).get('id') ?? '');
+		const response = await testSavedProvider({
+			...event,
+			params: { id },
+			route: { id: '/api/admin/ai-providers/[id]/test' }
+		} as Parameters<typeof testSavedProvider>[0]);
+		const result = await response.json();
+		return {
+			success: response.ok,
+			message: response.ok
+				? `测试通过，模型 ${result.model}，耗时 ${result.latencyMs}ms。${result.historySaved ? '' : '调用记录保存失败。'}`
+				: `${result.error} ${result.advice ?? ''}`
+		};
+	},
 	create: ({ platform, request }) => mutate(platform, request, false),
 	update: ({ platform, request }) => mutate(platform, request, true),
 	delete: async ({ platform, request }) => {

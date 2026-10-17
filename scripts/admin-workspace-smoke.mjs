@@ -13,6 +13,7 @@ import { checkMediaLibrary } from './media-library-checks.mjs';
 import { checkUserSubmissions } from './user-submission-checks.mjs';
 import { checkMessageWorkflow } from './message-workflow-checks.mjs';
 import { checkBackupRestore } from './backup-restore-checks.mjs';
+import { checkAiServices } from './ai-service-checks.mjs';
 import { checkHotSourceHealth } from './hot-source-health-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
@@ -36,7 +37,12 @@ writeFileSync(
 		compatibility_date: '2026-07-12',
 		compatibility_flags: ['nodejs_als'],
 		assets: { binding: 'ASSETS', directory: resolve('.svelte-kit/cloudflare') },
-		vars: { ADMIN_AUTH_MODE: 'session', GITHUB_LOGIN_ENABLED: 'false', PUBLIC_SITE_URL: baseUrl },
+		vars: {
+			ADMIN_AUTH_MODE: 'session',
+			GITHUB_LOGIN_ENABLED: 'false',
+			PUBLIC_SITE_URL: baseUrl,
+			AI_CONFIG_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64')
+		},
 		d1_databases: [
 			{
 				binding: 'DB',
@@ -60,7 +66,8 @@ const migrations = [
 	'0016_ai_usage_reservations',
 	'0017_session_metadata',
 	'0018_message_batches',
-	'0019_user_share_pages'
+	'0019_user_share_pages',
+	'0021_ai_service_calls'
 ];
 const statements = migrations.map((name) => readFileSync(`migrations/${name}.sql`, 'utf8'));
 statements.push(
@@ -1154,6 +1161,14 @@ try {
 		adminToken,
 		userToken
 	});
+	layouts += await checkAiServices({
+		browser,
+		baseUrl,
+		command,
+		screenshots,
+		adminToken,
+		userToken
+	});
 	layouts += await checkHotSourceHealth({
 		browser,
 		baseUrl,
@@ -1197,6 +1212,7 @@ try {
 						'website/article contributions, category paths, AI preservation and native submission',
 						'owned submission history, full pagination, private details, feedback, native revisions and duplicate protection',
 						'backup validation, full diff preview, stale-state guards, atomic restore and uncertain results',
+						'AI services: preserved drafts, test classifications, explicit activation, config invalidation, history and native forms',
 						'hot-source read-only previews, health states, native forms, preserved caches and deduplicated notifications'
 					]
 				},
