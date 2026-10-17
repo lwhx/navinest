@@ -19,7 +19,9 @@ describe('AI-assisted submission workflow', () => {
 	});
 
 	it('provides masked tested-before-enabled provider management', () => {
-		const page = read('src/routes/admin/ai-providers/+page.svelte'),
+		const page =
+				read('src/routes/admin/ai-providers/+page.svelte') +
+				read('src/lib/components/admin/AiProviderEditor.svelte'),
 			server = read('src/routes/admin/ai-providers/+page.server.ts'),
 			migration = read('migrations/0011_ai_providers.sql');
 		expect(page).toContain('数据库只保存AES-GCM密文');

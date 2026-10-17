@@ -262,3 +262,49 @@ describe('OpenAI-compatible submission generation', () => {
 		});
 	});
 });
+
+describe('AI failure classification and full response timeout', () => {
+	it.each([
+		[401, 'authentication'],
+		[403, 'authentication'],
+		[404, 'address'],
+		[408, 'timeout'],
+		[429, 'rate_limit'],
+		[503, 'upstream']
+	] as const)('classifies HTTP %s without exposing upstream bodies', async (status, code) => {
+		await expect(
+			generate(async () => new Response('secret-key error body', { status }))
+		).rejects.toMatchObject({ code });
+	});
+	it('distinguishes a network failure from invalid JSON', async () => {
+		await expect(
+			generate(async () => {
+				throw new TypeError('secret-key');
+			})
+		).rejects.toMatchObject({ code: 'network' });
+		await expect(generate(async () => new Response('not JSON'))).rejects.toMatchObject({
+			code: 'invalid_response'
+		});
+	});
+	it('keeps the timeout active while reading a stalled response body', async () => {
+		vi.useFakeTimers();
+		try {
+			const fetcher: typeof fetch = async (_url, init) =>
+				new Response(
+					new ReadableStream({
+						start(controller) {
+							init!.signal!.addEventListener('abort', () =>
+								controller.error(new DOMException('aborted', 'AbortError'))
+							);
+						}
+					})
+				);
+			const promise = generate(fetcher);
+			const check = expect(promise).rejects.toMatchObject({ code: 'timeout' });
+			await vi.advanceTimersByTimeAsync(5001);
+			await check;
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});

@@ -1,3 +1,4 @@
+import type { AiFailureCode } from '$lib/ai-service-status';
 import type { Database } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
 import type { AiProviderRuntimeConfig } from '$lib/server/services/ai-generation';
@@ -14,7 +15,10 @@ export type AiProviderInput = {
 };
 
 export class AiProviderError extends Error {
-	constructor(message: string) {
+	constructor(
+		message: string,
+		public code: AiFailureCode = 'configuration'
+	) {
 		super(message);
 		this.name = 'AiProviderError';
 	}
@@ -116,8 +120,21 @@ function normalize(input: AiProviderInput, requireKey: boolean): AiProviderInput
 	};
 }
 
-async function disableOthers(database: Database, exceptId: number) {
-	await database.prepare('UPDATE ai_providers SET is_enabled=0 WHERE id<>?').bind(exceptId).all();
+const configColumns = [
+	'base_url',
+	'model',
+	'api_key_ciphertext',
+	'api_key_iv',
+	'timeout_ms',
+	'max_source_chars',
+	'system_prompt'
+] as const;
+function revision(row: Row): string {
+	return JSON.stringify(configColumns.map((key) => row[key]));
+}
+const configGuard = configColumns.map((key) => `${key}=?`).join(' AND ');
+function configValues(row: Row) {
+	return configColumns.map((key) => row[key]);
 }
 
 export async function createAiProvider(
@@ -167,7 +184,12 @@ export async function updateAiProvider(
 	if (!existing) throw new AiProviderError('AI 服务不存在。');
 	const input = normalize(raw, false),
 		connectionChanged = Boolean(
-			input.apiKey || input.baseUrl !== existing.base_url || input.model !== existing.model
+			input.apiKey ||
+			input.baseUrl !== existing.base_url ||
+			input.model !== existing.model ||
+			input.timeoutMs !== existing.timeout_ms ||
+			input.maxSourceChars !== existing.max_source_chars ||
+			input.systemPrompt !== existing.system_prompt
 		),
 		secret = input.apiKey
 			? await encrypt(masterKey, input.apiKey)
@@ -176,7 +198,7 @@ export async function updateAiProvider(
 	const row = (
 		await database
 			.prepare(
-				`UPDATE ai_providers SET name=?,base_url=?,model=?,api_key_ciphertext=?,api_key_iv=?,key_hint=?,timeout_ms=?,max_source_chars=?,system_prompt=?,is_enabled=?,test_status=?,tested_at=?,test_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id`
+				`UPDATE ai_providers SET name=?,base_url=?,model=?,api_key_ciphertext=?,api_key_iv=?,key_hint=?,timeout_ms=?,max_source_chars=?,system_prompt=?,is_enabled=?,test_status=?,tested_at=?,test_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND ${configGuard} AND is_enabled=? AND test_status=? AND tested_at IS ? RETURNING id`
 			)
 			.bind(
 				input.name,
@@ -192,11 +214,15 @@ export async function updateAiProvider(
 				connectionChanged ? 'untested' : existing.test_status,
 				connectionChanged ? null : existing.tested_at,
 				connectionChanged ? null : existing.test_error,
-				id
+				id,
+				...configValues(existing),
+				existing.is_enabled,
+				existing.test_status,
+				existing.tested_at
 			)
 			.all<{ id: number }>()
 	).results[0];
-	if (!row) throw new AiProviderError('AI 服务更新失败。');
+	if (!row) throw new AiProviderError('配置已被其他操作修改，请刷新后重试。', 'stale');
 }
 
 export async function listAiProviders(database: Database) {
@@ -230,22 +256,28 @@ export async function recordAiProviderTest(
 	database: Database,
 	id: number,
 	success: boolean,
-	error: string | null
+	error: string | null,
+	expectedRevision?: string
 ) {
+	const existing = await rowById(database, id);
+	if (!existing) throw new AiProviderError('AI 服务不存在。');
+	if (expectedRevision && revision(existing) !== expectedRevision)
+		throw new AiProviderError('配置已变化，旧测试结果未应用。', 'stale');
 	const row = (
 		await database
 			.prepare(
-				`UPDATE ai_providers SET test_status=?,tested_at=CURRENT_TIMESTAMP,test_error=?,is_enabled=CASE WHEN ?=1 THEN is_enabled ELSE 0 END,updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING id`
+				`UPDATE ai_providers SET test_status=?,tested_at=CURRENT_TIMESTAMP,test_error=?,is_enabled=CASE WHEN ?=1 THEN is_enabled ELSE 0 END,updated_at=CURRENT_TIMESTAMP WHERE id=? AND ${configGuard} RETURNING id`
 			)
 			.bind(
 				success ? 'success' : 'failed',
 				success ? null : error?.slice(0, 500) || '测试失败',
 				success ? 1 : 0,
-				id
+				id,
+				...configValues(existing)
 			)
 			.all<{ id: number }>()
 	).results[0];
-	if (!row) throw new AiProviderError('AI 服务不存在。');
+	if (!row) throw new AiProviderError('配置已变化，旧测试结果未应用。', 'stale');
 }
 
 export async function enableAiProvider(database: Database, id: number) {
@@ -253,16 +285,17 @@ export async function enableAiProvider(database: Database, id: number) {
 	if (!provider) throw new AiProviderError('AI 服务不存在。');
 	if (provider.test_status !== 'success')
 		throw new AiProviderError('AI 服务必须先通过连接测试才能启用。');
-	await disableOthers(database, id);
-	const row = (
+	// One statement switches the service atomically, and refuses a changed configuration.
+	const rows = (
 		await database
 			.prepare(
-				"UPDATE ai_providers SET is_enabled=1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND test_status='success' RETURNING id"
+				`UPDATE ai_providers SET is_enabled=CASE WHEN id=? THEN 1 ELSE 0 END,updated_at=CURRENT_TIMESTAMP WHERE EXISTS(SELECT 1 FROM ai_providers WHERE id=? AND test_status='success' AND ${configGuard}) RETURNING id`
 			)
-			.bind(id)
+			.bind(id, id, ...configValues(provider))
 			.all<{ id: number }>()
-	).results[0];
-	if (!row) throw new AiProviderError('AI 服务启用失败。');
+	).results;
+	if (!rows.some((row) => row.id === id))
+		throw new AiProviderError('配置已变化，请重新测试后启用。', 'stale');
 }
 
 export async function disableAiProvider(database: Database, id: number) {
@@ -281,7 +314,13 @@ export async function getEnabledAiProvider(
 	database: Database,
 	masterKey: string
 ): Promise<
-	(AiProviderRuntimeConfig & { id: number; maxSourceChars: number; name: string }) | null
+	| (AiProviderRuntimeConfig & {
+			id: number;
+			maxSourceChars: number;
+			name: string;
+			revision: string;
+	  })
+	| null
 > {
 	const row = (
 		await database
@@ -291,6 +330,7 @@ export async function getEnabledAiProvider(
 	if (!row) return null;
 	return {
 		id: row.id,
+		revision: revision(row),
 		name: row.name,
 		baseUrl: row.base_url,
 		model: row.model,
@@ -301,17 +341,30 @@ export async function getEnabledAiProvider(
 	};
 }
 
+/** Server-only snapshot: also available when decrypting the saved key fails. */
+export async function getAiProviderTestState(database: Database, id: number) {
+	const row = await rowById(database, id);
+	return row ? { id: row.id, name: row.name, model: row.model, revision: revision(row) } : null;
+}
+
 export async function getAiProviderById(
 	database: Database,
 	masterKey: string,
 	id: number
 ): Promise<
-	(AiProviderRuntimeConfig & { id: number; maxSourceChars: number; name: string }) | null
+	| (AiProviderRuntimeConfig & {
+			id: number;
+			maxSourceChars: number;
+			name: string;
+			revision: string;
+	  })
+	| null
 > {
 	const row = await rowById(database, id);
 	if (!row) return null;
 	return {
 		id: row.id,
+		revision: revision(row),
 		name: row.name,
 		baseUrl: row.base_url,
 		model: row.model,

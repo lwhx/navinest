@@ -1,3 +1,9 @@
+import { getEnabledAiProvider } from '$lib/server/services/ai-providers';
+import {
+	generateSubmissionSuggestion,
+	AiGenerationError
+} from '$lib/server/services/ai-generation';
+import { recordAiCall } from '$lib/server/services/ai-call-history';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
@@ -5,12 +11,22 @@ import { finalizeAiUsage, reserveAiUsage } from '$lib/server/services/ai-usage';
 import { fetchWebSnapshot } from '$lib/server/services/web-enrichment';
 import { POST } from './+server';
 
+vi.mock('$lib/server/services/ai-call-history', () => ({ recordAiCall: vi.fn(async () => true) }));
 vi.mock('$lib/server/services/site-settings', () => ({
 	loadSiteSettings: async () => ({ submissionsOpen: true })
 }));
 vi.mock('$lib/server/services/ai-providers', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/services/ai-providers')>()),
-	getEnabledAiProvider: async () => null
+	getEnabledAiProvider: vi.fn(async () => null)
+}));
+vi.mock('$lib/server/services/ai-generation', async (original) => ({
+	...(await original<object>()),
+	generateSubmissionSuggestion: vi.fn(async () => ({
+		title: '建议',
+		summary: '简介',
+		content: '说明',
+		tags: []
+	}))
 }));
 vi.mock('$lib/server/services/ai-usage', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/services/ai-usage')>()),
@@ -89,6 +105,15 @@ describe('public contribution enrichment', () => {
 		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
 		try {
 			expect((await call(database, { type: 'site', url: 'https://example.com' })).status).toBe(500);
+			expect(recordAiCall).toHaveBeenCalledWith(
+				database,
+				expect.objectContaining({
+					origin: 'submission',
+					stage: 'webpage',
+					outcome: 'failed',
+					errorCode: 'webpage'
+				})
+			);
 			expect(finalizeAiUsage).toHaveBeenCalledWith(
 				database,
 				expect.objectContaining({
@@ -120,6 +145,51 @@ describe('public contribution enrichment', () => {
 		);
 		const body = await (await call(database, { type: 'site', url: 'https://example.com' })).json();
 		expect(body.duplicate).toEqual({ published: ['公开内容'], pendingCount: 2 });
+		expect(recordAiCall).toHaveBeenCalledWith(
+			database,
+			expect.objectContaining({
+				origin: 'submission',
+				stage: 'webpage',
+				outcome: 'skipped',
+				providerId: null
+			})
+		);
 		expect(JSON.stringify(body)).not.toMatch(/私有内容|草稿标题/);
 	});
+	it.each([true, false])(
+		'records actual AI outcomes separately from the webpage stage: %s',
+		async (success) => {
+			const { database } = fixture();
+			vi.mocked(getEnabledAiProvider).mockResolvedValueOnce({
+				id: 2,
+				name: '主服务',
+				model: 'model-a',
+				apiKey: 'never-return-this-key',
+				baseUrl: 'https://api.example.com/v1',
+				timeoutMs: 30000,
+				maxSourceChars: 8000,
+				systemPrompt: 'prompt',
+				revision: 'server-only'
+			});
+			if (!success)
+				vi.mocked(generateSubmissionSuggestion).mockRejectedValueOnce(
+					new AiGenerationError('密钥不可用', 'authentication')
+				);
+			const response = await call(database, { type: 'site', url: 'https://example.com' });
+			expect(response.status).toBe(success ? 200 : 422);
+			expect(recordAiCall).toHaveBeenCalledWith(
+				database,
+				expect.objectContaining({
+					origin: 'submission',
+					stage: 'generation',
+					outcome: success ? 'success' : 'failed',
+					providerId: 2,
+					providerName: '主服务',
+					model: 'model-a',
+					aiDurationMs: expect.any(Number)
+				})
+			);
+			expect(JSON.stringify(await response.json())).not.toContain('never-return-this-key');
+		}
+	);
 });

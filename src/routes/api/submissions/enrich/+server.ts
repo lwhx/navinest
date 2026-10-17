@@ -1,3 +1,5 @@
+import { recordAiCall, type AiCallRecord } from '$lib/server/services/ai-call-history';
+import type { AiFailureCode } from '$lib/ai-service-status';
 import { json } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
 import { getEnabledAiProvider, AiProviderError } from '$lib/server/services/ai-providers';
@@ -5,11 +7,7 @@ import {
 	generateSubmissionSuggestion,
 	AiGenerationError
 } from '$lib/server/services/ai-generation';
-import {
-	assertPublicFetchTarget,
-	fetchWebSnapshot,
-	WebFetchError
-} from '$lib/server/services/web-enrichment';
+import { fetchWebSnapshot, WebFetchError } from '$lib/server/services/web-enrichment';
 import { AiRateLimitError, finalizeAiUsage, reserveAiUsage } from '$lib/server/services/ai-usage';
 import { listCategories } from '$lib/server/services/categories';
 import { loadSiteSettings } from '$lib/server/services/site-settings';
@@ -24,6 +22,14 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 	const database = requireDatabase(platform);
 	let providerId: number | null = null,
 		reservationToken: string | null = null;
+	let auditStarted: number | null = null,
+		aiStarted: number | null = null;
+	const audit: AiCallRecord = {
+		origin: 'submission',
+		stage: 'configuration',
+		outcome: 'failed',
+		durationMs: 0
+	};
 	try {
 		let input: unknown;
 		try {
@@ -42,11 +48,17 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			return json({ error: '新投稿仅支持网址和文章。' }, { status: 400 });
 		if (!url || url.length > 2048) return json({ error: '请输入有效的网址。' }, { status: 400 });
 		reservationToken = (await reserveAiUsage(database, locals.user.id)).token;
+		auditStarted = Date.now();
 		const provider = await getEnabledAiProvider(
-				database,
-				platform?.env?.AI_CONFIG_ENCRYPTION_KEY ?? ''
-			),
-			visibleCategories = await listCategories(database, { type, visibleOnly: true }),
+			database,
+			platform?.env?.AI_CONFIG_ENCRYPTION_KEY ?? ''
+		);
+		providerId = provider?.id ?? null;
+		audit.providerId = providerId;
+		audit.providerName = provider?.name;
+		audit.model = provider?.model;
+		audit.stage = 'webpage';
+		const visibleCategories = await listCategories(database, { type, visibleOnly: true }),
 			categories = visibleCategories.flatMap((category) => {
 				const path = categoryParentPath(visibleCategories, String(category.id));
 				return path
@@ -82,6 +94,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			),
 			duplicate = { published, pendingCount };
 		if (!provider) {
+			audit.outcome = 'skipped';
 			await finalizeAiUsage(database, {
 				token: reservationToken,
 				providerId: null,
@@ -97,9 +110,10 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 				ai: { available: false as const }
 			});
 		}
-		providerId = provider.id;
-		await assertPublicFetchTarget(provider.baseUrl);
+		audit.stage = 'generation';
+		aiStarted = Date.now();
 		const suggestion = await generateSubmissionSuggestion(provider, snapshot, fetch, categories);
+		audit.aiDurationMs = Date.now() - aiStarted;
 		await finalizeAiUsage(database, {
 			token: reservationToken,
 			providerId,
@@ -107,6 +121,7 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			errorCode: null
 		});
 		reservationToken = null;
+		audit.outcome = 'success';
 		return json({
 			snapshot,
 			suggestion,
@@ -115,6 +130,15 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			ai: { available: true as const, provider: provider.name, model: provider.model }
 		});
 	} catch (error) {
+		audit.outcome = 'failed';
+		audit.errorCode =
+			error instanceof AiGenerationError || error instanceof AiProviderError
+				? error.code
+				: audit.stage === 'webpage'
+					? 'webpage'
+					: 'unknown';
+		if (aiStarted !== null && audit.aiDurationMs == null)
+			audit.aiDurationMs = Date.now() - aiStarted;
 		if (error instanceof AiRateLimitError)
 			return json({ error: error.message }, { status: 429, headers: { 'retry-after': '5' } });
 		if (reservationToken)
@@ -123,7 +147,12 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 					token: reservationToken,
 					providerId,
 					success: false,
-					errorCode: error instanceof Error ? error.name : 'UnknownError'
+					errorCode:
+						error instanceof AiGenerationError
+							? error.code
+							: error instanceof Error
+								? error.name
+								: 'UnknownError'
 				});
 			} catch {
 				// Preserve the original enrichment error if audit finalization fails.
@@ -133,8 +162,14 @@ export const POST: RequestHandler = async ({ locals, platform, request }) => {
 			error instanceof AiGenerationError ||
 			error instanceof AiProviderError
 		)
-			return json({ error: error.message }, { status: 422 });
+			return json(
+				{ error: error.message, code: audit.errorCode as AiFailureCode },
+				{ status: 422 }
+			);
 		console.error('Submission enrichment failed', error instanceof Error ? error.name : 'unknown');
 		return json({ error: '网页智能填充暂时不可用，请稍后重试或手动填写。' }, { status: 500 });
+	} finally {
+		if (auditStarted !== null)
+			await recordAiCall(database, { ...audit, durationMs: Date.now() - auditStarted });
 	}
 };
