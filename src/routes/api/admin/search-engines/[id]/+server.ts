@@ -19,7 +19,9 @@ function idFrom(value: string) {
 	if (!id) throw new AdminWriteError('搜索源 ID 无效。');
 	return id;
 }
-export const PATCH: RequestHandler = async ({ platform, request, params }) => {
+export const PATCH: RequestHandler = async ({ platform, request, params, url }) => {
+	if (request.headers.get('origin') !== url.origin)
+		return json({ error: '请求来源无效。' }, { status: 403 });
 	try {
 		const validation = validateSearchEngineInput(await readJsonObject(request));
 		if (!validation.valid) return validationApiError(validation);
@@ -29,7 +31,11 @@ export const PATCH: RequestHandler = async ({ platform, request, params }) => {
 		return mutationApiError(error);
 	}
 };
-export const DELETE: RequestHandler = async ({ platform, params }) => {
+export const DELETE: RequestHandler = async ({ platform, params, request, url }) => {
+	if (request.headers.get('origin') !== url.origin)
+		return json({ error: '请求来源无效。' }, { status: 403 });
+	if (request.headers.get('x-search-source-confirmed') !== 'yes')
+		return json({ error: '请确认删除搜索源。' }, { status: 428 });
 	try {
 		await deleteSearchEngine(requireDatabase(platform), idFrom(params.id));
 		return new Response(null, { status: 204 });

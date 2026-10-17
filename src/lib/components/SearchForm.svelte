@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { navigating } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { searchShortcut } from '$lib/ui-actions';
@@ -23,6 +24,10 @@
 		categories?: SearchCategoryOption[];
 		categoryUnavailable?: boolean;
 	} = $props();
+	let mounted = $state(false);
+	onMount(() => {
+		mounted = true;
+	});
 	const id = $props.id();
 	let input: HTMLInputElement;
 	const pending = $derived(Boolean(navigating.to));
@@ -67,7 +72,7 @@
 					input.focus();
 				}}>×</button
 			>{/if}
-		<button class="search-submit" type="submit" disabled={!value.trim() || pending}
+		<button class="search-submit" type="submit" disabled={pending || (mounted && !value.trim())}
 			>{pending ? '搜索中…' : '搜索'}</button
 		>
 	{/snippet}

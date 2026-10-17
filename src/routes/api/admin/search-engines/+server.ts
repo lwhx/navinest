@@ -5,7 +5,9 @@ import { mutationApiError, readJsonObject, validationApiError } from '$lib/serve
 import { createSearchEngine } from '$lib/server/services/admin-write';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ platform, request }) => {
+export const POST: RequestHandler = async ({ platform, request, url }) => {
+	if (request.headers.get('origin') !== url.origin)
+		return json({ error: '请求来源无效。' }, { status: 403 });
 	try {
 		const validation = validateSearchEngineInput(await readJsonObject(request));
 		if (!validation.valid) return validationApiError(validation);

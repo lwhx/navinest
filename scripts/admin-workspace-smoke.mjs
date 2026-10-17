@@ -15,6 +15,7 @@ import { checkMessageWorkflow } from './message-workflow-checks.mjs';
 import { checkBackupRestore } from './backup-restore-checks.mjs';
 import { checkAiServices } from './ai-service-checks.mjs';
 import { checkHotSourceHealth } from './hot-source-health-checks.mjs';
+import { checkSearchSources } from './search-source-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -1177,6 +1178,14 @@ try {
 		adminToken,
 		userToken
 	});
+	layouts += await checkSearchSources({
+		browser,
+		baseUrl,
+		command,
+		adminToken,
+		userToken,
+		screenshots
+	});
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
 	console.log(
 		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
@@ -1213,7 +1222,8 @@ try {
 						'owned submission history, full pagination, private details, feedback, native revisions and duplicate protection',
 						'backup validation, full diff preview, stale-state guards, atomic restore and uncertain results',
 						'AI services: preserved drafts, test classifications, explicit activation, config invalidation, history and native forms',
-						'hot-source read-only previews, health states, native forms, preserved caches and deduplicated notifications'
+						'hot-source read-only previews, health states, native forms, preserved caches and deduplicated notifications',
+						'search-source full pagination, safe link previews, ordering, defaults, homepage placeholders and native forms'
 					]
 				},
 				null,

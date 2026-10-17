@@ -132,7 +132,8 @@ export async function loadHomeData(database: Database): Promise<HomeData> {
 		searchEngines: searchEngines.map((engine) => ({
 			name: engine.name,
 			key: engine.key,
-			urlTemplate: engine.urlTemplate
+			urlTemplate: engine.urlTemplate,
+			placeholder: engine.placeholder
 		})),
 		dashboard,
 		modulePlan: buildHomeModulePlan(dashboard.modules, sections, dashboard.disabledCategorySlugs),
