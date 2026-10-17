@@ -76,6 +76,10 @@ export async function checkSearchSources({
 		assert.equal(new URL(target).searchParams.get('q'), keyword);
 		assert.equal(new URL(target).searchParams.get('mode'), 'all');
 		assert.deepEqual(snapshot(), before, 'link preview must not save or change status/order');
+		await page.getByRole('button', { name: '填入站内模板', exact: true }).click();
+		assert.equal(await page.locator('input[name=urlTemplate]').inputValue(), '/search?q={query}');
+		await page.getByRole('button', { name: '预览搜索链接', exact: true }).click();
+		assert.match(await page.locator('.source-preview code').innerText(), /^\/search\?q=/);
 		await page.locator('input[name=sampleQuery]').fill('下一条');
 		await page.locator('.source-preview').waitFor({ state: 'hidden' });
 		await page.locator('input[name=urlTemplate]').fill('https://{query}.example.com/');

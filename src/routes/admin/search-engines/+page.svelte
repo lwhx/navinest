@@ -27,10 +27,7 @@
 			sampleQuery: field('sampleQuery', '中文 & C++ / #?')
 		};
 	}
-	let draft = $state(initialDraft());
-	$effect(() => {
-		draft = initialDraft();
-	});
+	let draft = $derived(initialDraft());
 
 	let mounted = $state(false);
 	onMount(() => {
@@ -240,7 +237,7 @@
 								class="admin-secondary-button"
 								type="button"
 								onclick={() => {
-									draft.urlTemplate = INTERNAL_SEARCH_TEMPLATE;
+									draft = { ...draft, urlTemplate: INTERNAL_SEARCH_TEMPLATE };
 									previewInvalid = true;
 								}}>填入站内模板</button
 							>{:else}<small>站内模板：{INTERNAL_SEARCH_TEMPLATE}</small>{/if}
