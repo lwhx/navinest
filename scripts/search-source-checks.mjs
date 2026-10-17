@@ -40,6 +40,10 @@ export async function checkSearchSources({
 	const open = (path) => page.goto(baseUrl + path, { waitUntil: 'networkidle' });
 	let layouts = 0;
 	try {
+		// Restore the homepage prerequisite: the earlier backup suite intentionally removes all modules.
+		sql(
+			"INSERT INTO home_modules(type,title,config_json,sort_order,is_enabled) SELECT 'search','搜索源回归搜索','{}',10,1 WHERE NOT EXISTS (SELECT 1 FROM home_modules WHERE type='search' AND is_enabled=1)"
+		);
 		assert.equal((await anon.request.post(api, { headers, data: {} })).status(), 401);
 		assert.equal((await user.request.post(api, { headers, data: {} })).status(), 403);
 		assert.equal(
