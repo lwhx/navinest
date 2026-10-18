@@ -77,6 +77,9 @@ const endpoint = baseUrl + '/api/user/navigation/import',
 	headers = { origin: baseUrl };
 const count = () => Number(sql('SELECT COUNT(*) n FROM custom_links WHERE user_id=1')[0].n);
 async function choose(source = html) {
+	if (!(await page.locator('.import-drawer').evaluate((el) => el.open))) {
+		await page.locator('.import-drawer > summary').click();
+	}
 	await page
 		.locator('.bookmark-import input[type=file]')
 		.setInputFiles({ name: 'bookmarks.html', mimeType: 'text/html', buffer: Buffer.from(source) });

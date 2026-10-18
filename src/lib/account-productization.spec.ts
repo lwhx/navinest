@@ -45,9 +45,9 @@ describe('account productization', () => {
 	});
 	it('ships custom navigation ordering and bookmark import controls', () => {
 		const manager = read('src/lib/components/CustomNavigationManager.svelte');
-		expect(manager).toContain("fetch('/api/user/navigation'");
+		expect(manager).toContain("resolve('/api/user/navigation/workspace')");
 		expect(manager).toContain('<BookmarkImportPanel');
-		expect(manager).toContain("resource: 'order'");
+		expect(manager).toContain("kind: 'move'");
 		expect(manager).toContain('filterLinks');
 		expect(manager).toContain('placeholder="标题、网址、摘要或分类"');
 		for (const label of ['上移分类', '下移分类', '上移链接', '下移链接'])

@@ -1,5 +1,10 @@
 import type { Database } from '$lib/server/db';
 import { validateExternalTarget } from '$lib/server/safe-target';
+import { backupDigest } from './site-backup-state';
+import type { NavigationData } from '$lib/custom-navigation-workspace';
+
+export const customNavigationVersion = (navigation: NavigationData) =>
+	backupDigest({ categories: navigation.categories, links: navigation.links });
 
 export type CustomCategoryInput = { name: string; icon: string | null; sortOrder: number };
 export type CustomLinkInput = {
@@ -40,14 +45,14 @@ function text(value: string, label: string, max: number) {
 function order(value: number) {
 	return Number.isFinite(value) ? Math.trunc(value) : 0;
 }
-function categoryInput(input: CustomCategoryInput): CustomCategoryInput {
+export function categoryInput(input: CustomCategoryInput): CustomCategoryInput {
 	return {
 		name: text(input.name, '分类名称', 80),
 		icon: input.icon?.trim().slice(0, 80) || null,
 		sortOrder: order(input.sortOrder)
 	};
 }
-function linkInput(input: CustomLinkInput): CustomLinkInput {
+export function linkInput(input: CustomLinkInput): CustomLinkInput {
 	const target = validateExternalTarget(input.url);
 	if (!target.valid) throw new CustomNavigationError(target.reason, 'url');
 	if (input.status !== 'active' && input.status !== 'inactive')
@@ -91,7 +96,7 @@ export async function listCustomNavigation(database: Database, userId: number) {
 			.bind(userId)
 			.all<LinkRow>()
 	]);
-	return {
+	const navigation = {
 		categories: categories.results.map((row) => ({
 			id: row.id,
 			name: row.name,
@@ -108,6 +113,7 @@ export async function listCustomNavigation(database: Database, userId: number) {
 			status: row.status as 'active' | 'inactive'
 		}))
 	};
+	return { ...navigation, version: await customNavigationVersion(navigation) };
 }
 
 export async function createCustomCategory(
