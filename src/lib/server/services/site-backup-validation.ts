@@ -1,5 +1,6 @@
 import type { SiteBackup } from './site-backup';
 import { validateExternalTarget } from '$lib/server/safe-target';
+import { runtimeSetting } from '$lib/server/runtime-settings';
 const kinds = ['site', 'post', 'app', 'book', 'bulletin'];
 export const backupKey = (r: { type: string; slug: string }) => r.type + ':' + r.slug;
 export function validateSiteBackup(
@@ -17,8 +18,8 @@ export function validateSiteBackup(
 	for (const field of ['categories', 'tags', 'items', 'homeModules', 'searchEngines', 'hotSources'])
 		if (!Array.isArray(value[field])) issue(field, '必须是数组');
 	if (!object(value.settings)) issue('settings', '必须是对象');
-	else if (Object.keys(value.settings).some((key) => key.startsWith('admin:link-check:')))
-		issue('settings', '不得包含网址检查运行记录');
+	else if (Object.keys(value.settings).some(runtimeSetting))
+		issue('settings', '不得包含网址检查或书签导入运行记录');
 	if (errors.length) return { valid: false, errors };
 	function text(v: unknown, path: string, nullable = false, fallback?: string) {
 		if (v === undefined && fallback !== undefined) return fallback;

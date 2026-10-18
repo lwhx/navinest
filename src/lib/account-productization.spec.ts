@@ -46,7 +46,7 @@ describe('account productization', () => {
 	it('ships custom navigation ordering and bookmark import controls', () => {
 		const manager = read('src/lib/components/CustomNavigationManager.svelte');
 		expect(manager).toContain("fetch('/api/user/navigation'");
-		expect(manager).toContain("fetch('/api/user/navigation/import'");
+		expect(manager).toContain('<BookmarkImportPanel');
 		expect(manager).toContain("resource: 'order'");
 		expect(manager).toContain('filterLinks');
 		expect(manager).toContain('placeholder="标题、网址、摘要或分类"');

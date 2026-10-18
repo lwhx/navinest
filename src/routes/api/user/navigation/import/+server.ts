@@ -1,30 +1,48 @@
 import { json } from '@sveltejs/kit';
 import { requireDatabase } from '$lib/server/db';
-import { CustomNavigationError } from '$lib/server/services/custom-navigation';
-import { importBookmarks, parseBookmarkHtml } from '$lib/server/services/bookmark-import';
+import {
+	bookmarkImportReceipt,
+	cancelBookmarkImport,
+	commitBookmarkImport,
+	BookmarkImportError
+} from '$lib/server/services/bookmark-import-workspace';
+import { readBookmarkRequest, bookmarkError } from '$lib/server/bookmark-import-request';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals, platform, request }) => {
+	if (!locals.user)
+		return json({ error: '请先登录后再操作导入。', uncertain: false }, { status: 401 });
+	try {
+		const body = await readBookmarkRequest(request);
+		if (!body || typeof body !== 'object' || Array.isArray(body))
+			throw new BookmarkImportError('导入内容格式无效。');
+		const data = body as Record<string, unknown>,
+			db = requireDatabase(platform);
+		if (data.action === 'cancel') {
+			if (data.confirmed !== true) throw new BookmarkImportError('请确认取消尚未开始的批次。', 428);
+			return json({
+				receipt: await cancelBookmarkImport(db, locals.user.id, data.runId, data.digest)
+			});
+		}
+		return json({ receipt: await commitBookmarkImport(db, locals.user.id, body) });
+	} catch (error) {
+		return bookmarkError(error, true);
+	}
+};
+export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 	try {
-		let body: unknown;
-		try {
-			body = await request.json();
-		} catch {
-			return json({ error: 'Invalid request' }, { status: 400 });
-		}
-		const html = (body as Record<string, unknown> | null)?.html;
-		const parsed = parseBookmarkHtml(html);
-		const result = await importBookmarks(
-			requireDatabase(platform),
-			locals.user.id,
-			parsed.entries,
-			{ skipped: parsed.skipped }
+		return json(
+			{
+				receipt: await bookmarkImportReceipt(
+					requireDatabase(platform),
+					locals.user.id,
+					url.searchParams.get('runId')
+				)
+			},
+			{ headers: { 'cache-control': 'private, no-store' } }
 		);
-		return json(result, { status: 201 });
 	} catch (error) {
-		if (error instanceof CustomNavigationError)
-			return json({ error: error.message, field: error.field ?? null }, { status: error.status });
-		return json({ error: 'Invalid request' }, { status: 400 });
+		return bookmarkError(error);
 	}
 };

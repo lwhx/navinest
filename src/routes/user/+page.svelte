@@ -214,5 +214,5 @@
 				</ul>{:else}<p class="account-empty">暂无浏览记录。</p>{/if}
 		</section>
 	</div>
-	<CustomNavigationManager navigation={data.navigation} />
+	<CustomNavigationManager userId={data.user.id} navigation={data.navigation} />
 </AccountShell>

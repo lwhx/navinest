@@ -1,6 +1,7 @@
 import type { Database, DatabaseStatement } from '$lib/server/db';
 import type { SiteBackup } from './site-backup';
 import { jsonChunks } from './site-backup-state';
+import { portableSettingsScope } from '$lib/server/runtime-settings';
 export function backupWrites(
 	db: Database,
 	b: SiteBackup,
@@ -74,7 +75,7 @@ export function backupWrites(
 		);
 	}
 	if (replace.has('settings')) {
-		result.push(db.prepare("DELETE FROM settings WHERE key NOT GLOB 'admin:link-check:*'"));
+		result.push(db.prepare('DELETE FROM settings' + portableSettingsScope));
 		each(
 			Object.entries(b.settings).map(([key, value]) => ({ key, valueJson: JSON.stringify(value) })),
 			`INSERT INTO settings(key,value_json) SELECT value->>'$.key',value->>'$.valueJson' FROM json_each(?)`
