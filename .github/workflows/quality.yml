@@ -67,6 +67,11 @@ jobs:
           NAVINEST_REQUIRE_CJK: '1'
           NAVINEST_BOOKMARK_SCREENSHOT_DIR: ${{ runner.temp }}/navinest-admin-layout/bookmarks
         run: npm run test:bookmark-import
+      - name: Personal navigation workflow and responsive layouts
+        env:
+          NAVINEST_REQUIRE_CJK: '1'
+          NAVINEST_NAVIGATION_SCREENSHOT_DIR: ${{ runner.temp }}/navinest-admin-layout/navigation
+        run: npm run test:navigation-workspace
       - name: Upload administration layout evidence
         if: always()
         uses: actions/upload-artifact@v4

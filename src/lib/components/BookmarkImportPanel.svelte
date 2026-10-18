@@ -10,7 +10,11 @@
 		type BookmarkReceipt,
 		type BookmarkMapping
 	} from '$lib/bookmark-import';
-	let { userId, onlock }: { userId: number; onlock: (locked: boolean) => void } = $props();
+	let {
+		userId,
+		onlock,
+		disabled = false
+	}: { userId: number; onlock: (locked: boolean) => void; disabled?: boolean } = $props();
 	let ready = $state(false),
 		file = $state<File | null>(null),
 		html = $state(''),
@@ -39,8 +43,8 @@
 		) ?? []
 	);
 	const pages = $derived(Math.max(1, Math.ceil(rows.length / 20)));
-	const locked = $derived(busy || !!recovery);
-	$effect(() => onlock(locked));
+	const locked = $derived(disabled || busy || !!recovery);
+	$effect(() => onlock(busy || !!recovery));
 	beforeNavigate(({ cancel }) => {
 		if (busy) cancel();
 	});

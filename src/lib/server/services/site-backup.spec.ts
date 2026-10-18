@@ -89,31 +89,28 @@ describe('site backup', () => {
 		expect(JSON.stringify(backup)).not.toContain('SECRET');
 		expect(JSON.stringify(backup)).not.toContain('password_hash');
 	});
-	it('excludes private bookmark receipts, preserves them on restore and rejects injection', async () => {
-		const { db, sqlite } = fixture();
-		sqlite.exec(
-			`INSERT INTO settings VALUES('user:bookmark-import:7:run','{"status":"completed"}');`
-		);
-		const backup = await exportSiteBackup(db);
-		expect(Object.keys(backup.settings)).toEqual(['theme']);
-		backup.settings.theme = { mode: 'light' };
-		const preview = await previewSiteBackup(db, backup);
-		sqlite.exec(
-			`INSERT INTO settings VALUES('user:bookmark-import:8:run','{"status":"cancelled"}');`
-		);
-		await restoreSiteBackup(db, backup, preview);
-		expect(
-			sqlite
-				.prepare("SELECT COUNT(*) n FROM settings WHERE key GLOB 'user:bookmark-import:*'")
-				.get()
-		).toEqual({ n: 2 });
-		expect(
-			validateSiteBackup({
-				...backup,
-				settings: { ...backup.settings, 'user:bookmark-import:7:run': { status: 'cancelled' } }
-			})
-		).toMatchObject({ valid: false });
-	});
+	it.each(['user:bookmark-import:', 'user:navigation:'])(
+		'excludes private receipts in %s and preserves them on restore',
+		async (prefix) => {
+			const { db, sqlite } = fixture();
+			sqlite.exec(`INSERT INTO settings VALUES('${prefix}7:run','{"status":"completed"}');`);
+			const backup = await exportSiteBackup(db);
+			expect(Object.keys(backup.settings)).toEqual(['theme']);
+			backup.settings.theme = { mode: 'light' };
+			const preview = await previewSiteBackup(db, backup);
+			sqlite.exec(`INSERT INTO settings VALUES('${prefix}8:run','{"status":"cancelled"}');`);
+			await restoreSiteBackup(db, backup, preview);
+			expect(
+				sqlite.prepare(`SELECT COUNT(*) n FROM settings WHERE key GLOB '${prefix}*'`).get()
+			).toEqual({ n: 2 });
+			expect(
+				validateSiteBackup({
+					...backup,
+					settings: { ...backup.settings, [prefix + '7:run']: { status: 'cancelled' } }
+				})
+			).toMatchObject({ valid: false });
+		}
+	);
 	it('rejects invalid references before restore', () => {
 		expect(
 			validateSiteBackup({
