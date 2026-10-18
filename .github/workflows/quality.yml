@@ -32,6 +32,8 @@ jobs:
         run: npm run check
       - name: Unit and integration tests
         run: npm run test
+      - name: Link probes in the Worker runtime
+        run: npm run test:link-probe-runtime
       - name: Install browser for homepage checks
         run: npx playwright install --with-deps chromium
       - name: Install Chinese fonts for layout checks

@@ -41,7 +41,8 @@ export async function probeLink(url: string, options: ProbeOptions = {}): Promis
 							{
 								signal: controller.signal,
 								headers: { accept: 'application/dns-json' },
-								redirect: 'error'
+								// Workers rejects redirect: 'error'. Inspect non-2xx below without following it.
+								redirect: 'manual'
 							}
 						);
 						if (!response.ok) {

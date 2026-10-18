@@ -94,6 +94,42 @@ describe('bounded manual link probes', () => {
 		expect(await probeLink(url, { fetcher })).toMatchObject({ status: 'uncertain', reason: 'dns' });
 		expect(fetcher).toHaveBeenCalledTimes(2);
 	});
+	it('resolves public DNS using redirect modes accepted by the Worker runtime', async () => {
+		const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+			if (init?.redirect === 'error') throw new TypeError('Invalid redirect value in Workers');
+			if (String(input).startsWith('https://cloudflare-dns.com/dns-query?')) {
+				const type = new URL(String(input)).searchParams.get('type');
+				return Response.json({
+					Status: 0,
+					Answer: type === 'A' ? [{ type: 1, data: '93.184.216.34' }] : []
+				});
+			}
+			return new Response(null, { status: 200 });
+		});
+		expect(await probeLink(url, { fetcher })).toMatchObject({
+			status: 'reachable',
+			httpStatus: 200,
+			reason: 'ok'
+		});
+		expect(fetcher).toHaveBeenCalledTimes(3);
+	});
+	it('rejects DNS endpoint redirects without visiting the redirect target or website', async () => {
+		const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+			expect(init?.redirect).toBe('manual');
+			return new Response(null, {
+				status: 302,
+				headers: { location: 'http://127.0.0.1/private-dns' }
+			});
+		});
+		expect(await probeLink(url, { fetcher })).toMatchObject({
+			status: 'uncertain',
+			reason: 'dns',
+			finalUrl: null
+		});
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		for (const [input] of fetcher.mock.calls)
+			expect(String(input)).toMatch(/^https:\/\/cloudflare-dns\.com\/dns-query\?/);
+	});
 	it('limits redirect chains and detects missing targets and loops', async () => {
 		let hop = 0;
 		const fetcher = vi.fn<typeof fetch>(
