@@ -699,7 +699,11 @@ try {
 	);
 	await open(page, '/admin');
 	assert.ok((await page.locator('.admin-task-list').textContent()).includes('1 条'));
-	assert.equal(await page.locator('.admin-sidebar nav a').count(), 15);
+	assert.equal(await page.locator('.admin-sidebar nav a').count(), 16);
+	assert.equal(
+		await page.locator('.admin-sidebar nav a[href="/admin/link-checks"]').innerText(),
+		'网址检查'
+	);
 	assert.equal(await page.locator('.admin-sidebar a[aria-current="page"]').count(), 1);
 	assert.equal(await page.locator('.skip-link').getAttribute('href'), '#admin-main');
 	// Task checks use only this script's temporary LOCAL bindings.
