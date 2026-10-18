@@ -16,6 +16,7 @@ import { checkBackupRestore } from './backup-restore-checks.mjs';
 import { checkAiServices } from './ai-service-checks.mjs';
 import { checkHotSourceHealth } from './hot-source-health-checks.mjs';
 import { checkSearchSources } from './search-source-checks.mjs';
+import { checkSiteSettings } from './site-settings-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -1179,6 +1180,14 @@ try {
 		userToken
 	});
 	layouts += await checkSearchSources({
+		browser,
+		baseUrl,
+		command,
+		adminToken,
+		userToken,
+		screenshots
+	});
+	layouts += await checkSiteSettings({
 		browser,
 		baseUrl,
 		command,

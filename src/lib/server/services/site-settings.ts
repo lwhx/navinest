@@ -1,6 +1,7 @@
 import type { Database } from '$lib/server/db';
 import { SITE_SETTINGS_DEFAULTS, SITE_SETTINGS_KEY, type SiteSettings } from '$lib/types/site';
-import { validateExternalTarget } from '$lib/server/safe-target';
+import { announcementTarget } from '$lib/site-settings-preview';
+import { AdminWriteError } from '$lib/server/services/admin-write';
 import type { ValidationResult } from '$lib/server/admin-validation';
 
 export { SITE_SETTINGS_DEFAULTS, SITE_SETTINGS_KEY, siteDisplayName } from '$lib/types/site';
@@ -37,7 +38,7 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
 			SITE_SETTINGS_DEFAULTS.announcementEnabled
 		),
 		announcementMessage: text(record.announcementMessage, '', 240),
-		announcementLink: text(record.announcementLink, '', 300),
+		announcementLink: announcementTarget(text(record.announcementLink, '', 300)) ?? '',
 		announcementLinkLabel: text(record.announcementLinkLabel, '', 40),
 		submissionsOpen: flag(record.submissionsOpen, SITE_SETTINGS_DEFAULTS.submissionsOpen),
 		registrationOpen: flag(record.registrationOpen, SITE_SETTINGS_DEFAULTS.registrationOpen),
@@ -73,11 +74,11 @@ export function validateSiteSettingsInput(
 	let announcementLink = '';
 	if (rawLink) {
 		if (rawLink.length > 300) errors.announcementLink = '公告链接不能超过 300 个字符。';
-		else if (rawLink.startsWith('/')) announcementLink = rawLink;
 		else {
-			const target = validateExternalTarget(rawLink);
-			if (!target.valid) errors.announcementLink = '公告链接需要是站内路径或合法的 http(s) 地址。';
-			else announcementLink = target.target;
+			const target = announcementTarget(rawLink);
+			if (target === null)
+				errors.announcementLink = '公告链接需要是站内路径或合法的公网 http(s) 地址。';
+			else announcementLink = target;
 		}
 	}
 
@@ -130,12 +131,76 @@ export async function loadSiteSettings(database: Database | null): Promise<SiteS
 	}
 }
 
-export async function saveSiteSettings(database: Database, settings: SiteSettings) {
-	await database
-		.prepare(
-			`INSERT INTO settings(key,value_json,updated_at) VALUES(?,?,CURRENT_TIMESTAMP)
-			 ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=CURRENT_TIMESTAMP`
-		)
-		.bind(SITE_SETTINGS_KEY, JSON.stringify(settings))
-		.all();
+async function storedSettings(database: Database) {
+	return (
+		(
+			await database
+				.prepare('SELECT value_json FROM settings WHERE key=? LIMIT 1')
+				.bind(SITE_SETTINGS_KEY)
+				.all<{ value_json: string }>()
+		).results[0]?.value_json ?? null
+	);
+}
+
+async function revision(raw: string | null) {
+	const bytes = await crypto.subtle.digest(
+		'SHA-256',
+		new TextEncoder().encode(JSON.stringify(raw))
+	);
+	return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function editableRecord(raw: string | null): Record<string, unknown> {
+	if (raw === null) return {};
+	try {
+		const value: unknown = JSON.parse(raw);
+		if (value && typeof value === 'object' && !Array.isArray(value))
+			return value as Record<string, unknown>;
+	} catch {
+		/* The public fallback must not silently become the administrator's saved configuration. */
+	}
+	throw new AdminWriteError(
+		'已保存的站点设置格式异常，请先核对原始配置；当前禁止覆盖。',
+		undefined,
+		409
+	);
+}
+
+/** Strict administrator read; public pages retain their tolerant fallback. */
+export async function readSiteSettingsWorkspace(database: Database) {
+	const raw = await storedSettings(database);
+	return { settings: normalizeSiteSettings(editableRecord(raw)), revision: await revision(raw) };
+}
+
+export async function saveSiteSettings(
+	database: Database,
+	settings: SiteSettings,
+	expectedRevision?: string
+) {
+	const raw = await storedSettings(database);
+	const record = editableRecord(raw);
+	if (expectedRevision !== undefined && expectedRevision !== (await revision(raw))) {
+		throw new AdminWriteError(
+			'设置已在其他页面改变。填写内容已保留，请打开最新设置核对后重新填写。',
+			undefined,
+			409
+		);
+	}
+	const next = JSON.stringify({ ...record, ...settings });
+	const statement =
+		raw === null
+			? database
+					.prepare(
+						'INSERT INTO settings(key,value_json,updated_at) SELECT ?,?,CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM settings WHERE key=?) RETURNING key'
+					)
+					.bind(SITE_SETTINGS_KEY, next, SITE_SETTINGS_KEY)
+			: database
+					.prepare(
+						'UPDATE settings SET value_json=?,updated_at=CURRENT_TIMESTAMP WHERE key=? AND value_json=? RETURNING key'
+					)
+					.bind(next, SITE_SETTINGS_KEY, raw);
+	const result = await statement.all<{ key: string }>();
+	if (!result.results.length)
+		throw new AdminWriteError('保存时设置发生变化，请核对最新设置后重试。', undefined, 409);
+	return { settings, revision: await revision(next) };
 }

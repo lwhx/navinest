@@ -5,6 +5,7 @@ import {
 	loadSiteSettings,
 	normalizeSiteSettings,
 	readSiteSettings,
+	readSiteSettingsWorkspace,
 	saveSiteSettings,
 	validateSiteSettingsInput
 } from '$lib/server/services/site-settings';
@@ -43,6 +44,106 @@ CREATE TABLE settings(key TEXT PRIMARY KEY,value_json TEXT NOT NULL,updated_at T
 afterEach(() => connections.splice(0).forEach((connection) => connection.close()));
 
 describe('site settings storage', () => {
+	it('preserves unknown extension settings and unrelated rows', async () => {
+		const { db, sqlite } = fixture();
+		sqlite
+			.prepare('INSERT INTO settings(key,value_json) VALUES(?,?)')
+			.run('site', JSON.stringify({ ...SITE_SETTINGS_DEFAULTS, extension: { kept: true } }));
+		sqlite
+			.prepare('INSERT INTO settings(key,value_json) VALUES(?,?)')
+			.run('other', '{"secret":"untouched"}');
+		const current = await readSiteSettingsWorkspace(db);
+		const saved = await saveSiteSettings(
+			db,
+			{ ...current.settings, siteName: '新名称' },
+			current.revision
+		);
+		expect(saved.revision).not.toBe(current.revision);
+		expect(await readSiteSettingsWorkspace(db)).toEqual(saved);
+		const raw = sqlite.prepare("SELECT value_json FROM settings WHERE key='site'").get() as {
+			value_json: string;
+		};
+		expect(JSON.parse(raw.value_json)).toMatchObject({
+			siteName: '新名称',
+			extension: { kept: true }
+		});
+		expect(sqlite.prepare("SELECT value_json FROM settings WHERE key='other'").get()).toEqual({
+			value_json: '{"secret":"untouched"}'
+		});
+	});
+
+	it('rejects stale first-save and existing-row versions without overwriting', async () => {
+		const { db } = fixture();
+		const empty = await readSiteSettingsWorkspace(db);
+		const first = await saveSiteSettings(
+			db,
+			{ ...empty.settings, siteName: '先保存' },
+			empty.revision
+		);
+		await expect(
+			saveSiteSettings(db, { ...empty.settings, siteName: '旧页面' }, empty.revision)
+		).rejects.toMatchObject({ status: 409 });
+		const second = await saveSiteSettings(
+			db,
+			{ ...first.settings, submissionsOpen: false },
+			first.revision
+		);
+		await expect(saveSiteSettings(db, first.settings, first.revision)).rejects.toMatchObject({
+			status: 409
+		});
+		expect(await readSiteSettingsWorkspace(db)).toEqual(second);
+	});
+
+	it.each(['not-json', 'null', '[]', '42'])(
+		'blocks administrator overwrite of malformed configuration: %s',
+		async (raw) => {
+			const { db, sqlite } = fixture();
+			sqlite.prepare("INSERT INTO settings(key,value_json) VALUES('site',?)").run(raw);
+			await expect(readSiteSettingsWorkspace(db)).rejects.toMatchObject({ status: 409 });
+			await expect(saveSiteSettings(db, SITE_SETTINGS_DEFAULTS)).rejects.toMatchObject({
+				status: 409
+			});
+			expect(
+				(
+					sqlite.prepare("SELECT value_json FROM settings WHERE key='site'").get() as {
+						value_json: string;
+					}
+				).value_json
+			).toBe(raw);
+		}
+	);
+
+	it('rejects a writer arriving after the version read inside the final SQL', async () => {
+		const { db, sqlite } = fixture();
+		await saveSiteSettings(db, SITE_SETTINGS_DEFAULTS);
+		const current = await readSiteSettingsWorkspace(db);
+		const wrapped: Database = {
+			prepare(query) {
+				if (query.startsWith('UPDATE settings SET'))
+					sqlite
+						.prepare("UPDATE settings SET value_json=? WHERE key='site'")
+						.run(JSON.stringify({ ...SITE_SETTINGS_DEFAULTS, siteName: '迟到的修改' }));
+				return db.prepare(query);
+			}
+		};
+		await expect(
+			saveSiteSettings(wrapped, { ...current.settings, siteName: '旧修改' }, current.revision)
+		).rejects.toMatchObject({ status: 409 });
+		expect((await readSiteSettings(db)).siteName).toBe('迟到的修改');
+	});
+
+	it('leaves the original row unchanged when the database aborts the update', async () => {
+		const { db, sqlite } = fixture();
+		await saveSiteSettings(db, SITE_SETTINGS_DEFAULTS);
+		const current = await readSiteSettingsWorkspace(db);
+		sqlite.exec(
+			"CREATE TRIGGER stop_settings BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT,'forced failure'); END;"
+		);
+		await expect(
+			saveSiteSettings(db, { ...current.settings, siteName: '不可写入' }, current.revision)
+		).rejects.toThrow('forced failure');
+		expect(await readSiteSettingsWorkspace(db)).toEqual(current);
+	});
 	it('falls back to defaults when nothing is stored', async () => {
 		const { db } = fixture();
 		expect(await readSiteSettings(db)).toEqual(SITE_SETTINGS_DEFAULTS);
@@ -105,6 +206,19 @@ describe('site settings normalisation', () => {
 });
 
 describe('site settings validation', () => {
+	it.each([
+		'//example.com/path',
+		'/\\example.com/path',
+		'/\nexample.com',
+		'http://127.0.0.1/',
+		'https://user:pass@example.com/'
+	])('rejects unsafe links in both saves and historical public output: %s', (announcementLink) => {
+		expect(validateSiteSettingsInput({ siteName: '测试', announcementLink })).toMatchObject({
+			valid: false,
+			errors: { announcementLink: expect.any(String) }
+		});
+		expect(normalizeSiteSettings({ announcementLink }).announcementLink).toBe('');
+	});
 	it('normalises a complete submission', () => {
 		expect(
 			validateSiteSettingsInput({
