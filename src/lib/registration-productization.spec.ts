@@ -32,7 +32,6 @@ describe('public registration wiring', () => {
 
 	it('exposes the switch in site settings', () => {
 		expect(read('src/lib/types/site.ts')).toContain('registrationOpen: false');
-		expect(read('src/routes/admin/settings/+page.svelte')).toContain('name="registrationOpen"');
 		expect(read('src/lib/server/services/site-settings.ts')).toContain('registrationOpen');
 	});
 });

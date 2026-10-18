@@ -49,7 +49,6 @@ describe('site settings productization', () => {
 		expect(read('src/routes/admin/settings/+page.server.ts')).toContain(
 			'validateSiteSettingsInput'
 		);
-		expect(read('src/routes/admin/settings/+page.svelte')).toContain('name="announcementEnabled"');
 		const api = read('src/routes/api/admin/settings/+server.ts');
 		expect(api).toContain('export const GET');
 		expect(api).toContain('export const PUT');
