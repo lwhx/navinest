@@ -1,5 +1,6 @@
 import type { Database, DatabaseStatement } from '$lib/server/db';
 import type { SiteBackup } from './site-backup';
+import { portableSettingsScope } from '$lib/server/runtime-settings';
 
 // Only site configuration/content columns: runtime counters and private account data stay outside.
 const specs = [
@@ -92,8 +93,7 @@ const specs = [
 ] as const;
 export type BackupState = Array<{ table: string; rows: string[] }>;
 // Link diagnostics are runtime state, not portable site configuration.
-const scope = (table: string) =>
-	table === 'settings' ? " WHERE key NOT GLOB 'admin:link-check:*'" : '';
+const scope = (table: string) => (table === 'settings' ? portableSettingsScope : '');
 export const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 // Stay below D1's per-value size; parameters, not interpolated input, carry data.
 export function jsonChunks(values: unknown[], maximum = 900_000): string[] {
