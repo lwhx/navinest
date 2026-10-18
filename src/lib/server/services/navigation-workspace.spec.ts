@@ -307,4 +307,22 @@ describe('personal navigation workspace mutations', () => {
 		});
 		expect(calls.length).toBeLessThan(25);
 	});
+	it('writes only the two neighbors when sorting a large collection with unique order values', async () => {
+		const { db, sqlite } = fixture(601);
+		sqlite.exec(
+			'UPDATE custom_links SET sort_order=id*10; CREATE TABLE written_ids(id INTEGER); CREATE TRIGGER track_navigation_update AFTER UPDATE ON custom_links BEGIN INSERT INTO written_ids VALUES(new.id); END;'
+		);
+		await commitNavigationMutation(
+			db,
+			7,
+			await packet(db, { kind: 'move', resource: 'link', id: 601, direction: -1 })
+		);
+		expect(sqlite.prepare('SELECT id FROM written_ids ORDER BY id').all()).toEqual([
+			{ id: 600 },
+			{ id: 601 }
+		]);
+		expect((await listCustomNavigation(db, 7)).links.slice(-3).map((l) => l.id)).toEqual([
+			599, 601, 600
+		]);
+	});
 });

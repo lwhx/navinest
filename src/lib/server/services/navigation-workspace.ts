@@ -322,16 +322,31 @@ export async function prepareNavigationMutation(db: Database, userId: number, in
 			b = order.indexOf(other.id);
 		[order[a], order[b]] = [order[b], order[a]];
 		const table = mutation.resource === 'link' ? 'custom_links' : 'custom_categories';
-		for (const chunk of jsonChunks(
-			order.map((id, index) => ({ id, sort: (index + 1) * 10 })),
-			400000
-		))
+		const uniqueOrders =
+			current.sortOrder !== other.sortOrder &&
+			list.filter((row) => row.sortOrder === current.sortOrder).length === 1 &&
+			list.filter((row) => row.sortOrder === other.sortOrder).length === 1;
+		if (uniqueOrders)
 			run(
-				`UPDATE ${table} SET sort_order=(SELECT value->>'$.sort' FROM json_each(?) WHERE value->>'$.id'=${table}.id),updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id IN(SELECT value->>'$.id' FROM json_each(?))`,
-				chunk,
+				`UPDATE ${table} SET sort_order=CASE id WHEN ? THEN ? ELSE ? END,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id IN(?,?)`,
+				current.id,
+				other.sortOrder,
+				current.sortOrder,
 				userId,
-				chunk
+				current.id,
+				other.id
 			);
+		else
+			for (const chunk of jsonChunks(
+				order.map((id, index) => ({ id, sort: (index + 1) * 10 })),
+				400000
+			))
+				run(
+					`UPDATE ${table} SET sort_order=(SELECT value->>'$.sort' FROM json_each(?) WHERE value->>'$.id'=${table}.id),updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id IN(SELECT value->>'$.id' FROM json_each(?))`,
+					chunk,
+					userId,
+					chunk
+				);
 		title = mutation.direction === -1 ? '上移' : '下移';
 		detail = mutation.resource === 'link' ? '调整同分类内的相邻链接顺序。' : '调整分类顺序。';
 		items = [current, other].map((r) => ({ id: r.id, title: 'title' in r ? r.title : r.name }));
