@@ -334,6 +334,7 @@ try {
 	await native.addCookies([{ name: 'navinest_session', value: userToken, url: baseUrl }]);
 	const np = await native.newPage();
 	await np.goto(baseUrl + '/user');
+	await np.locator('.import-drawer > summary').click();
 	assert.equal(await np.getByRole('button', { name: '生成预览', exact: true }).isDisabled(), true);
 	assert.match(await np.locator('.bookmark-import').innerText(), /需要启用 JavaScript/);
 	await native.close();
