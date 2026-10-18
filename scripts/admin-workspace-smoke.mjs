@@ -17,6 +17,7 @@ import { checkAiServices } from './ai-service-checks.mjs';
 import { checkHotSourceHealth } from './hot-source-health-checks.mjs';
 import { checkSearchSources } from './search-source-checks.mjs';
 import { checkSiteSettings } from './site-settings-checks.mjs';
+import { checkSavedLinks } from './link-check-checks.mjs';
 
 // This check always owns a temporary LOCAL database and worker. It cannot target production.
 const temporary = mkdtempSync(join(tmpdir(), 'navinest-admin-'));
@@ -698,7 +699,11 @@ try {
 	);
 	await open(page, '/admin');
 	assert.ok((await page.locator('.admin-task-list').textContent()).includes('1 条'));
-	assert.equal(await page.locator('.admin-sidebar nav a').count(), 15);
+	assert.equal(await page.locator('.admin-sidebar nav a').count(), 16);
+	assert.equal(
+		await page.locator('.admin-sidebar nav a[href="/admin/link-checks"]').innerText(),
+		'网址检查'
+	);
 	assert.equal(await page.locator('.admin-sidebar a[aria-current="page"]').count(), 1);
 	assert.equal(await page.locator('.skip-link').getAttribute('href'), '#admin-main');
 	// Task checks use only this script's temporary LOCAL bindings.
@@ -1196,6 +1201,14 @@ try {
 		screenshots
 	});
 	assert.deepEqual(errors, [], 'Administration produced browser runtime errors');
+	layouts += await checkSavedLinks({
+		browser,
+		baseUrl,
+		command,
+		adminToken,
+		userToken,
+		screenshots
+	});
 	console.log(
 		`Admin workspace: authorization, cascading category parents and native forms, descendant content, category types and legacy preservation, pagination, filters, editor save, bulk updates, complete ordering, config preservation, keyboard navigation and ${layouts} CJK layouts passed.`
 	);
@@ -1232,7 +1245,8 @@ try {
 						'backup validation, full diff preview, stale-state guards, atomic restore and uncertain results',
 						'AI services: preserved drafts, test classifications, explicit activation, config invalidation, history and native forms',
 						'hot-source read-only previews, health states, native forms, preserved caches and deduplicated notifications',
-						'search-source full pagination, safe link previews, ordering, defaults, homepage placeholders and native forms'
+						'search-source full pagination, safe link previews, ordering, defaults, homepage placeholders and native forms',
+						'saved-URL real local checks, result filtering, full pagination, stale URL guards, editor shortcuts and native forms'
 					]
 				},
 				null,

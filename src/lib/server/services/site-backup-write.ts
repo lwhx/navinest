@@ -74,7 +74,7 @@ export function backupWrites(
 		);
 	}
 	if (replace.has('settings')) {
-		result.push(db.prepare('DELETE FROM settings'));
+		result.push(db.prepare("DELETE FROM settings WHERE key NOT GLOB 'admin:link-check:*'"));
 		each(
 			Object.entries(b.settings).map(([key, value]) => ({ key, valueJson: JSON.stringify(value) })),
 			`INSERT INTO settings(key,value_json) SELECT value->>'$.key',value->>'$.valueJson' FROM json_each(?)`

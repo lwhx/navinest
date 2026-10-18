@@ -47,6 +47,27 @@ function fixture() {
 }
 afterEach(() => connections.splice(0).forEach((x) => x.close()));
 describe('site backup', () => {
+	it('excludes live link diagnostics from backups and guards, preserves them on restore and rejects injected runtime keys', async () => {
+		const { db, sqlite } = fixture();
+		sqlite.exec(`INSERT INTO settings VALUES('admin:link-check:item:1','{"status":"gone"}');`);
+		const backup = await exportSiteBackup(db);
+		expect(Object.keys(backup.settings)).toEqual(['theme']);
+		backup.settings.theme = { mode: 'light' };
+		const preview = await previewSiteBackup(db, backup);
+		sqlite.exec(`INSERT INTO settings VALUES('admin:link-check:lease','{"token":"current"}');`);
+		await restoreSiteBackup(db, backup, preview);
+		expect(
+			sqlite
+				.prepare("SELECT COUNT(*) count FROM settings WHERE key GLOB 'admin:link-check:*'")
+				.get()
+		).toEqual({ count: 2 });
+		expect(
+			validateSiteBackup({
+				...backup,
+				settings: { ...backup.settings, 'admin:link-check:lease': { token: 'injected' } }
+			})
+		).toMatchObject({ valid: false });
+	});
 	it('exports portable site data without users or secrets', async () => {
 		const { db } = fixture();
 		const backup = await exportSiteBackup(db, new Date('2026-07-13T00:00:00Z'));

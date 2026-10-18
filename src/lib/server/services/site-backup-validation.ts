@@ -17,6 +17,8 @@ export function validateSiteBackup(
 	for (const field of ['categories', 'tags', 'items', 'homeModules', 'searchEngines', 'hotSources'])
 		if (!Array.isArray(value[field])) issue(field, '必须是数组');
 	if (!object(value.settings)) issue('settings', '必须是对象');
+	else if (Object.keys(value.settings).some((key) => key.startsWith('admin:link-check:')))
+		issue('settings', '不得包含网址检查运行记录');
 	if (errors.length) return { valid: false, errors };
 	function text(v: unknown, path: string, nullable = false, fallback?: string) {
 		if (v === undefined && fallback !== undefined) return fallback;

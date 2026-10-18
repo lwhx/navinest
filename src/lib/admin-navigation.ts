@@ -4,6 +4,7 @@ export const adminNavigation = [
 		label: '内容运营',
 		items: [
 			{ href: '/admin/items', label: '内容管理', icon: 'document' },
+			{ href: '/admin/link-checks', label: '网址检查', icon: 'check' },
 			{ href: '/admin/categories', label: '分类管理', icon: 'folder' },
 			{ href: '/admin/tags', label: '标签管理', icon: 'tag' },
 			{ href: '/admin/submissions', label: '投稿审核', icon: 'check' },
