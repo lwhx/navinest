@@ -291,6 +291,14 @@
 		</div>
 	</div>
 	{#if data.source === 'database'}<div class="content-header-actions">
+			<a
+				class="admin-secondary-button"
+				href={resolve('/admin/link-checks')}
+				aria-disabled={sortSaving || bulkBusy}
+				onclick={(event) => {
+					if (sortSaving || bulkBusy) event.preventDefault();
+				}}>检查网址</a
+			>
 			<button
 				class="admin-secondary-button"
 				type="button"

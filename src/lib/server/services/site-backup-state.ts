@@ -91,6 +91,9 @@ const specs = [
 	{ table: 'settings', keys: ['key'], columns: ['key', 'value_json'] }
 ] as const;
 export type BackupState = Array<{ table: string; rows: string[] }>;
+// Link diagnostics are runtime state, not portable site configuration.
+const scope = (table: string) =>
+	table === 'settings' ? " WHERE key NOT GLOB 'admin:link-check:*'" : '';
 export const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 // Stay below D1's per-value size; parameters, not interpolated input, carry data.
 export function jsonChunks(values: unknown[], maximum = 900_000): string[] {
@@ -118,7 +121,7 @@ export async function readBackupState(db: Database): Promise<BackupState> {
 		const rows = (
 			await db
 				.prepare(
-					`SELECT json_array(${spec.columns.join(',')}) value FROM ${spec.table} ORDER BY ${spec.keys.join(',')}`
+					`SELECT json_array(${spec.columns.join(',')}) value FROM ${spec.table}${scope(spec.table)} ORDER BY ${spec.keys.join(',')}`
 				)
 				.all<{ value: string }>()
 		).results;
@@ -133,7 +136,7 @@ export function stateGuards(db: Database, state: BackupState): DatabaseStatement
 		return (chunks.length ? chunks : ['[]']).map((chunk) =>
 			db
 				.prepare(
-					`SELECT CASE WHEN (SELECT COUNT(*) FROM ${spec.table})=?
+					`SELECT CASE WHEN (SELECT COUNT(*) FROM ${spec.table}${scope(spec.table)})=?
 		 AND NOT EXISTS(SELECT 1 FROM json_each(?) expected WHERE NOT EXISTS(SELECT 1 FROM ${spec.table}
 		 WHERE ${spec.keys.map((k) => `${spec.table}.${k}=json_extract(expected.value,'$[${(spec.columns as readonly string[]).indexOf(k)}]')`).join(' AND ')}
 		 AND json_array(${spec.columns.join(',')})=expected.value))
