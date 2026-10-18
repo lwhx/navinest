@@ -914,6 +914,17 @@
 						</article>{/each}
 				</div>
 				{#if !matchingCategories.length}<p class="empty muted">没有匹配的分类。</p>{/if}
+				<nav class="pager" aria-label="分类管理分页">
+					{#if categoryPage > 1}<a
+							href={resolve(url({ navCategoryPage: categoryPage - 1 }) as '/')}
+							data-sveltekit-noscroll>分类上一页</a
+						>{:else}<span>分类上一页</span>{/if}
+					<span>{categoryPage} / {categoryPages}</span>
+					{#if categoryPage < categoryPages}<a
+							href={resolve(url({ navCategoryPage: categoryPage + 1 }) as '/')}
+							data-sveltekit-noscroll>分类下一页</a
+						>{:else}<span>分类下一页</span>{/if}
+				</nav>
 			{/if}
 		</div>
 	</div>

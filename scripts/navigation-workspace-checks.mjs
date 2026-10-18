@@ -191,6 +191,17 @@ try {
 		(await (await user.request.post(endpoint, { headers, data: packet })).json()).receipt.status,
 		'completed'
 	);
+	// Actual status transitions retain all other fields and clear the reviewed selection.
+	for (const [label, status] of [
+		['批量启用', 'active'],
+		['批量停用', 'inactive']
+	]) {
+		await app().getByRole('checkbox', { name: '选择链接 1020 资源020', exact: true }).check();
+		await app().getByRole('button', { name: label, exact: true }).click();
+		await confirmReview();
+		await waitMessage('操作已完成');
+		assert.equal(sql('SELECT status FROM custom_links WHERE id=1020')[0].status, status);
+	}
 	// Error responses keep the isolated editor draft and block duplicate saves while a request is pending.
 	await app().getByRole('button', { name: '编辑链接 1020 资源020', exact: true }).click();
 	await app().getByRole('textbox', { name: '链接标题', exact: true }).fill('保留的编辑草稿');
@@ -278,6 +289,10 @@ try {
 	await app().getByRole('button', { name: '刷新列表', exact: true }).click();
 	await waitMessage('列表已刷新');
 	await app().getByRole('link', { name: '管理分类', exact: true }).click();
+	await app().getByRole('link', { name: '分类下一页', exact: true }).click();
+	await app().getByRole('button', { name: '编辑分类 110 分类10', exact: true }).waitFor();
+	assert.equal(await app().locator('.category-row').count(), 10);
+	await app().getByRole('link', { name: '分类上一页', exact: true }).click();
 	await app().getByRole('button', { name: '删除分类 100 分类00', exact: true }).click();
 	assert.match(await app().locator('.operation-review').innerText(), /链接保留并移至未分类/);
 	await confirmReview();
