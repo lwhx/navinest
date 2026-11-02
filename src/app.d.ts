@@ -7,6 +7,8 @@ declare global {
 		ALERT_WEBHOOK_URL?: string;
 		ADMIN_AUTH_MODE?: string;
 		GITHUB_LOGIN_ENABLED?: string;
+		CF_ACCESS_TEAM_DOMAIN?: string;
+		CF_ACCESS_AUD?: string;
 	}
 
 	namespace App {

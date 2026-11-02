@@ -1,4 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { verifyAccessAssertion } from '$lib/server/access-jwt';
 import { getDatabase, type Database } from '$lib/server/db';
 import type { UserIdentity } from '$lib/server/user-auth';
 
@@ -30,9 +31,14 @@ type AdminUserRow = {
 export type AdminAuthorizationContext = {
 	database: Database | null;
 	isLocal: boolean;
-	email: string | null;
 	assertion: string | null;
 	mode?: AdminAuthMode;
+	/** Cloudflare Access team domain (e.g. team.example.cloudflareaccess.com); access mode fails closed without it. */
+	accessTeamDomain?: string | null;
+	/** Optional Access application AUD tag to pin the token audience. */
+	accessAud?: string | null;
+	/** Injectable for tests; production uses global fetch. */
+	accessFetch?: typeof fetch;
 	/** Populated by the server hook from the current, active D1 session. */
 	user?: UserIdentity | null;
 };
@@ -70,11 +76,30 @@ export async function authorizeAdmin(
 		};
 	}
 
-	if (!context.email || !context.assertion) {
+	if (!context.assertion) {
 		return {
 			authorized: false,
 			status: 401,
 			message: 'Cloudflare Access authentication required.'
+		};
+	}
+	if (!context.accessTeamDomain) {
+		return {
+			authorized: false,
+			status: 503,
+			message: 'Access JWT verification is not configured; set CF_ACCESS_TEAM_DOMAIN.'
+		};
+	}
+	const verification = await verifyAccessAssertion(context.assertion, {
+		teamDomain: context.accessTeamDomain,
+		aud: context.accessAud ?? null,
+		fetcher: context.accessFetch
+	});
+	if (!verification.ok) {
+		return {
+			authorized: false,
+			status: verification.reason === 'key-unavailable' ? 503 : 401,
+			message: 'Cloudflare Access assertion rejected.'
 		};
 	}
 
@@ -89,7 +114,7 @@ export async function authorizeAdmin(
 			 WHERE lower(email) = lower(?)
 			 LIMIT 1`
 		)
-		.bind(context.email)
+		.bind(verification.email)
 		.all<AdminUserRow>();
 	const user = results[0];
 
@@ -114,12 +139,14 @@ function isLocalRequest(event: RequestEvent): boolean {
 }
 
 export function adminAuthorizationContext(event: RequestEvent): AdminAuthorizationContext {
+	const env = event.platform?.env;
 	return {
 		database: getDatabase(event.platform),
 		isLocal: isLocalRequest(event),
-		email: event.request.headers.get('cf-access-authenticated-user-email'),
 		assertion: event.request.headers.get('cf-access-jwt-assertion'),
-		mode: adminAuthMode(event.platform?.env?.ADMIN_AUTH_MODE),
+		mode: adminAuthMode(env?.ADMIN_AUTH_MODE),
+		accessTeamDomain: env?.CF_ACCESS_TEAM_DOMAIN || null,
+		accessAud: env?.CF_ACCESS_AUD || null,
 		user: event.locals.user
 	};
 }

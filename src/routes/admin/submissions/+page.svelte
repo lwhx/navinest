@@ -10,6 +10,8 @@
 		type ReviewAttempt,
 		type ReviewReceipt
 	} from '$lib/submission-queue';
+	import AdminSubmissionEvidence from '$lib/components/admin/AdminSubmissionEvidence.svelte';
+	import AdminSubmissionQueue from '$lib/components/admin/AdminSubmissionQueue.svelte';
 	import type { PageProps } from './$types';
 	let { data: initialData, form }: PageProps = $props();
 	let queueSnapshot = $state<{ url: string; data: PageProps['data'] } | null>(null);
@@ -615,83 +617,18 @@
 			· <a href={resolve(result.publishedHref as '/')} onclick={blockBusy}>查看已发布内容</a>{/if}
 	</p>{/if}
 <div class="review-workbench">
-	<aside class="review-queue">
-		<div class="review-queue-head"><strong>审核队列</strong><span>{data.total} 条</span></div>
-		<form
-			class="review-filters"
-			method="GET"
-			action={resolve('/admin/submissions')}
-			onsubmit={(event) => {
-				if (processing || pending || syncing) event.preventDefault();
-			}}
-		>
-			<label
-				><span>搜索投稿</span><input
-					name="q"
-					value={data.filters.q}
-					maxlength="160"
-					placeholder="标题、投稿人或网址"
-					disabled={processing || pending !== null || syncing}
-				/></label
-			>
-			<label
-				><span>审核状态</span><select
-					name="status"
-					value={data.filters.status}
-					disabled={processing || pending !== null || syncing}
-					><option value="pending">待处理</option><option value="reviewing">处理中</option><option
-						value="published">已发布</option
-					><option value="approved">历史已通过</option><option value="rejected">已拒绝</option
-					><option value="all">全部</option></select
-				></label
-			>
-			<button
-				class="admin-secondary-button"
-				type="submit"
-				disabled={processing || pending !== null || syncing}>筛选</button
-			>
-		</form>
-		<div class="review-list">
-			{#each visible as submission (submission.id)}<a
-					href={resolve(
-						submissionQueueUrl(data.filters, { submission: submission.id }) as '/admin/submissions'
-					)}
-					class:active={selected?.id === submission.id}
-					aria-current={selected?.id === submission.id ? 'true' : undefined}
-					aria-disabled={processing || pending !== null || syncing}
-					onclick={blockBusy}
-					><span class="review-type"
-						>{typeLabels[submission.type] ?? '投稿'} · {submission.processing
-							? '处理中'
-							: label(submission.status)}</span
-					><strong>{submission.title}</strong><small
-						>{submission.user.displayName} · {submission.createdAt.slice(0, 10)}</small
-					>{#if submission.payload.aiSuggestion}<em>✦ AI</em>{/if}</a
-				>{:else}<p class="admin-notice">没有匹配投稿。</p>{/each}
-		</div>
-		<nav class="review-pagination" aria-label="投稿分页">
-			<p>第 {data.filters.page} / {data.pageCount} 页 · 每页 {data.pageSize} 条</p>
-			<div>
-				{#if data.filters.page > 1}<a
-						href={resolve(
-							submissionQueueUrl(data.filters, {
-								page: data.filters.page - 1,
-								submission: null
-							}) as '/admin/submissions'
-						)}
-						onclick={blockBusy}>上一页</a
-					>{/if}{#if data.filters.page < data.pageCount}<a
-						href={resolve(
-							submissionQueueUrl(data.filters, {
-								page: data.filters.page + 1,
-								submission: null
-							}) as '/admin/submissions'
-						)}
-						onclick={blockBusy}>下一页</a
-					>{/if}
-			</div>
-		</nav>
-	</aside>
+	<AdminSubmissionQueue
+		submissions={visible}
+		selectedId={selected?.id ?? null}
+		filters={data.filters}
+		total={data.total}
+		pageCount={data.pageCount}
+		pageSize={data.pageSize}
+		busy={processing || pending !== null || syncing}
+		{typeLabels}
+		statusLabel={label}
+		{blockBusy}
+	/>
 
 	<section class="review-detail">
 		{#if data.selectedUnavailable}<p class="admin-notice" role="alert">
@@ -725,66 +662,7 @@
 					target="_blank"
 					rel="external noopener noreferrer">{selected.payload.url} ↗</a
 				>{/if}
-			<div class="review-evidence">
-				<section>
-					<h3>用户最终提交</h3>
-					<dl>
-						<dt>标题</dt>
-						<dd>{selected.title}</dd>
-						<dt>简介</dt>
-						<dd>{selected.payload.summary || '未填写'}</dd>
-						<dt>补充说明</dt>
-						<dd>{selected.payload.content || '未填写'}</dd>
-						<dt>分类</dt>
-						<dd>
-							{data.categories.find((category) => category.id === selected.payload.userCategoryId)
-								?.name || '未选择'}
-						</dd>
-						<dt>图标</dt>
-						<dd>
-							{#if selected.payload.iconFileId}<img
-									class="review-icon"
-									src={`/api/admin/files/${selected.payload.iconFileId}`}
-									alt="投稿图标"
-								/>{:else}未选择{/if}
-						</dd>
-					</dl>
-				</section>
-				<section>
-					<h3>网页原始提取</h3>
-					{#if selected.payload.webSnapshot}<dl>
-							<dt>原始标题</dt>
-							<dd>{selected.payload.webSnapshot.title || '无'}</dd>
-							<dt>网页描述</dt>
-							<dd>{selected.payload.webSnapshot.description || '无'}</dd>
-							<dt>站点</dt>
-							<dd>{selected.payload.webSnapshot.siteName || '无'}</dd>
-						</dl>{:else}<p>此投稿没有网页快照。</p>{/if}
-				</section>
-				<section class="ai-evidence">
-					<h3>✦ AI建议</h3>
-					{#if selected.payload.aiSuggestion}<dl>
-							<dt>模型</dt>
-							<dd>
-								{selected.payload.aiSuggestion.provider} / {selected.payload.aiSuggestion.model}
-							</dd>
-							<dt>标题</dt>
-							<dd>{selected.payload.aiSuggestion.title}</dd>
-							<dt>简介</dt>
-							<dd>{selected.payload.aiSuggestion.summary}</dd>
-							<dt>推荐分类</dt>
-							<dd>
-								{selected.payload.aiSuggestion.categoryName ||
-									'未判断'}{#if selected.payload.aiSuggestion.categoryReason}<br />{selected.payload
-										.aiSuggestion.categoryReason}{/if}
-							</dd>
-							<dt>标签</dt>
-							<dd class="suggested-tags">
-								{#each selected.payload.aiSuggestion.tags as tag (tag)}<span>{tag}</span>{/each}
-							</dd>
-						</dl>{:else}<p>未使用AI生成。</p>{/if}
-				</section>
-			</div>
+			<AdminSubmissionEvidence submission={selected} categories={data.categories} />
 			{#if selected.status === 'pending' && !selected.processing && selected.payloadAvailable}{#key selected.id}
 					<form
 						class="admin-form review-form"
@@ -1048,52 +926,6 @@
 		display: block;
 		overflow-wrap: anywhere;
 	}
-	.review-pagination {
-		padding: 12px;
-		display: grid;
-		gap: 8px;
-		border-top: 1px solid var(--admin-border);
-	}
-	.review-pagination p {
-		font-size: 13px;
-		color: var(--admin-muted);
-		margin: 0;
-	}
-	.review-pagination div {
-		display: flex;
-		gap: 12px;
-		flex-wrap: wrap;
-	}
-	.review-pagination a {
-		min-height: 44px;
-		display: inline-flex;
-		align-items: center;
-		color: var(--admin-accent);
-	}
-	.review-filters label {
-		display: grid;
-		gap: 5px;
-		font-size: 13px;
-	}
-	.review-filters input,
-	.review-filters select {
-		min-height: 44px;
-		min-width: 0;
-		width: 100%;
-		box-sizing: border-box;
-	}
-	.review-list a {
-		text-decoration: none;
-		color: inherit;
-		overflow-wrap: anywhere;
-	}
-	.review-list a:focus-visible {
-		outline: 2px solid var(--admin-accent);
-		outline-offset: -2px;
-	}
-	.review-list a[aria-disabled='true'] {
-		cursor: wait;
-	}
 	.review-check-button {
 		margin: 0 18px 16px;
 	}
@@ -1104,19 +936,13 @@
 		gap: 16px;
 		align-items: start;
 	}
-	.review-queue,
 	.review-detail {
 		border: 1px solid var(--admin-border);
 		border-radius: 14px;
 		background: var(--admin-surface);
 		box-shadow: 0 8px 28px #20242b0a;
-	}
-	.review-queue {
-		position: sticky;
-		top: 80px;
 		overflow: hidden;
 	}
-	.review-queue-head,
 	.review-detail-head {
 		display: flex;
 		align-items: center;
@@ -1124,74 +950,11 @@
 		padding: 16px 18px;
 		border-bottom: 1px solid var(--admin-border);
 	}
-	.review-queue-head span {
-		border-radius: 999px;
-		padding: 3px 8px;
-		background: var(--admin-soft);
-		font-size: 13px;
-	}
-	.review-filters {
-		display: grid;
-		gap: 8px;
-		padding: 12px;
-		border-bottom: 1px solid var(--admin-border);
-	}
-	.review-filters input,
-	.review-filters select {
-		min-height: 44px;
-		border: 1px solid var(--admin-border);
-		border-radius: 8px;
-		padding: 0 10px;
-		font: inherit;
-	}
-	.review-list {
-		display: grid;
-		max-height: calc(100vh - 250px);
-		overflow: auto;
-	}
-	.review-list a {
-		position: relative;
-		display: grid;
-		gap: 5px;
-		border: 0;
-		border-bottom: 1px solid var(--admin-border);
-		padding: 13px 15px;
-		background: var(--admin-surface);
-		text-align: left;
-		cursor: pointer;
-	}
-	.review-list a:hover,
-	.review-list a.active {
-		background: var(--admin-soft);
-	}
-	.review-list a.active {
-		box-shadow: inset 3px 0 var(--admin-accent);
-	}
-	.review-list strong {
-		font-size: 15px;
-		padding-right: 40px;
-	}
-	.review-list small {
+	.review-detail-head span {
 		color: var(--admin-muted);
 		font-size: 13px;
 	}
-	.review-list em {
-		position: absolute;
-		top: 13px;
-		right: 12px;
-		color: var(--admin-accent);
-		font-size: 13px;
-		font-style: normal;
-	}
-	.review-type {
-		color: var(--admin-muted);
-		font-size: 13px;
-		text-transform: uppercase;
-	}
-	.review-detail {
-		overflow: hidden;
-	}
-	.review-detail-head h2 {
+	.review-url {
 		overflow-wrap: anywhere;
 		margin: 3px 0;
 		font-size: 20px;
@@ -1219,61 +982,6 @@
 		white-space: nowrap;
 		color: var(--admin-muted);
 		font-size: 13px;
-	}
-	.review-evidence {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 10px;
-		padding: 16px 18px;
-	}
-	.review-evidence section {
-		border: 1px solid var(--admin-border);
-		border-radius: 10px;
-		padding: 13px;
-		background: var(--admin-soft);
-	}
-	.review-evidence section.ai-evidence {
-		border-color: var(--admin-border);
-		background: var(--admin-soft);
-	}
-	.review-evidence h3 {
-		margin: 0 0 10px;
-		font-size: 14px;
-	}
-	.review-evidence dl {
-		display: grid;
-		gap: 4px;
-		margin: 0;
-	}
-	.review-evidence dt {
-		margin-top: 7px;
-		color: var(--admin-muted);
-		font-size: 13px;
-		font-weight: 700;
-	}
-	.review-evidence dd {
-		overflow-wrap: anywhere;
-		margin: 0;
-		color: var(--admin-text);
-		font-size: 13px;
-		line-height: 1.55;
-	}
-	.suggested-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.suggested-tags span {
-		border-radius: 999px;
-		padding: 3px 6px;
-		background: var(--admin-soft);
-	}
-	.review-icon {
-		width: 44px;
-		height: 44px;
-		border-radius: 9px;
-		background: var(--admin-surface);
-		object-fit: contain;
 	}
 	.new-tag-options {
 		margin-top: 14px;
@@ -1313,20 +1021,8 @@
 		.review-workbench {
 			grid-template-columns: 1fr;
 		}
-		.review-queue {
-			position: static;
-		}
-		.review-list {
-			max-height: 320px;
-		}
-		.review-evidence {
-			grid-template-columns: 1fr;
-		}
 	}
 	@media (max-width: 600px) {
-		.review-evidence {
-			padding: 12px;
-		}
 		.review-detail-head {
 			align-items: flex-start;
 			gap: 10px;

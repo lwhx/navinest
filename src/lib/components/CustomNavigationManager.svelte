@@ -10,30 +10,30 @@
 		NAVIGATION_BATCH_LIMIT,
 		type NavigationCategory,
 		type NavigationData,
+		type NavigationEditor,
 		type NavigationLink,
 		type NavigationMutation,
-		type NavigationPlan,
-		type NavigationReceipt
+		type NavigationReceipt,
+		type NavigationReview
 	} from '$lib/custom-navigation-workspace';
 	import BookmarkImportPanel from './BookmarkImportPanel.svelte';
+	import DiscardDialog from './navigation/DiscardDialog.svelte';
+	import NavigationBulkPanel from './navigation/NavigationBulkPanel.svelte';
+	import NavigationEditorPanel from './navigation/NavigationEditorPanel.svelte';
+	import NavigationReviewPanel from './navigation/NavigationReviewPanel.svelte';
 	let { navigation, userId }: { navigation: NavigationData; userId: number } = $props();
-	type Editor =
-		| { resource: 'link'; id: number | null; data: Omit<NavigationLink, 'id'> }
-		| { resource: 'category'; id: number | null; data: Omit<NavigationCategory, 'id'> };
-	type Review = { plan: NavigationPlan; mutation: NavigationMutation; version: string };
 	let categoriesOpen = $state(true),
 		importOpen = $state(false);
 	let ready = $state(false),
 		busy = $state(false),
 		importLocked = $state(false),
 		message = $state('');
-	let editor = $state<Editor | null>(null),
+	let editor = $state<NavigationEditor | null>(null),
 		original = $state(''),
 		editorVersion = $state('');
 	let editorElement = $state<HTMLElement>();
-	let discardDialog = $state<HTMLDialogElement>();
 	let discard = $state<(() => void) | null>(null),
-		review = $state<Review | null>(null),
+		review = $state<NavigationReview | null>(null),
 		confirmed = $state(false),
 		reviewPage = $state(1);
 	let selectedIds = $state<number[]>([]),
@@ -88,10 +88,6 @@
 		if (selectedIds.some((id) => !owned.has(id)))
 			selectedIds = selectedIds.filter((id) => owned.has(id));
 	});
-	$effect(() => {
-		if (discard && discardDialog && !discardDialog.open) discardDialog.showModal();
-		else if (!discard && discardDialog?.open) discardDialog.close();
-	});
 	beforeNavigate(({ cancel, to }) => {
 		if (busy) {
 			cancel();
@@ -127,11 +123,24 @@
 		if (dirty) discard = action;
 		else action();
 	}
-	function approveDiscard() {
-		const action = discard;
-		discard = null;
-		editor = null;
-		action?.();
+	function reloadEditor() {
+		const current = editor;
+		if (!current) return;
+		if (current.resource === 'link') {
+			const found = navigation.links.find((l) => l.id === current.id);
+			if (current.id && !found) {
+				message = '此链接已被删除，请先关闭编辑。';
+				return;
+			}
+			editLink(found);
+		} else {
+			const found = navigation.categories.find((c) => c.id === current.id);
+			if (current.id && !found) {
+				message = '此分类已被删除，请先关闭编辑。';
+				return;
+			}
+			editCategory(found);
+		}
 	}
 	function url(values: Record<string, string | number>) {
 		const result = new SvelteURL(route.url);
@@ -276,7 +285,7 @@
 			if (!response.ok) throw new Error(value.error ?? '核对失败。');
 			if (!value.plan || !Array.isArray(value.plan.items) || typeof value.plan.digest !== 'string')
 				throw new Error('核对响应不完整，请重试。');
-			const next = { mutation, version, plan: value.plan } as Review;
+			const next = { mutation, version, plan: value.plan } as NavigationReview;
 			review = next;
 			reviewPage = 1;
 			if (auto) await submit(next);
@@ -333,7 +342,7 @@
 			message += ' 列表刷新失败，请点击刷新列表核对。';
 		}
 	}
-	async function submit(next: Review) {
+	async function submit(next: NavigationReview) {
 		const run = { runId: crypto.randomUUID(), digest: next.plan.digest };
 		try {
 			sessionStorage.setItem(storageKey, JSON.stringify(run));
@@ -482,152 +491,32 @@
 		>
 	</div>
 	{#if editor}
-		<section
-			class="panel editor"
-			aria-labelledby="navigation-editor-title"
-			bind:this={editorElement}
-		>
-			<div class="workspace-header">
-				<div>
-					<h3 id="navigation-editor-title">
-						{editor.id ? '编辑' : '新增'}{editor.resource === 'link' ? '链接' : '分类'}
-					</h3>
-					<p class="muted">
-						{dirty ? '有未保存的修改' : '填写后点击保存'}{editor.id ? ` · 编号 #${editor.id}` : ''}
-					</p>
-				</div>
-				<button disabled={locked} onclick={() => ask(() => (editor = null))}>关闭编辑</button>
-			</div>
-			{#if editorVersion !== navigation.version}<div class="notice">
-					<p>列表已变化，草稿仍保留。保存前请载入最新记录重新核对；此操作会放弃当前草稿。</p>
-					<button
-						disabled={locked}
-						onclick={() => {
-							const current = editor;
-							if (!current) return;
-							if (current.resource === 'link') {
-								const found = navigation.links.find((l) => l.id === current.id);
-								if (current.id && !found) {
-									message = '此链接已被删除，请先关闭编辑。';
-									return;
-								}
-								editLink(found);
-							} else {
-								const found = navigation.categories.find((c) => c.id === current.id);
-								if (current.id && !found) {
-									message = '此分类已被删除，请先关闭编辑。';
-									return;
-								}
-								editCategory(found);
-							}
-						}}>载入最新记录</button
-					>
-				</div>{/if}
-			<form
-				onsubmit={(event) => {
-					event.preventDefault();
-					saveEditor();
-				}}
-			>
-				<fieldset disabled={locked || !!review} class="editor-grid">
-					{#if editor.resource === 'link'}
-						<label
-							><span>链接标题</span><input
-								bind:value={editor.data.title}
-								required
-								maxlength="120"
-							/></label
-						><label
-							><span>网址</span><input
-								bind:value={editor.data.url}
-								required
-								type="url"
-								maxlength="2048"
-							/></label
-						>
-						<label
-							><span>链接分类</span><select bind:value={editor.data.categoryId}
-								><option value={null}>未分类</option
-								>{#each navigation.categories as category (category.id)}<option value={category.id}
-										>{category.name} #{category.id}</option
-									>{/each}</select
-							></label
-						>
-						<label
-							><span>链接状态</span><select bind:value={editor.data.status}
-								><option value="active">启用</option><option value="inactive">停用</option></select
-							></label
-						>
-						<label class="wide"
-							><span>链接摘要</span><textarea
-								bind:value={editor.data.summary}
-								maxlength="300"
-								rows="3"></textarea></label
-						>
-					{:else}<label class="wide"
-							><span>分类名称</span><input
-								bind:value={editor.data.name}
-								required
-								maxlength="80"
-							/></label
-						>{/if}
-					<label
-						><span>排序值</span><input
-							type="number"
-							bind:value={editor.data.sortOrder}
-							required
-							step="1"
-							min="-1000000000000"
-							max="1000000000000"
-						/></label
-					>
-					<div class="actions wide">
-						<button class="primary" type="submit"
-							>{busy ? '保存中…' : '保存' + (editor.resource === 'link' ? '链接' : '分类')}</button
-						><button type="button" onclick={() => ask(() => (editor = null))}>取消编辑</button>
-					</div>
-				</fieldset>
-			</form>
-		</section>
+		<NavigationEditorPanel
+			{editor}
+			{locked}
+			{busy}
+			{dirty}
+			stale={editorVersion !== navigation.version}
+			hasReview={!!review}
+			categories={navigation.categories}
+			bind:editorElement
+			onsave={saveEditor}
+			onclose={() => ask(() => (editor = null))}
+			onreload={reloadEditor}
+		/>
 	{/if}
 	{#if review && !recovery}
-		<section class="panel operation-review" aria-labelledby="navigation-review-title">
-			<h3 id="navigation-review-title">核对操作：{review.plan.title}</h3>
-			<p>本次将处理 <strong>{review.plan.affected}</strong> 条记录。{review.plan.detail}</p>
-			<ol start={(reviewPage - 1) * 10 + 1}>
-				{#each review.plan.items.slice((reviewPage - 1) * 10, reviewPage * 10) as item (item.id)}<li
-					>
-						<strong>{item.title}</strong>{#if item.id}
-							<span>#{item.id}</span>{/if}{#if item.url}<small>{item.url}</small>{/if}
-					</li>{/each}
-			</ol>
-			<div class="pager">
-				<button disabled={locked || reviewPage === 1} onclick={() => reviewPage--}
-					>核对上一页</button
-				><span>{reviewPage} / {Math.max(1, Math.ceil(review.plan.items.length / 10))}</span><button
-					disabled={locked || reviewPage >= Math.ceil(review.plan.items.length / 10)}
-					onclick={() => reviewPage++}>核对下一页</button
-				>
-			</div>
-			<label class="check"
-				><input
-					type="checkbox"
-					bind:checked={confirmed}
-					disabled={locked}
-				/>我已核对所列记录和影响范围</label
-			>
-			<div class="actions">
-				<button class="primary" disabled={locked || !confirmed} onclick={commitReview}
-					>确认执行{review.plan.title}</button
-				><button
-					disabled={locked}
-					onclick={() => {
-						review = null;
-						confirmed = false;
-					}}>返回整理</button
-				>
-			</div>
-		</section>
+		<NavigationReviewPanel
+			{review}
+			{locked}
+			bind:confirmed
+			bind:reviewPage
+			oncommit={commitReview}
+			oncancel={() => {
+				review = null;
+				confirmed = false;
+			}}
+		/>
 	{/if}
 	<div class="workspace-body">
 		<details class="category-sidebar" aria-label="导航分类" bind:open={categoriesOpen}>
@@ -738,46 +627,16 @@
 						>
 					</div>
 				</div>
-				{#if selectedIds.length}<section class="panel bulk" aria-label="批量整理">
-						<h3>已勾选 {selectedIds.length} 条</h3>
-						<p class="muted">
-							当前筛选内 {selectedInFilter} 条，其他筛选内 {selectedIds.length - selectedInFilter} 条。跨页勾选会保留，每批最多
-							500 条。
-						</p>
-						<fieldset disabled={locked || !!review || !!editor}>
-							<label
-								><span>批量目标分类</span><select bind:value={bulkCategory}
-									><option value="">未分类</option
-									>{#each navigation.categories as category (category.id)}<option
-											value={String(category.id)}>{category.name} #{category.id}</option
-										>{/each}</select
-								></label
-							>
-							<div class="actions">
-								<button
-									onclick={() =>
-										prepare({
-											kind: 'link-bulk',
-											ids: [...selectedIds],
-											change: 'move',
-											categoryId: bulkCategory ? Number(bulkCategory) : null
-										})}>移动到分类</button
-								><button
-									onclick={() =>
-										prepare({ kind: 'link-bulk', ids: [...selectedIds], change: 'active' })}
-									>批量启用</button
-								><button
-									onclick={() =>
-										prepare({ kind: 'link-bulk', ids: [...selectedIds], change: 'inactive' })}
-									>批量停用</button
-								><button
-									class="danger"
-									onclick={() => prepare({ kind: 'link-delete', ids: [...selectedIds] })}
-									>删除所选</button
-								>
-							</div>
-						</fieldset>
-					</section>{/if}
+				{#if selectedIds.length}
+					<NavigationBulkPanel
+						ids={selectedIds}
+						inFilter={selectedInFilter}
+						disabled={locked || !!review || !!editor}
+						categories={navigation.categories}
+						bind:bulkCategory
+						onprepare={prepare}
+					/>
+				{/if}
 				<div class="navigation-list">
 					{#each visibleLinks as link (link.id)}<article class="navigation-row">
 							<label class="row-select"
@@ -941,24 +800,7 @@
 		/>
 	</details>
 </section>
-<dialog
-	class="discard-dialog"
-	bind:this={discardDialog}
-	oncancel={(event) => {
-		event.preventDefault();
-		discard = null;
-	}}
-	aria-labelledby="discard-title"
->
-	<h2 id="discard-title">放弃未保存的修改？</h2>
-	<p>当前编辑内容尚未保存，继续会丢弃这些修改。</p>
-	<div class="actions">
-		<button onclick={() => (discard = null)}>继续编辑</button><button
-			class="danger"
-			onclick={approveDiscard}>放弃修改并继续</button
-		>
-	</div>
-</dialog>
+<DiscardDialog bind:discard onclear={() => (editor = null)} />
 
 <style>
 	.navigation-workspace {
@@ -1074,20 +916,6 @@
 		color: #bd2739;
 		border-color: #c42b3b;
 	}
-	fieldset {
-		border: 0;
-		padding: 0;
-		margin: 0;
-		min-width: 0;
-	}
-	.editor-grid {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 14px;
-	}
-	.wide {
-		grid-column: 1/-1;
-	}
 	label {
 		display: grid;
 		gap: 7px;
@@ -1095,8 +923,7 @@
 		min-width: 0;
 	}
 	input:not([type='checkbox']),
-	select,
-	textarea {
+	select {
 		box-sizing: border-box;
 		min-width: 0;
 		width: 100%;
@@ -1107,9 +934,6 @@
 		color: var(--nw-text);
 		padding: 10px;
 		font: inherit;
-	}
-	textarea {
-		resize: vertical;
 	}
 	.check {
 		display: flex;
@@ -1282,18 +1106,6 @@
 	.category-row {
 		grid-template-columns: minmax(0, 1fr) auto;
 	}
-	.bulk fieldset {
-		display: flex;
-		align-items: end;
-		flex-wrap: wrap;
-		gap: 12px;
-	}
-	.bulk label {
-		flex: 1 1 180px;
-	}
-	.bulk .actions {
-		flex: 2 1 330px;
-	}
 	.pager {
 		display: flex;
 		align-items: center;
@@ -1337,52 +1149,6 @@
 	.import-drawer :global(.bookmark-import) {
 		margin-top: 16px;
 	}
-	.operation-review ol {
-		padding-left: 24px;
-	}
-	.operation-review li {
-		padding: 8px 0;
-		border-bottom: 1px solid var(--nw-border);
-		font-size: 13px;
-	}
-	.operation-review li small {
-		display: block;
-		color: var(--nw-muted);
-		overflow-wrap: anywhere;
-	}
-	.operation-review li span {
-		color: var(--nw-muted);
-	}
-	.discard-dialog {
-		border: 1px solid #ccd1da;
-		border-radius: 15px;
-		max-width: 440px;
-		width: calc(100% - 32px);
-		padding: 24px;
-		box-sizing: border-box;
-		background: #fff;
-		color: #252c36;
-	}
-	.discard-dialog::backdrop {
-		background: #11182799;
-	}
-	.discard-dialog p {
-		line-height: 1.7;
-	}
-	.discard-dialog button {
-		--nw-bg: #fff;
-		--nw-border: #ccd1da;
-		--nw-text: #252c36;
-	}
-	:global([data-theme='dark']) .discard-dialog {
-		background: #20252d;
-		color: #edf0f5;
-	}
-	:global([data-theme='dark']) .discard-dialog button {
-		--nw-bg: #20252d;
-		--nw-border: #444d5b;
-		--nw-text: #edf0f5;
-	}
 	@media (max-width: 900px) {
 		.workspace-body {
 			grid-template-columns: 170px minmax(0, 1fr);
@@ -1417,9 +1183,6 @@
 		}
 		.category-sidebar > a {
 			padding: 8px 10px;
-		}
-		.editor-grid {
-			grid-template-columns: minmax(0, 1fr);
 		}
 		.workspace-header,
 		.result-heading {

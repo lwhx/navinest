@@ -5,13 +5,14 @@ const read = (path: string) => readFileSync(path, 'utf8');
 describe('AI-assisted submission workflow', () => {
 	it('keeps AI suggestions user-controlled in the contribution flow', () => {
 		const page = read('src/routes/contribute/+page.svelte');
+		const panel = read('src/lib/components/contribution/ContributionSuggestionPanel.svelte');
 		expect(page).toContain("fetch('/api/submissions/enrich'");
 		expect(page).toContain('智能获取网页信息');
 		expect(page).toContain('采用建议');
-		expect(page).toContain('AI生成内容可能不准确');
+		expect(panel).toContain('AI生成内容可能不准确');
 		expect(page).toContain('webSnapshot: snapshot');
 		expect(page).toContain('aiSuggestion');
-		expect(page).toContain('采用全部可用建议');
+		expect(panel).toContain('采用全部可用建议');
 		expect(page).toContain('bind:value={draft.categoryId}');
 		expect(page).toContain("fetch('/api/submissions/icon'");
 		expect(page).toContain('uploadIcon');
@@ -35,9 +36,10 @@ describe('AI-assisted submission workflow', () => {
 	it('uses a review queue with user, webpage and AI evidence', () => {
 		const page = read('src/routes/admin/submissions/+page.svelte');
 		expect(page).toContain('review-workbench');
-		expect(page).toContain('用户最终提交');
-		expect(page).toContain('网页原始提取');
-		expect(page).toContain('AI建议');
+		const evidence = read('src/lib/components/admin/AdminSubmissionEvidence.svelte');
+		expect(evidence).toContain('用户最终提交');
+		expect(evidence).toContain('网页原始提取');
+		expect(evidence).toContain('AI建议');
 		expect(page).toContain('最终发布内容');
 		expect(page).toContain('正式标签');
 		expect(page).toContain('name="newTagNames"');

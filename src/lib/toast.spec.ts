@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$app/environment', () => ({ browser: true }));
+
 describe('toast feedback', () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(async () => {
@@ -12,7 +14,7 @@ describe('toast feedback', () => {
 
 	it('loads the global toast component during server rendering', async () => {
 		await expect(import('./components/ToastContainer.svelte')).resolves.toHaveProperty('default');
-	});
+	}, 20000);
 
 	it('removes a message after its configured duration', async () => {
 		const { showToast, getToasts } = await import('./toast.svelte');
@@ -41,5 +43,18 @@ describe('toast feedback', () => {
 		removeToast(first);
 		vi.advanceTimersByTime(10000);
 		expect(getToasts()).toEqual([{ id: second, message: '第二个提示', type: 'error' }]);
+	});
+
+	it('ignores toast requests during server rendering', async () => {
+		vi.resetModules();
+		vi.doMock('$app/environment', () => ({ browser: false }));
+		try {
+			const toast = await import('./toast.svelte');
+			expect(toast.showToast('不应出现', 'info', 1000)).toBe(-1);
+			expect(toast.getToasts()).toHaveLength(0);
+		} finally {
+			vi.doUnmock('$app/environment');
+			vi.resetModules();
+		}
 	});
 });

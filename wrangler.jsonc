@@ -9,7 +9,9 @@
 		"PUBLIC_SITE_URL": "https://nss.whks.de",
 		"ADMIN_AUTH_MODE": "session",
 		"GITHUB_LOGIN_ENABLED": "false",
-		"GITHUB_CLIENT_ID": "Ov23li5a3AnNdqUzn86i"
+		"GITHUB_CLIENT_ID": "Ov23li5a3AnNdqUzn86i",
+		"CF_ACCESS_TEAM_DOMAIN": "",
+		"CF_ACCESS_AUD": ""
 	},
 	"d1_databases": [
 		{

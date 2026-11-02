@@ -4,28 +4,16 @@
 	import { resolve } from '$app/paths';
 	import AccountShell from '$lib/components/AccountShell.svelte';
 	import CategoryParentPicker from '$lib/components/admin/CategoryParentPicker.svelte';
+	import ContributionIconEditor from '$lib/components/contribution/ContributionIconEditor.svelte';
+	import ContributionSuggestionPanel from '$lib/components/contribution/ContributionSuggestionPanel.svelte';
 	import { categoryParentPath } from '$lib/category-parent-selection';
-	import type { ContributionType } from '$lib/contribution-types';
+	import type {
+		ContributionSnapshot,
+		ContributionSuggestion,
+		ContributionType
+	} from '$lib/contribution-types';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
-	type Snapshot = {
-		fetchedUrl: string;
-		title: string;
-		description: string;
-		excerpt: string;
-		siteName: string;
-		iconUrl?: string;
-		fetchedAt: string;
-	};
-	type Suggestion = {
-		title: string;
-		summary: string;
-		content: string;
-		tags: string[];
-		categoryId?: number | null;
-		categoryName?: string | null;
-		categoryReason?: string;
-	};
 	type Draft = {
 		title: string;
 		summary: string;
@@ -36,8 +24,8 @@
 		iconFileId: number | null;
 		iconSource: 'auto' | 'manual' | null;
 		iconPreviewUrl: string;
-		snapshot: Snapshot | null;
-		suggestion: Suggestion | null;
+		snapshot: ContributionSnapshot | null;
+		suggestion: ContributionSuggestion | null;
 		ai: { available: boolean; provider?: string; model?: string };
 		duplicate: { published: string[]; pendingCount: number };
 		enrichStage: string;
@@ -218,6 +206,11 @@
 		} finally {
 			iconSaving = false;
 		}
+	}
+	function removeIcon() {
+		draft.iconFileId = null;
+		draft.iconSource = null;
+		draft.iconPreviewUrl = '';
 	}
 	async function uploadIcon(event: Event) {
 		const input = event.currentTarget as HTMLInputElement,
@@ -473,45 +466,18 @@
 							{#if tags.length}<div class="tag-preview account-wide">
 									{#each tags as tag (tag)}<span>{tag}</span>{/each}
 								</div>{/if}
-							<div class="icon-editor account-wide">
-								<div class="icon-preview">
-									{#if draft.iconPreviewUrl}<img
-											src={draft.iconPreviewUrl}
-											alt="当前投稿图标"
-										/>{:else}<span>图标</span>{/if}
-								</div>
-								<div>
-									<strong>图标（选填）</strong>
-									<p>
-										{draft.iconFileId
-											? '已选择图标，可替换或移除。'
-											: '可采用网页图标，或手动上传。'}
-									</p>
-									<div class="icon-actions">
-										{#if snapshot?.iconUrl && !draft.iconFileId}<button
-												type="button"
-												disabled={busy}
-												onclick={saveRemoteIcon}>使用网页图标</button
-											>{/if}<label class="icon-upload"
-											><input
-												type="file"
-												accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/x-icon"
-												aria-label="手动上传图标"
-												onchange={uploadIcon}
-												disabled={busy}
-											/><span>{iconSaving ? '保存中…' : '手动上传'}</span></label
-										>{#if draft.iconFileId}<button
-												type="button"
-												disabled={busy}
-												onclick={() => {
-													draft.iconFileId = null;
-													draft.iconSource = null;
-													draft.iconPreviewUrl = '';
-												}}>移除图标</button
-											>{/if}
-									</div>
-									{@render fieldError('iconFileId')}
-								</div>
+							<div class="account-wide">
+								<ContributionIconEditor
+									iconFileId={draft.iconFileId}
+									iconPreviewUrl={draft.iconPreviewUrl}
+									{snapshot}
+									{busy}
+									{iconSaving}
+									{fieldError}
+									onsaveremote={saveRemoteIcon}
+									onupload={uploadIcon}
+									onremove={removeIcon}
+								/>
 							</div>
 							<div class="account-wide account-actions">
 								<button class="account-button contribute-primary" type="submit" disabled={busy}
@@ -522,55 +488,15 @@
 							</div>
 						</div>
 					</section>
-					<aside class="account-card suggestion-panel" aria-label="智能建议">
-						<div class="account-card-header">
-							<div>
-								<h2>智能建议</h2>
-								<p>
-									{draft.ai.available
-										? '根据参考网页整理，采用前请核对。'
-										: '网页读取是辅助步骤，可随时手动填写。'}
-								</p>
-							</div>
-						</div>
-						{#if snapshot}<button class="apply-all" type="button" disabled={busy} onclick={applyAll}
-								>采用全部可用建议</button
-							>
-							<p class="field-hint">仅补全空白项；单项“采用建议”会替换对应字段。</p>
-							<dl class="suggestion-list">
-								<div>
-									<dt>原网页</dt>
-									<dd>{snapshot.siteName || snapshot.fetchedUrl}</dd>
-								</div>
-								<div>
-									<dt>原始标题</dt>
-									<dd>{snapshot.title || '未提取到'}</dd>
-								</div>
-								<div>
-									<dt>建议标题</dt>
-									<dd>{suggestion?.title || snapshot.title || '未生成'}</dd>
-								</div>
-								<div>
-									<dt>建议简介</dt>
-									<dd>{suggestion?.summary || snapshot.description || '未提取到'}</dd>
-								</div>
-								{#if categoryLabel(suggestion?.categoryId)}<div>
-										<dt>推荐分类</dt>
-										<dd>{categoryLabel(suggestion?.categoryId)}</dd>
-									</div>{/if}
-							</dl>{:else}<div class="suggestion-empty">
-								<strong>{type === 'post' ? '从正文开始' : '按需获取网页信息'}</strong>
-								<p>
-									{type === 'post'
-										? '可直接撰写文章；需要整理参考网页时，再填写参考网址。'
-										: '输入网址后可智能获取信息，也可以手动完成收录信息。'}
-								</p>
-							</div>{/if}
-						<div class="ai-boundary">
-							<strong>提交前由你确认</strong>
-							<p>AI生成内容可能不准确。自动读取只补全空白项，确认后再提交审核。</p>
-						</div>
-					</aside>
+					<ContributionSuggestionPanel
+						{type}
+						{snapshot}
+						{suggestion}
+						aiAvailable={draft.ai.available}
+						{busy}
+						{categoryLabel}
+						onapplyall={applyAll}
+					/>
 				</div>
 			</fieldset>
 		</form>
@@ -713,15 +639,11 @@
 		font-size: 15px;
 	}
 	.contribute-flow button,
-	.contribute-flow .account-button,
-	.icon-upload span {
+	.contribute-flow .account-button {
 		min-height: 44px;
 		font-size: 13px;
 	}
-	.field-with-action button,
-	.icon-actions button,
-	.apply-all,
-	.icon-upload span {
+	.field-with-action button {
 		border: 1px solid var(--ui-line);
 		border-radius: 8px;
 		padding: 10px 12px;
@@ -772,10 +694,7 @@
 	.account-form small:not(.field-error),
 	.url-stage > p,
 	.field-hint,
-	.reference-source > p,
-	.icon-editor p,
-	.suggestion-empty p,
-	.ai-boundary p {
+	.reference-source > p {
 		color: var(--ui-muted);
 		font-size: 13px;
 		line-height: 1.7;
@@ -833,8 +752,7 @@
 		font-weight: 600;
 		cursor: pointer;
 	}
-	.tag-preview,
-	.icon-actions {
+	.tag-preview {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
@@ -847,95 +765,6 @@
 		background: var(--ui-soft);
 		color: var(--ui-text);
 		font-size: 13px;
-	}
-	.icon-editor {
-		display: grid;
-		grid-template-columns: 56px minmax(0, 1fr);
-		gap: 12px;
-		align-items: start;
-		padding: 12px;
-		border: 1px solid var(--ui-line);
-		border-radius: 10px;
-	}
-	.icon-editor strong {
-		color: var(--ui-text);
-		font-size: 15px;
-	}
-	.icon-editor p {
-		margin: 6px 0;
-	}
-	.icon-preview {
-		display: grid;
-		width: 56px;
-		height: 56px;
-		place-items: center;
-		background: var(--ui-soft);
-		color: var(--ui-muted);
-		border-radius: 10px;
-		font-size: 13px;
-	}
-	.icon-preview img {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-	}
-	.icon-upload {
-		position: relative;
-		display: inline-flex;
-		cursor: pointer;
-	}
-	.icon-upload input {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		min-height: 0;
-		opacity: 0;
-	}
-	.icon-upload:focus-within {
-		outline: 2px solid var(--ui-accent);
-		outline-offset: 2px;
-		border-radius: 8px;
-	}
-	.icon-upload span {
-		display: inline-flex;
-		align-items: center;
-	}
-	.suggestion-panel {
-		min-width: 0;
-	}
-	.suggestion-list {
-		margin: 0;
-	}
-	.suggestion-list > div {
-		padding: 14px 0;
-		border-bottom: 1px solid var(--ui-line);
-	}
-	.suggestion-list dt {
-		margin-bottom: 7px;
-		color: var(--ui-muted);
-		font-size: 13px;
-	}
-	.suggestion-list dd {
-		margin: 0;
-		color: var(--ui-text);
-		font-size: 15px;
-		line-height: 1.7;
-		overflow-wrap: anywhere;
-	}
-	.suggestion-empty {
-		padding: 18px 0;
-		color: var(--ui-text);
-	}
-	.ai-boundary {
-		margin-top: 20px;
-		padding: 12px;
-		border-radius: 10px;
-		background: var(--ui-soft);
-		color: var(--ui-text);
-		font-size: 13px;
-	}
-	.ai-boundary p {
-		margin-bottom: 0;
 	}
 	@media (max-width: 1000px) {
 		.contribute-columns {
