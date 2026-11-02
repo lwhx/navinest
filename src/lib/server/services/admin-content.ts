@@ -39,15 +39,26 @@ export async function loadAdminContentSummary(database: Database) {
 
 function queryFor(filters: AdminContentFilters): ItemQuery {
 	return {
-		status: filters.mode === 'sort' || filters.status === 'all' ? null : filters.status,
-		visibility: filters.mode === 'sort' || filters.visibility === 'all' ? null : filters.visibility,
+		status: filters.status === 'all' ? null : filters.status,
+		visibility: filters.visibility === 'all' ? null : filters.visibility,
 		...(filters.type !== 'all' ? { type: filters.type } : {}),
 		...(filters.category !== 'all'
 			? { categoryId: filters.category === 'none' ? null : Number(filters.category) }
 			: {}),
-		search: filters.mode === 'sort' ? '' : filters.q,
+		search: filters.q,
 		includeSlugInSearch: true
 	};
+}
+
+/** Per-category item counts for the active type; null category is keyed as "none". */
+export async function countItemsByCategory(database: Database, type: string) {
+	const { results } = await database
+		.prepare('SELECT category_id, COUNT(*) AS total FROM items WHERE type = ? GROUP BY category_id')
+		.bind(type)
+		.all<{ category_id: number | null; total: number }>();
+	return Object.fromEntries(
+		results.map((row) => [row.category_id === null ? 'none' : String(row.category_id), row.total])
+	);
 }
 
 export async function loadAdminContent(database: Database, params: URLSearchParams) {
@@ -57,26 +68,26 @@ export async function loadAdminContent(database: Database, params: URLSearchPara
 		listTags(database),
 		loadAdminContentSummary(database)
 	]);
-	if (filters.mode === 'sort') {
-		filters.page = 1;
-		filters.q = '';
-		filters.status = filters.visibility = 'all';
-		if (filters.type === 'all') filters.type = 'site';
-		if (
-			!categories.some(
-				(category) => String(category.id) === filters.category && category.type === filters.type
-			)
-		)
-			filters.category = String(
-				categories.find((category) => category.type === filters.type)?.id ?? 'all'
-			);
-	}
+	// A selected category implies its type: the type tab then reflects it, and the
+	// category sidebar is always scoped to one type.
+	const categoryEntry =
+		filters.category !== 'all'
+			? (categories.find((category) => String(category.id) === filters.category) ?? null)
+			: null;
+	if (categoryEntry) filters.type = categoryEntry.type as AdminContentFilters['type'];
 	const query = queryFor(filters);
 	const total = await countItems(database, query);
 	const pageCount = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
 	filters.page = Math.min(filters.page, pageCount);
+	// Browsing one category without search or status filters IS the sortable view:
+	// the complete list is loaded so drags can go to the strict full-scope order API.
 	const orderComplete =
-		filters.mode === 'sort' && filters.category !== 'all' && total <= ADMIN_SORT_LIMIT;
+		filters.type !== 'all' &&
+		filters.category !== 'all' &&
+		!filters.q &&
+		filters.status === 'all' &&
+		filters.visibility === 'all' &&
+		total <= ADMIN_SORT_LIMIT;
 	let items: Item[];
 	if (orderComplete) {
 		// Read the complete category, rather than sending a page fragment to the strict order API.
@@ -89,12 +100,15 @@ export async function loadAdminContent(database: Database, params: URLSearchPara
 			limit: ADMIN_PAGE_SIZE,
 			offset: (filters.page - 1) * ADMIN_PAGE_SIZE
 		});
+	const categoryCounts =
+		filters.type === 'all' ? {} : await countItemsByCategory(database, filters.type);
 	return {
 		items,
 		categories,
 		tags,
 		files: [],
 		summary,
+		categoryCounts,
 		filters,
 		total,
 		pageCount,
@@ -107,7 +121,6 @@ export async function loadAdminContent(database: Database, params: URLSearchPara
 
 export function paginateAdminFallback(data: { items: Item[] }, params: URLSearchParams) {
 	const filters = adminContentFilters(params);
-	filters.mode = 'browse';
 	const summary = {
 		total: data.items.length,
 		published: data.items.filter((item) => item.status === 'published').length,
@@ -148,6 +161,60 @@ export function paginateAdminFallback(data: { items: Item[] }, params: URLSearch
 	};
 }
 
+/** Moves up to 50 items of one type into a category, appending them after its current order. */
+async function bulkMoveItems(database: Database, ids: number[], categoryId: unknown) {
+	const targetCategoryId =
+		typeof categoryId === 'number' && Number.isSafeInteger(categoryId) && categoryId > 0
+			? categoryId
+			: null;
+	if (!targetCategoryId) throw new AdminWriteError('请选择要移动到的目标分类。');
+	const category = (
+		await database
+			.prepare('SELECT id, type FROM categories WHERE id = ?')
+			.bind(targetCategoryId)
+			.all<{ id: number; type: string }>()
+	).results[0];
+	if (!category) throw new AdminWriteError('目标分类不存在，请刷新后重试。', undefined, 404);
+	const typedRows = (
+		await database
+			.prepare(
+				'SELECT type, COUNT(*) AS n FROM items WHERE id IN (SELECT value FROM json_each(?)) GROUP BY type'
+			)
+			.bind(JSON.stringify(ids))
+			.all<{ type: string; n: number }>()
+	).results;
+	const movedTotal = typedRows.reduce((sum, row) => sum + row.n, 0);
+	if (movedTotal !== ids.length)
+		throw new AdminWriteError('所选内容已发生变化，请刷新后重新选择。', undefined, 409);
+	if (typedRows.length !== 1) throw new AdminWriteError('所选内容的类型不一致，请按类型分开移动。');
+	if (typedRows[0].type !== category.type)
+		throw new AdminWriteError('目标分类与所选内容的类型不一致，请重新选择分类。');
+	const base =
+		(
+			await database
+				.prepare(
+					'SELECT COALESCE(MAX(sort_order), 0) AS maxSort FROM items WHERE type = ? AND category_id = ?'
+				)
+				.bind(category.type, targetCategoryId)
+				.all<{ maxSort: number }>()
+		).results[0]?.maxSort ?? 0;
+	// One statement: the appended block gets spaced sort values after the current tail.
+	const { results } = await database
+		.prepare(
+			`WITH selected AS (SELECT value AS id, (CAST(key AS INTEGER) + 1) * 10 AS position FROM json_each(?))
+		UPDATE items SET category_id = ?,
+			sort_order = ? + (SELECT position FROM selected WHERE selected.id = items.id),
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id IN (SELECT id FROM selected)
+		AND (SELECT COUNT(*) FROM items WHERE id IN (SELECT id FROM selected)) = ? RETURNING id`
+		)
+		.bind(JSON.stringify(ids), targetCategoryId, base, ids.length)
+		.all<{ id: number }>();
+	if (results.length !== ids.length)
+		throw new AdminWriteError('所选内容已发生变化，请刷新后重新选择。', undefined, 409);
+	return { count: results.length };
+}
+
 export async function bulkUpdateAdminContent(database: Database, input: Record<string, unknown>) {
 	const ids = input.ids;
 	if (
@@ -158,6 +225,7 @@ export async function bulkUpdateAdminContent(database: Database, input: Record<s
 		new Set(ids).size !== ids.length
 	)
 		throw new AdminWriteError('请选择 1–50 条有效且不重复的内容。');
+	if (input.action === 'move') return bulkMoveItems(database, ids, input.categoryId);
 	if (!BULK_CONTENT_ACTIONS.some((action) => action.value === input.action))
 		throw new AdminWriteError('批量操作无效。');
 	const action = input.action as BulkContentAction;

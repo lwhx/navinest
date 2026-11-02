@@ -13,12 +13,12 @@ export const PUT: RequestHandler = async ({ platform, request }) => {
 				typeof input.type === 'string' && types.has(input.type as ContentType)
 					? (input.type as ContentType)
 					: null,
-			categoryId = Number(input.categoryId),
+			categoryId =
+				input.categoryId === null || input.categoryId === '' ? null : Number(input.categoryId),
 			itemIds = Array.isArray(input.itemIds) ? input.itemIds.map(Number) : [];
 		if (
 			!type ||
-			!Number.isInteger(categoryId) ||
-			categoryId <= 0 ||
+			(categoryId !== null && (!Number.isInteger(categoryId) || categoryId <= 0)) ||
 			itemIds.some((id) => !Number.isInteger(id) || id <= 0)
 		)
 			throw new AdminWriteError('排序参数无效。');

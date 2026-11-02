@@ -50,7 +50,9 @@ export async function checkUserSubmissions({ browser, baseUrl, command, userToke
 	statements.push(
 		`UPDATE submissions SET review_message='请补充实际用途和适用人群。' WHERE id=8001; UPDATE submissions SET type='post',payload_json='{"content":"原文正文","summary":"原文摘要","tagNames":["经验"]}' WHERE id=8002; UPDATE submissions SET payload_json='broken',status='rejected' WHERE id=8004; UPDATE submissions SET type='book',status='rejected' WHERE id=8005; INSERT INTO submissions(id,user_id,type,title,payload_json,status) VALUES(8300,1,'site','其他作者隐私记录','{}','rejected')`
 	);
-	sql(statements.join(';'));
+	// Windows caps one argv entry near 32 KiB, so the batch runs in bounded chunks.
+	for (let start = 0; start < statements.length; start += 50)
+		sql(statements.slice(start, start + 50).join(';'));
 	try {
 		await page.goto(baseUrl + '/user/submissions?q=我的投稿验收', { waitUntil: 'networkidle' });
 		assert.match(

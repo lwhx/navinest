@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db';
 import { adminContentFilters, adminContentUrl } from '$lib/admin-content';
+import { AdminWriteError } from '$lib/server/services/admin-write';
 import { loadAdminContent, bulkUpdateAdminContent } from './admin-content';
 import { loadAdminOverview } from './admin-data';
 import { validateHomeModuleInput } from '$lib/server/admin-validation';
@@ -129,33 +130,29 @@ describe('administrator content library', () => {
 		).toBe(3);
 		expect((await loadAdminContent(database, new URLSearchParams({ type: 'app' }))).total).toBe(0);
 	});
-	it('loads an entire category for sorting, including drafts/private content, with an explicit large-category boundary', async () => {
+	it('loads an entire category as the sortable view, with explicit boundaries for filters and large categories', async () => {
 		const { database } = fixture();
 		const result = await loadAdminContent(
 			database,
-			new URLSearchParams({
-				mode: 'sort',
-				type: 'site',
-				category: '1',
-				q: 'irrelevant',
-				status: 'published',
-				visibility: 'public',
-				page: '3'
-			})
+			new URLSearchParams({ type: 'site', category: '1' })
 		);
 		expect(result.items).toHaveLength(123);
 		expect(result.orderComplete).toBe(true);
-		expect(result.filters).toMatchObject({
-			mode: 'sort',
-			q: '',
-			status: 'all',
-			visibility: 'all',
-			page: 1
-		});
+		expect(result.filters).toMatchObject({ type: 'site', category: '1', q: '', page: 1 });
+		// A category implies its type, even when the URL omits or contradicts it.
+		const implied = await loadAdminContent(database, new URLSearchParams({ category: '1' }));
+		expect(implied.orderComplete).toBe(true);
+		expect(implied.filters.type).toBe('site');
+		// Search or status filters narrow the scope, so the view is paginated instead.
+		const filtered = await loadAdminContent(
+			database,
+			new URLSearchParams({ type: 'site', category: '1', q: '关键词' })
+		);
+		expect(filtered.orderComplete).toBe(false);
 		const big = fixture(501);
 		const limited = await loadAdminContent(
 			big.database,
-			new URLSearchParams({ mode: 'sort', type: 'site', category: '1' })
+			new URLSearchParams({ type: 'site', category: '1' })
 		);
 		expect(limited.orderComplete).toBe(false);
 		expect(limited.total).toBe(501);
@@ -279,6 +276,44 @@ describe('administrator bulk content operations', () => {
 		await expect(
 			bulkUpdateAdminContent(database, { ids: [1], action: 'delete' })
 		).rejects.toMatchObject({ status: 400 });
+	});
+	it('moves same-type items into a category, appending after its tail, and rejects mismatched scopes', async () => {
+		const { database, sqlite } = fixture();
+		sqlite.exec(
+			"INSERT INTO categories(id,type,name,slug) VALUES(3,'site','设计资源','design'); INSERT INTO items(id,type,category_id,title,slug,status,visibility,sort_order) VALUES(500,'app',2,'应用','app-1','published','public',40);"
+		);
+		expect(
+			await bulkUpdateAdminContent(database, { ids: [1, 2], action: 'move', categoryId: 3 })
+		).toEqual({ count: 2 });
+		expect(
+			sqlite
+				.prepare(
+					'SELECT id,category_id,sort_order FROM items WHERE category_id=3 ORDER BY sort_order'
+				)
+				.all()
+		).toEqual([
+			{ id: 1, category_id: 3, sort_order: 10 },
+			{ id: 2, category_id: 3, sort_order: 20 }
+		]);
+		expect(sqlite.prepare('SELECT category_id FROM items WHERE id=3').get()).toEqual({
+			category_id: 1
+		});
+		// Type mismatch, mixed selections, unknown category and stale ids all fail without writes.
+		await expect(
+			bulkUpdateAdminContent(database, { ids: [1], action: 'move', categoryId: 2 })
+		).rejects.toBeInstanceOf(AdminWriteError);
+		await expect(
+			bulkUpdateAdminContent(database, { ids: [3, 500], action: 'move', categoryId: 3 })
+		).rejects.toBeInstanceOf(AdminWriteError);
+		await expect(
+			bulkUpdateAdminContent(database, { ids: [3], action: 'move', categoryId: 999 })
+		).rejects.toMatchObject({ status: 404 });
+		await expect(
+			bulkUpdateAdminContent(database, { ids: [3, 9999], action: 'move', categoryId: 3 })
+		).rejects.toMatchObject({ status: 409 });
+		expect(sqlite.prepare('SELECT COUNT(*) AS n FROM items WHERE category_id=3').get()).toEqual({
+			n: 2
+		});
 	});
 	it('uses the route error contract for invalid JSON, unavailable databases and valid updates', async () => {
 		const { database } = fixture();

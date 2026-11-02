@@ -16,7 +16,6 @@ export type AdminContentFilters = {
 	visibility: 'all' | 'public' | 'private';
 	q: string;
 	page: number;
-	mode: 'browse' | 'sort';
 };
 
 export function adminContentFilters(params: URLSearchParams): AdminContentFilters {
@@ -40,8 +39,7 @@ export function adminContentFilters(params: URLSearchParams): AdminContentFilter
 				? (params.get('visibility') as AdminContentFilters['visibility'])
 				: 'all',
 		q: (params.get('q') ?? '').trim().slice(0, 160),
-		page: Number.isSafeInteger(page) && page > 0 ? page : 1,
-		mode: params.get('mode') === 'sort' ? 'sort' : 'browse'
+		page: Number.isSafeInteger(page) && page > 0 ? page : 1
 	};
 }
 
@@ -54,8 +52,7 @@ export function adminContentUrl(
 	for (const key of ['type', 'category', 'status', 'visibility'] as const)
 		if (next[key] !== 'all') params.set(key, next[key]);
 	if (next.q) params.set('q', next.q);
-	if (next.mode === 'sort') params.set('mode', 'sort');
-	else if (next.page > 1) params.set('page', String(next.page));
+	if (next.page > 1) params.set('page', String(next.page));
 	return '/admin/items' + (params.size ? '?' + params.toString() : '');
 }
 

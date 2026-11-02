@@ -70,4 +70,21 @@ describe('manual content ordering', () => {
 				reorderItems(db, { type: 'site', categoryId: 2, itemIds })
 			).rejects.toBeInstanceOf(AdminWriteError);
 	});
+	it('reorders unclassified items inside one type through a null category', async () => {
+		const { db, sqlite } = setup();
+		sqlite.exec(
+			"INSERT INTO items(id,type,category_id,sort_order) VALUES(6,'site',NULL,10),(7,'site',NULL,20);"
+		);
+		await reorderItems(db, { type: 'site', categoryId: null, itemIds: [7, 6] });
+		expect(
+			sqlite
+				.prepare(
+					"SELECT id,sort_order FROM items WHERE category_id IS NULL AND type='site' ORDER BY sort_order"
+				)
+				.all()
+		).toEqual([
+			{ id: 7, sort_order: 10 },
+			{ id: 6, sort_order: 20 }
+		]);
+	});
 });

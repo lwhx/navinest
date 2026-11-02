@@ -14,10 +14,11 @@
 	import { moveOrderedItem } from '$lib/content-ordering';
 	import { searchShortcut } from '$lib/ui-actions';
 	import { adminDialog } from '$lib/admin-actions';
-	import type { Category, ContentType, Item, Tag } from '$lib/types/content';
+	import type { Category, Item, Tag } from '$lib/types/content';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
 	const types = ADMIN_CONTENT_TYPES;
+	const typeLabel = (value: string) => types.find((type) => type.value === value)?.label ?? value;
 	const selectedItemIds = new SvelteSet<number>();
 	let orderedItems = $derived([...data.items]),
 		contentSearch = $derived(data.filters.q);
@@ -37,16 +38,33 @@
 	let bulkAction = $state<BulkContentAction>('publish'),
 		bulkBusy = $state(false),
 		bulkMessage = $state(''),
-		bulkFailed = $state(false);
+		bulkFailed = $state(false),
+		moveTarget = $state('');
 	const activeType = $derived(data.filters.type),
 		contentCategoryFilter = $derived(data.filters.category);
-	const sortingMode = $derived(data.filters.mode === 'sort');
 	const filteredItems = $derived(orderedItems);
 	const sortableScope = $derived(
-		sortingMode && data.source === 'database' && data.orderComplete && filteredItems.length > 1
+		data.source === 'database' && data.orderComplete && filteredItems.length > 1
+	);
+	const categorySidebar = $derived(
+		data.source === 'database' && activeType !== 'all'
+			? data.categories.filter((category) => category.type === activeType)
+			: []
+	);
+	const sidebarCounts = $derived(
+		data.source === 'database' ? (data.categoryCounts ?? {}) : ({} as Record<string, number>)
 	);
 	const allVisibleSelected = $derived(
 		filteredItems.length > 0 && filteredItems.every((item) => selectedItemIds.has(item.id))
+	);
+	let flashMessage = $derived(
+		data.flash === 'created'
+			? '内容已创建。'
+			: data.flash === 'updated'
+				? '内容已保存。'
+				: data.flash === 'deleted'
+					? '内容已删除。'
+					: ''
 	);
 	$effect(() => {
 		void data.items;
@@ -79,16 +97,27 @@
 		}
 	}
 	function selectItem(id: number, selected: boolean) {
-		if (bulkBusy || sortingMode) return;
+		if (bulkBusy) return;
 		if (selected) selectedItemIds.add(id);
 		else selectedItemIds.delete(id);
 	}
 	function selectAllVisible(selected: boolean) {
-		if (bulkBusy || sortingMode) return;
+		if (bulkBusy) return;
 		for (const item of filteredItems) {
 			if (selected) selectedItemIds.add(item.id);
 			else selectedItemIds.delete(item.id);
 		}
+	}
+	function sidebarCategoryUrl(category: string) {
+		return resolve(
+			adminContentUrl(data.filters, {
+				category,
+				q: '',
+				status: 'all',
+				visibility: 'all',
+				page: 1
+			}) as '/'
+		);
 	}
 	async function bulkUpdate() {
 		if (bulkBusy || !selectedItemIds.size) return;
@@ -122,39 +151,39 @@
 			bulkBusy = false;
 		}
 	}
-	function enterSortingMode() {
-		const type = activeType === 'all' ? 'site' : activeType;
-		const category =
-			data.categories.find(
-				(entry) => entry.type === type && String(entry.id) === contentCategoryFilter
-			) ?? data.categories.find((entry) => entry.type === type);
-		void goto(
-			resolve(
-				adminContentUrl(data.filters, {
-					mode: 'sort',
-					type,
-					category: category ? String(category.id) : 'all',
-					q: '',
-					status: 'all',
-					visibility: 'all',
-					page: 1
-				}) as '/'
-			),
-			{ keepFocus: true }
-		);
-	}
-	function selectSortingType(type: ContentType) {
-		const category = data.categories.find((entry) => entry.type === type);
-		void goto(
-			resolve(
-				adminContentUrl(data.filters, {
-					type,
-					category: category ? String(category.id) : 'all',
-					page: 1
-				}) as '/'
-			),
-			{ keepFocus: true }
-		);
+	async function bulkMove() {
+		if (bulkBusy || !selectedItemIds.size || !moveTarget) return;
+		const ids = [...selectedItemIds];
+		const target = data.categories.find((category) => String(category.id) === moveTarget);
+		if (!target) return;
+		if (!confirm(`将把 ${ids.length} 条内容移动到“${target.name}”，是否继续？`)) return;
+		bulkBusy = true;
+		bulkFailed = false;
+		bulkMessage = '正在移动内容…';
+		try {
+			const response = await fetch('/api/admin/items/bulk', {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ ids, action: 'move', categoryId: Number(moveTarget) })
+			});
+			const body = await response.json();
+			if (!response.ok) throw new Error(body.error ?? '移动失败，请稍后重试。');
+			selectedItemIds.clear();
+			moveTarget = '';
+			const completedMessage = `已把 ${body.count} 条内容移动到“${target.name}”。`;
+			try {
+				await invalidateAll();
+				await tick();
+				bulkMessage = completedMessage;
+			} catch {
+				bulkMessage = completedMessage + '列表刷新失败，请刷新页面查看结果。';
+			}
+		} catch (error) {
+			bulkFailed = true;
+			bulkMessage = error instanceof Error ? error.message : '移动失败，请稍后重试。';
+		} finally {
+			bulkBusy = false;
+		}
 	}
 	async function saveOrder(itemIds: number[], previous: Item[]) {
 		sortSaving = true;
@@ -165,7 +194,7 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					type: activeType,
-					categoryId: Number(contentCategoryFilter),
+					categoryId: contentCategoryFilter === 'none' ? null : Number(contentCategoryFilter),
 					itemIds
 				})
 			});
@@ -298,14 +327,6 @@
 				onclick={(event) => {
 					if (sortSaving || bulkBusy) event.preventDefault();
 				}}>检查网址</a
-			>
-			<button
-				class="admin-secondary-button"
-				type="button"
-				disabled={sortSaving || bulkBusy}
-				onclick={sortingMode
-					? () => goto(resolve(adminContentUrl(data.filters, { mode: 'browse', page: 1 }) as '/'))
-					: enterSortingMode}>{sortingMode ? '退出排序' : '进入排序'}</button
 			><button
 				class="admin-primary-button"
 				type="button"
@@ -316,6 +337,7 @@
 </header>
 {#if data.source === 'fallback'}<p class="admin-notice">本地示例为只读数据。</p>{/if}
 {#if form?.message && !data.mode}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
+{#if flashMessage}<p class="admin-form-message" role="status">{flashMessage}</p>{/if}
 {#if bulkMessage}<p
 		class="admin-bulk-feedback"
 		class:error={bulkFailed}
@@ -324,34 +346,58 @@
 		{bulkMessage}
 	</p>{/if}
 
-<div class="content-workbench">
+<div class="content-workbench" class:with-sidebar={categorySidebar.length}>
+	{#if categorySidebar.length}<nav class="content-category-sidebar" aria-label="分类导航">
+			<a
+				class:active={contentCategoryFilter === 'all'}
+				href={sidebarCategoryUrl('all')}
+				data-sveltekit-noscroll
+			>
+				<span>全部内容</span><strong>{data.summary.types[activeType] ?? 0}</strong>
+			</a>
+			<a
+				class:active={contentCategoryFilter === 'none'}
+				href={sidebarCategoryUrl('none')}
+				data-sveltekit-noscroll
+			>
+				<span>未分类</span><strong>{sidebarCounts['none'] ?? 0}</strong>
+			</a>
+			{#each categorySidebar as category (category.id)}<a
+					class:active={contentCategoryFilter === String(category.id)}
+					href={sidebarCategoryUrl(String(category.id))}
+					data-sveltekit-noscroll
+				>
+					<span>{category.name}</span><strong>{sidebarCounts[String(category.id)] ?? 0}</strong>
+				</a>{/each}
+		</nav>{/if}
 	<section
 		class="content-browser"
 		aria-labelledby="content-browser-title"
 		aria-busy={bulkBusy || sortSaving}
 	>
 		<div class="content-browser-header">
-			<h2 id="content-browser-title">{sortingMode ? '分类内容排序' : '内容库'}</h2>
+			<h2 id="content-browser-title">内容库</h2>
 			<span
-				>{data.total} 条{data.filters.q ? '匹配结果' : '内容'}{!sortingMode && data.pageCount > 1
+				>{data.total} 条{data.filters.q ? '匹配结果' : '内容'}{data.pageCount > 1
 					? ` · 第 ${data.filters.page} / ${data.pageCount} 页`
 					: ''}</span
 			>
 		</div>
-		{#if !sortingMode}<nav class="content-type-tabs" aria-label="内容类型">
-				{#each types as type (type.value)}<a
-						class:active={activeType === type.value}
-						aria-current={activeType === type.value ? 'page' : undefined}
-						href={resolve(
-							adminContentUrl(data.filters, { type: type.value, category: 'all', page: 1 }) as '/'
-						)}
-						><span>{type.label}</span><strong
-							>{type.value === 'all'
-								? data.summary.total
-								: (data.summary.types[type.value] ?? 0)}</strong
-						></a
-					>{/each}
-			</nav>{/if}
+		<nav class="content-type-tabs" aria-label="内容类型">
+			{#each types as type (type.value)}<a
+					class:active={activeType === type.value}
+					aria-current={activeType === type.value ? 'page' : undefined}
+					href={resolve(
+						adminContentUrl(data.filters, { type: type.value, category: 'all', page: 1 }) as '/'
+					)}
+					data-sveltekit-noscroll
+					><span>{type.label}</span><strong
+						>{type.value === 'all'
+							? data.summary.total
+							: (data.summary.types[type.value] ?? 0)}</strong
+					></a
+				>{/each}
+		</nav>
 		<form
 			bind:this={filterForm}
 			class="content-toolbar content-command-bar"
@@ -359,27 +405,17 @@
 			action={resolve('/admin/items')}
 		>
 			{#if activeType !== 'all'}<input type="hidden" name="type" value={activeType} />{/if}
-			{#if sortingMode}<input type="hidden" name="mode" value="sort" /><label
-					><span>内容类型</span><select
-						value={activeType}
-						disabled={sortSaving}
-						onchange={(event) => selectSortingType(event.currentTarget.value as ContentType)}
-						>{#each types.filter((type) => type.value !== 'all') as type (type.value)}<option
-								value={type.value}>{type.label}</option
-							>{/each}</select
-					></label
-				>
-			{:else}<label class="content-search"
-					><span class="sr-only">搜索内容</span><input
-						name="q"
-						type="search"
-						bind:value={contentSearch}
-						use:searchShortcut
-						placeholder="搜索标题、用途、分类、标签或 Slug"
-						maxlength="160"
-						disabled={bulkBusy}
-					/></label
-				>{/if}
+			<label class="content-search"
+				><span class="sr-only">搜索内容</span><input
+					name="q"
+					type="search"
+					bind:value={contentSearch}
+					use:searchShortcut
+					placeholder="搜索标题、用途、分类、标签或 Slug"
+					maxlength="160"
+					disabled={bulkBusy}
+				/></label
+			>
 			<label
 				><span class="sr-only">分类</span><select
 					name="category"
@@ -387,47 +423,47 @@
 					value={contentCategoryFilter}
 					disabled={sortSaving || bulkBusy}
 					onchange={() => filterForm?.requestSubmit()}
-					><option value="all">全部分类</option>{#if !sortingMode}<option value="none"
-							>未分类</option
-						>{/if}{#each data.categories.filter((category) => activeType === 'all' || category.type === activeType) as category (category.id)}<option
+					><option value="all">全部分类</option><option value="none">未分类</option
+					>{#each data.categories.filter((category) => activeType === 'all' || category.type === activeType) as category (category.id)}<option
 							value={String(category.id)}>{category.name}</option
 						>{/each}</select
 				></label
 			>
-			{#if !sortingMode}<label
-					><span class="sr-only">状态</span><select
-						name="status"
-						class="content-status-filter"
-						value={data.filters.status}
-						disabled={bulkBusy}
-						onchange={() => filterForm?.requestSubmit()}
-						><option value="all">全部状态</option><option value="published">已发布</option><option
-							value="draft">草稿</option
-						></select
-					></label
-				><label
-					><span class="sr-only">可见性</span><select
-						name="visibility"
-						class="content-visibility-filter"
-						value={data.filters.visibility}
-						disabled={bulkBusy}
-						onchange={() => filterForm?.requestSubmit()}
-						><option value="all">全部可见性</option><option value="public">公开</option><option
-							value="private">私有</option
-						></select
-					></label
-				>{/if}
-			<button class="admin-secondary-button" type="submit" disabled={sortSaving || bulkBusy}
-				>{sortingMode ? '查看分类' : '筛选'}</button
+			<label
+				><span class="sr-only">状态</span><select
+					name="status"
+					class="content-status-filter"
+					value={data.filters.status}
+					disabled={bulkBusy}
+					onchange={() => filterForm?.requestSubmit()}
+					><option value="all">全部状态</option><option value="published">已发布</option><option
+						value="draft">草稿</option
+					></select
+				></label
+			><label
+				><span class="sr-only">可见性</span><select
+					name="visibility"
+					class="content-visibility-filter"
+					value={data.filters.visibility}
+					disabled={bulkBusy}
+					onchange={() => filterForm?.requestSubmit()}
+					><option value="all">全部可见性</option><option value="public">公开</option><option
+						value="private">私有</option
+					></select
+				></label
 			>
-			{#if !sortingMode}<a class="content-clear-filters" href={resolve('/admin/items')}>清除筛选</a
-				>{/if}
+			<button class="admin-secondary-button" type="submit" disabled={sortSaving || bulkBusy}
+				>筛选</button
+			>
+			<a class="content-clear-filters" href={resolve('/admin/items')}>清除筛选</a>
 		</form>
 		<div class="content-library-meta">
 			<span
-				>{sortingMode
-					? '排序包含该分类的全部状态与可见性。'
-					: '筛选保存在地址中，刷新或返回后可继续工作。'}</span
+				>{sortableScope
+					? '当前为完整分类，拖动排序会即时保存。'
+					: contentCategoryFilter !== 'all'
+						? '搜索或筛选状态下不能整组排序；清除后即可拖动。'
+						: '在左侧选择分类后即可直接拖动排序。'}</span
 			>
 			<div class="content-density-toggle" aria-label="列表密度">
 				<button
@@ -443,15 +479,19 @@
 				>
 			</div>
 		</div>
-		{#if sortingMode}<div class="content-sort-bar enabled" role="status">
+		{#if contentCategoryFilter !== 'all'}<div
+				class="content-sort-bar"
+				class:enabled={sortableScope}
+				role="status"
+			>
 				{sortMessage ||
 					(data.total > data.sortLimit
 						? `该分类超过 ${data.sortLimit} 条，暂不支持整组排序；请通过编辑内容调整排序值。`
 						: sortableScope
 							? `共 ${data.total} 条，拖动手柄或使用上下按钮，调整后自动保存。`
-							: '请选择至少包含两条内容的分类。')}
+							: '清除搜索或状态筛选后即可拖动排序。')}
 			</div>{/if}
-		{#if selectedItemIds.size && !sortingMode}<div class="content-selection-bar">
+		{#if selectedItemIds.size}<div class="content-selection-bar">
 				<strong>已选择 {selectedItemIds.size} 项</strong><label
 					><span class="sr-only">批量操作</span><select bind:value={bulkAction} disabled={bulkBusy}
 						>{#each BULK_CONTENT_ACTIONS as action (action.value)}<option value={action.value}
@@ -460,6 +500,20 @@
 					></label
 				><button class="admin-primary-button" type="button" disabled={bulkBusy} onclick={bulkUpdate}
 					>{bulkBusy ? '保存中…' : '应用到所选内容'}</button
+				><label
+					><span class="sr-only">移动到分类</span><select
+						bind:value={moveTarget}
+						disabled={bulkBusy}
+						><option value="">移动到分类…</option
+						>{#each data.categories.filter((category) => activeType === 'all' || String(category.id) !== contentCategoryFilter) as category (category.id)}<option
+								value={String(category.id)}>{category.name}（{typeLabel(category.type)}）</option
+							>{/each}</select
+					></label
+				><button
+					class="admin-secondary-button"
+					type="button"
+					disabled={bulkBusy || !moveTarget}
+					onclick={bulkMove}>移动</button
 				><button
 					class="content-clear-filters"
 					type="button"
@@ -468,7 +522,7 @@
 				><small>仅作用于本页明确勾选的内容</small>
 			</div>{/if}
 		<div class="content-table-head">
-			{#if !sortingMode && data.source === 'database'}<label
+			{#if data.source === 'database'}<label
 					><input
 						type="checkbox"
 						aria-label="全选本页内容"
@@ -479,7 +533,7 @@
 				>{:else}<span></span>{/if}<span aria-hidden="true"></span><span>内容</span><span>状态</span
 			><span>排序与更新</span><span>操作</span>
 		</div>
-		{#if !sortingMode && data.source === 'database'}<label class="content-mobile-select"
+		{#if data.source === 'database'}<label class="content-mobile-select"
 				><input
 					type="checkbox"
 					checked={allVisibleSelected}
@@ -491,7 +545,7 @@
 			{#each filteredItems as item, index (item.id)}<AdminContentRow
 					{item}
 					database={data.source === 'database'}
-					selectable={!sortingMode && data.source === 'database'}
+					selectable={data.source === 'database'}
 					busy={bulkBusy || sortSaving}
 					sortable={sortableScope && !sortSaving}
 					first={index === 0}
@@ -509,7 +563,7 @@
 					<a class="admin-secondary-button" href={resolve('/admin/items')}>查看全部内容</a>
 				</div>{/each}
 		</div>
-		{#if !sortingMode && data.pageCount > 1}<nav class="admin-pagination" aria-label="内容分页">
+		{#if data.pageCount > 1}<nav class="admin-pagination" aria-label="内容分页">
 				<span>共 {data.total} 条 · 第 {data.filters.page} / {data.pageCount} 页</span>
 				<div>
 					{#if data.filters.page > 1}<a

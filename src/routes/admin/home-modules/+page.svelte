@@ -36,6 +36,13 @@
 		>{/if}
 </header>
 {#if data.source === 'fallback'}<p class="admin-notice">本地示例为只读数据。</p>{/if}
+{#if data.flash && !data.mode}<p class="admin-form-message" role="status">
+		{data.flash === 'created'
+			? '模块已创建。'
+			: data.flash === 'updated'
+				? '模块已保存。'
+				: '模块已删除。'}
+	</p>{/if}
 {#if data.source === 'database' && data.mode}<section class="admin-editor">
 		<div class="admin-editor-header">
 			<h2>{data.mode === 'create' ? '新增模块' : '编辑模块'}</h2>

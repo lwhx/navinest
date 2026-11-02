@@ -28,9 +28,12 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	if (url.searchParams.has('create') && createParent && !isManagedCategoryType(createParent.type)) {
 		error(400, '历史分类不再新增子分类，请选择网址或文章分类。');
 	}
+	const flash =
+		['created', 'updated', 'deleted'].find((name) => url.searchParams.has(name)) ?? null;
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
+		flash,
 		createParent,
 		editing: editId ? (data.categories.find((category) => category.id === editId) ?? null) : null
 	};

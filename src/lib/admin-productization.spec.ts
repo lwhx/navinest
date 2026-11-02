@@ -36,6 +36,12 @@ describe('administrator productization', () => {
 		expect(page).toContain('<CategoryParentPicker');
 		expect(node).toContain('node.deleteImpact');
 		expect(node).toContain('disabled={!node.canDelete}');
+		// Sibling drag ordering lives on the unfiltered tree and auto-saves.
+		expect(page).toContain("fetch('/api/admin/categories/order'");
+		expect(page).toContain('sortableTree');
+		expect(node).toContain('category-drag-handle');
+		expect(node).toContain('上移分类');
+		expect(node).toContain('下移分类');
 		expect(css).toContain('.category-workbench');
 		expect(css).toContain('@media (max-width: 900px)');
 	});
@@ -63,8 +69,13 @@ describe('administrator productization', () => {
 		expect(page).toContain('sortableScope');
 		expect(page).toContain("fetch('/api/admin/items/order'");
 		expect(page).toContain('orderedItems = previous');
-		expect(page).toContain('sortingMode');
-		expect(page).toContain('进入排序');
+		// Drag ordering is always available on an unfiltered single-category view,
+		// without a separate sort mode.
+		expect(page).toContain('content-category-sidebar');
+		expect(page).toContain('sidebarCategoryUrl');
+		expect(css).toContain('.content-category-sidebar');
+		expect(page).toContain("fetch('/api/admin/items/bulk'");
+		expect(page).toContain("action: 'move'");
 		expect(page).toContain('content-editor-modal');
 		expect(page).toContain('role="dialog"');
 		expect(page).toContain('editingItem');
@@ -78,6 +89,8 @@ describe('administrator productization', () => {
 		expect(page).toContain('selectedItemIds');
 		expect(page).toContain('content-density-toggle');
 		expect(page).toContain('content-selection-bar');
+		expect(page).not.toContain("mode: 'sort'");
+		expect(page).not.toContain('进入排序');
 		expect(row).toContain('content-row-select');
 		expect(row).toContain('content-row-menu');
 		expect(form).toContain('读取网页信息');
