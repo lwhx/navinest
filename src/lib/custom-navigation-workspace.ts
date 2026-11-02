@@ -44,6 +44,16 @@ export type NavigationReceipt = {
 	affected: number;
 	completedAt: string;
 };
+/** Draft being edited in the workspace editor panel. */
+export type NavigationEditor =
+	| { resource: 'link'; id: number | null; data: Omit<NavigationLink, 'id'> }
+	| { resource: 'category'; id: number | null; data: Omit<NavigationCategory, 'id'> };
+/** A previewed mutation pending explicit user confirmation. */
+export type NavigationReview = {
+	plan: NavigationPlan;
+	mutation: NavigationMutation;
+	version: string;
+};
 export const NAVIGATION_BATCH_LIMIT = 500;
 export function navigationFilters(params: URLSearchParams) {
 	const integer = (name: string) =>

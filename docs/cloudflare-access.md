@@ -57,16 +57,24 @@ NaviNest 在 Access 模式使用两层后台访问控制：
 
 后台守卫要求 Cloudflare 提供以下请求头：
 
-- `Cf-Access-Authenticated-User-Email`
 - `Cf-Access-Jwt-Assertion`
 
-应用只检查 assertion 是否存在，JWT 签名和 audience 验证由前置 Cloudflare Access 承担。因此必须满足：
+应用不再信任请求头中的邮箱：它使用 Access 团队域发布的 JWKS 独立验证 assertion 的 RS256 签名、有效期、签发者与 audience，并只接受**已验证 token 中的 `email` 声明**作为身份来源。`Cf-Access-Authenticated-User-Email` 头仅作展示参考，不参与授权。
+
+Access 模式要求配置以下 Worker 变量（`wrangler.jsonc` 或仪表板）：
+
+| 变量                    | 必填 | 说明                                                                                                   |
+| ----------------------- | ---- | ------------------------------------------------------------------------------------------------------ |
+| `CF_ACCESS_TEAM_DOMAIN` | 是   | Access 团队域，如 `team.example.cloudflareaccess.com`；未配置时 access 模式直接返回 503（fail-closed） |
+| `CF_ACCESS_AUD`         | 建议 | Access 应用的 AUD 标签；配置后校验 token 的 `aud` 声明                                                 |
+
+JWKS 会按团队域缓存 10 分钟；JWKS 暂时不可用时返回 503，签名或声明校验失败返回 401。边缘 Access 仍是第一道防线，因此仍必须满足：
 
 - 所有承载后台的自定义域名都配置相同的 Access 保护。
 - 禁用未受保护的 `workers.dev` 和 preview URL，或为它们配置等价的 Access 应用。
 - 不要将 Worker 暴露在可绕过 Access 的其他路由上。
 
-如果以后需要在没有 Access 代理的环境中独立验证 Access 身份，应增加 Access JWKS 签名和 audience 校验，不能只信任请求头。站内 session 模式通过数据库会话验证身份，不使用 Access 请求头。
+站内 session 模式通过数据库会话验证身份，不使用 Access 请求头，也无需上述变量。
 
 ### Access 管理员配置
 

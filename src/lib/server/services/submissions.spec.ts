@@ -4,6 +4,7 @@ import type { Database, DatabaseStatement, DatabaseValue } from '$lib/server/db'
 import {
 	createSubmission,
 	listUserSubmissions,
+	SUBMISSION_DAILY_LIMIT,
 	SubmissionError
 } from '$lib/server/services/submissions';
 
@@ -280,5 +281,18 @@ describe('user submissions', () => {
 			).rejects.toMatchObject({ field: 'userCategoryId' });
 		}
 		expect(sqlite.prepare('SELECT COUNT(*) AS n FROM submissions').get()).toMatchObject({ n: 1 });
+	});
+
+	it('enforces the per-user daily submission quota without touching other users', async () => {
+		const { database } = fixture();
+		const input = { type: 'post', title: '投稿', summary: null, content: '内容', url: null };
+		for (let index = 0; index < SUBMISSION_DAILY_LIMIT; index++) {
+			await expect(createSubmission(database, 7, input)).resolves.toBe(index + 1);
+		}
+		await expect(createSubmission(database, 7, input)).rejects.toMatchObject({
+			name: 'SubmissionError',
+			message: expect.stringContaining('每天最多')
+		});
+		await expect(createSubmission(database, 8, input)).resolves.toBeGreaterThan(0);
 	});
 });

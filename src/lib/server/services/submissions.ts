@@ -170,7 +170,22 @@ function normalize(input: SubmissionInput) {
 		}
 	};
 }
+/** Per-user submissions per UTC day, counting resubmissions; an anti-abuse backstop. */
+export const SUBMISSION_DAILY_LIMIT = 20;
+
+async function assertDailyQuota(database: Database, userId: number) {
+	const { results } = await database
+		.prepare(
+			"SELECT COUNT(*) AS count FROM submissions WHERE user_id=? AND created_at >= strftime('%Y-%m-%d','now')"
+		)
+		.bind(userId)
+		.all<{ count: number }>();
+	if ((results[0]?.count ?? 0) >= SUBMISSION_DAILY_LIMIT)
+		throw new SubmissionError(`每天最多提交 ${SUBMISSION_DAILY_LIMIT} 条投稿，请明天再试。`);
+}
+
 export async function createSubmission(database: Database, userId: number, input: SubmissionInput) {
+	await assertDailyQuota(database, userId);
 	const data = normalize(input);
 	const sourceId = input.sourceSubmissionId ?? null;
 	if (sourceId !== null) {
