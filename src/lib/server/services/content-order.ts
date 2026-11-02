@@ -1,8 +1,17 @@
 import type { ContentType } from '$lib/types/content';
 import type { Database } from '$lib/server/db';
 import { AdminWriteError } from '$lib/server/services/admin-write';
-export type ItemOrderInput = { type: ContentType; categoryId: number; itemIds: number[] };
+export type ItemOrderInput = {
+	type: ContentType;
+	categoryId: number | null;
+	itemIds: number[];
+};
 export async function reorderItems(database: Database, input: ItemOrderInput): Promise<void> {
+	if (
+		input.categoryId !== null &&
+		(!Number.isSafeInteger(input.categoryId) || input.categoryId <= 0)
+	)
+		throw new AdminWriteError('排序分类无效。');
 	if (
 		!input.itemIds.length ||
 		new Set(input.itemIds).size !== input.itemIds.length ||
@@ -15,7 +24,7 @@ export async function reorderItems(database: Database, input: ItemOrderInput): P
 		.prepare(
 			`WITH desired AS (
 		SELECT value AS id, (CAST(key AS INTEGER) + 1) * 10 AS position FROM json_each(?)
-	), scope AS (SELECT id FROM items WHERE type = ? AND category_id = ?)
+	), scope AS (SELECT id FROM items WHERE type = ? AND category_id IS ?)
 	UPDATE items SET sort_order = (SELECT position FROM desired WHERE desired.id = items.id),
 		updated_at = CURRENT_TIMESTAMP
 	WHERE id IN (SELECT id FROM desired) AND (SELECT COUNT(*) FROM scope) = ?

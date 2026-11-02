@@ -304,6 +304,21 @@ try {
 	await page.locator('.category-legacy summary').click();
 	assert.equal(await page.locator('.category-legacy .category-tree-node').count(), 4);
 	assert.equal(await page.locator('.category-legacy a[href*="create="]').count(), 0);
+	// Root-level sibling ordering: move 设计资源 above 开发工具 with one click.
+	const rootNames = () =>
+		page
+			.locator(
+				'.category-browser > .category-tree > .category-tree-node > .category-node-main .category-node-copy strong'
+			)
+			.allTextContents();
+	assert.deepEqual(await rootNames(), ['开发工具与团队协作资源', '文章资源', '设计资源']);
+	assert.ok(
+		await page.getByRole('button', { name: '上移分类开发工具与团队协作资源' }).isDisabled()
+	);
+	await page.getByRole('button', { name: '上移分类设计资源', exact: true }).click();
+	await page.getByRole('status').filter({ hasText: '分类顺序已保存' }).waitFor();
+	await page.reload({ waitUntil: 'networkidle' });
+	assert.deepEqual(await rootNames(), ['文章资源', '设计资源', '开发工具与团队协作资源']);
 	await open(page, '/admin/categories?create=1&parent=1');
 	assert.deepEqual(
 		await page
@@ -318,7 +333,7 @@ try {
 			.getByLabel('一级分类', { exact: true })
 			.locator('option')
 			.evaluateAll((options) => options.map((option) => option.value)),
-		['', '1', '9']
+		['', '9', '1']
 	);
 	assert.deepEqual(
 		await page
@@ -526,11 +541,18 @@ try {
 		).status(),
 		200
 	);
-	await page.locator('.content-category-filter').selectOption('1');
+	// Switch to the site type, then use the sidebar: it clears filters by design and
+	// landing on one category is the sortable view (no separate sort mode).
+	await page.locator('.content-type-tabs').getByRole('link', { name: /网址/ }).click();
+	await page.waitForURL('**type=site*');
+	await page
+		.locator('.content-category-sidebar')
+		.getByRole('link', { name: /开发工具与团队协作资源/ })
+		.click();
 	await page.waitForURL('**category=1*');
-	await page.getByRole('button', { name: '进入排序', exact: true }).click();
-	await page.waitForURL('**mode=sort*');
 	assert.equal(await page.locator('.content-row').count(), 123);
+	assert.equal(await page.locator('.content-category-sidebar a.active').count(), 1);
+	assert.ok(await page.getByRole('status').filter({ hasText: '拖动手柄' }).isVisible());
 	const before = await page
 		.locator('.content-row')
 		.evaluateAll((rows) => rows.map((row) => Number(row.dataset.contentId)));
@@ -541,6 +563,37 @@ try {
 		.locator('.content-row')
 		.evaluateAll((rows) => rows.map((row) => Number(row.dataset.contentId)));
 	assert.deepEqual(after, [before[1], before[0], ...before.slice(2)]);
+	// Bulk move happens from the full-library view: sortable category rows hide their
+	// select boxes. A throwaway target category is created through the admin API.
+	const moveTargetResponse = await context.request.post(baseUrl + '/api/admin/categories', {
+		data: {
+			type: 'site',
+			parentId: null,
+			name: '移动测试分类',
+			slug: 'smoke-move-target',
+			isVisible: true
+		}
+	});
+	assert.equal(moveTargetResponse.status(), 201);
+	const moveTargetId = String((await moveTargetResponse.json()).id);
+	await page
+		.locator('.content-type-tabs')
+		.getByRole('link', { name: /全部内容/ })
+		.click();
+	await page.waitForURL((url) => !url.search.includes('category='));
+	await page.locator('.content-row').first().locator('.content-row-select input').check();
+	await page.locator('.content-row').nth(1).locator('.content-row-select input').check();
+	await page.locator('.content-selection-bar').getByLabel('移动到分类').selectOption(moveTargetId);
+	await page.getByRole('button', { name: '移动', exact: true }).click();
+	await page.getByRole('status').filter({ hasText: '已把 2 条内容移动到' }).waitFor();
+	await page.locator('.content-type-tabs').getByRole('link', { name: /网址/ }).click();
+	await page.waitForURL('**type=site*');
+	await page
+		.locator('.content-category-sidebar')
+		.getByRole('link', { name: /移动测试分类/ })
+		.click();
+	await page.waitForURL(`**category=${moveTargetId}*`);
+	assert.equal(await page.locator('.content-row').count(), 2);
 	assert.equal(
 		(
 			await context.request.patch(baseUrl + '/api/admin/items/1', {

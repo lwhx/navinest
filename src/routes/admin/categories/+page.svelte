@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { isManagedCategoryType, managedCategoryTypes } from '$lib/category-types';
 	import CategoryTreeNode from '$lib/components/CategoryTreeNode.svelte';
 	import CategoryParentPicker from '$lib/components/admin/CategoryParentPicker.svelte';
+	import { moveOrderedItem } from '$lib/content-ordering';
 	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
 	import type { PageProps } from './$types';
 	let { data, form }: PageProps = $props();
@@ -10,6 +12,12 @@
 	let categorySearch = $state(''),
 		categoryTypeFilter = $state('all'),
 		categoryVisibilityFilter = $state('all');
+	let treeDraft = $state<CategoryWorkbenchNode[] | null>(null),
+		sortBusy = $state(false),
+		sortFailed = $state(false),
+		sortMessage = $state(''),
+		draggedCategoryId = $state<number | null>(null);
+	const browsableRoots = $derived(treeDraft ?? data.workbench.roots);
 
 	function matches(node: CategoryWorkbenchNode): CategoryWorkbenchNode | null {
 		const children = node.children.flatMap((child) => {
@@ -26,12 +34,27 @@
 			? { ...node, children }
 			: null;
 	}
-	let filteredRoots = $derived(data.workbench.roots.flatMap((root) => matches(root) ?? []));
+	let filteredRoots = $derived(browsableRoots.flatMap((root) => matches(root) ?? []));
+	// Ordering submits the complete sibling list, so it is only offered on the
+	// unfiltered tree — a filtered view would silently drop hidden siblings.
+	const sortableTree = $derived(
+		data.source === 'database' &&
+			!data.mode &&
+			!sortBusy &&
+			!categorySearch.trim() &&
+			categoryTypeFilter === 'all' &&
+			categoryVisibilityFilter === 'all'
+	);
 	const legacyEditor = $derived(Boolean(data.editing && !isManagedCategoryType(data.editing.type)));
 	let selectedType = $derived(legacyEditor ? data.editing!.type : managedType()),
 		selectedParent = $derived(
 			value('parentId', String(data.editing?.parentId ?? data.createParent?.id ?? ''))
 		);
+	$effect(() => {
+		void data.workbench;
+		treeDraft = null;
+		sortMessage = '';
+	});
 
 	function value(name: string, fallback = ''): string {
 		const submitted = form?.values?.[name];
@@ -44,6 +67,102 @@
 
 	function visibleChecked(): boolean {
 		return form?.values ? value('isVisible') === 'on' : data.editing?.isVisible !== false;
+	}
+
+	function deepCopyNodes(nodes: CategoryWorkbenchNode[]): CategoryWorkbenchNode[] {
+		return nodes.map((node) => ({ ...node, children: deepCopyNodes(node.children) }));
+	}
+	function locateSiblings(
+		nodes: CategoryWorkbenchNode[],
+		id: number,
+		parentId: number | null
+	): { list: CategoryWorkbenchNode[]; parentId: number | null; type: string } | null {
+		for (const node of nodes) {
+			if (node.id === id) return { list: nodes, parentId, type: node.type };
+			const found = locateSiblings(node.children, id, node.id);
+			if (found) return found;
+		}
+		return null;
+	}
+	/**
+	 * Reorders one type's subsequence inside a shared sibling array (top level mixes
+	 * types); resolveTarget receives the same-type id list and returns the swap target.
+	 */
+	function reorderTypedSiblings(
+		list: CategoryWorkbenchNode[],
+		id: number,
+		resolveTarget: (ids: number[]) => number | undefined
+	) {
+		const type = list.find((node) => node.id === id)?.type;
+		if (!type) return null;
+		const sameType = list.filter((node) => node.type === type),
+			ids = sameType.map((node) => node.id),
+			target = resolveTarget(ids);
+		if (target === undefined || target === id) return null;
+		const next = moveOrderedItem(ids, id, target);
+		if (next.every((value, index) => value === ids[index])) return null;
+		const queue = next.map((value) => sameType.find((node) => node.id === value)!);
+		list.splice(
+			0,
+			list.length,
+			...list.map((node) => (node.type === type ? queue.shift()! : node))
+		);
+		return { type, categoryIds: next };
+	}
+	function reorderSiblings(id: number, resolveTarget: (ids: number[]) => number | undefined) {
+		if (!treeDraft) return;
+		const scope = locateSiblings(treeDraft, id, null),
+			previous = treeDraft;
+		if (!scope) return;
+		const outcome = reorderTypedSiblings(scope.list, id, resolveTarget);
+		if (!outcome) return;
+		void saveCategoryOrder(outcome.type, scope.parentId, outcome.categoryIds, previous);
+	}
+	async function saveCategoryOrder(
+		type: string,
+		parentId: number | null,
+		categoryIds: number[],
+		previous: CategoryWorkbenchNode[]
+	) {
+		sortBusy = true;
+		sortFailed = false;
+		sortMessage = '正在保存顺序…';
+		try {
+			const response = await fetch('/api/admin/categories/order', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ type, parentId, categoryIds })
+			});
+			const body = response.ok ? null : await response.json();
+			if (!response.ok) throw new Error(body?.error ?? '排序保存失败。');
+			const completed = '分类顺序已保存。';
+			treeDraft = null;
+			try {
+				await invalidateAll();
+				sortMessage = completed;
+			} catch {
+				sortMessage = completed + '树刷新失败，请刷新页面核对。';
+			}
+		} catch (error) {
+			treeDraft = previous;
+			sortFailed = true;
+			sortMessage = error instanceof Error ? error.message : '排序保存失败，已恢复原顺序。';
+		} finally {
+			sortBusy = false;
+		}
+	}
+	function moveCategory(id: number, direction: -1 | 1) {
+		if (!sortableTree) return;
+		if (!treeDraft) treeDraft = deepCopyNodes(data.workbench.roots);
+		if (!locateSiblings(treeDraft, id, null)) return;
+		reorderSiblings(id, (ids) => ids[ids.indexOf(id) + direction]);
+	}
+	function dropOnCategory(targetId: number) {
+		if (!sortableTree || draggedCategoryId === null || draggedCategoryId === targetId) return;
+		if (!treeDraft) treeDraft = deepCopyNodes(data.workbench.roots);
+		const dragged = draggedCategoryId;
+		draggedCategoryId = null;
+		reorderSiblings(dragged, () => targetId);
 	}
 </script>
 
@@ -59,6 +178,20 @@
 </header>
 {#if data.source === 'fallback'}<p class="admin-notice">本地示例为只读数据。</p>{/if}
 {#if form?.message && !data.mode}<p class="admin-form-message" role="alert">{form.message}</p>{/if}
+{#if data.flash}<p class="admin-form-message" role="status">
+		{data.flash === 'created'
+			? '分类已创建。'
+			: data.flash === 'updated'
+				? '分类已保存。'
+				: '分类已删除。'}
+	</p>{/if}
+{#if sortMessage}<p
+		class="admin-form-message"
+		class:error={sortFailed}
+		role={sortFailed ? 'alert' : 'status'}
+	>
+		{sortMessage}
+	</p>{/if}
 
 {#if data.source === 'database' && data.mode}
 	<section class="admin-editor" aria-labelledby="category-editor-title">
@@ -201,10 +334,23 @@
 				></label
 			>
 		</div>
+		{#if sortableTree}<div class="category-sort-hint" role="status">
+				拖动 ⋮⋮ 或使用上下按钮调整同层分类顺序，调整后自动保存。
+			</div>{:else if !data.mode && data.source === 'database'}<div class="category-sort-hint">
+				清除搜索或筛选后即可拖动排序。
+			</div>{/if}
 		<div class="category-tree" aria-live="polite">
-			{#each filteredRoots as root (root.id)}<CategoryTreeNode
+			{#each filteredRoots as root, index (root.id)}<CategoryTreeNode
 					node={root}
 					database={data.source === 'database'}
+					sortable={sortableTree && !sortBusy}
+					first={index === 0}
+					last={index === filteredRoots.length - 1}
+					busy={sortBusy}
+					onDragStart={(id) => (draggedCategoryId = id)}
+					onDragOver={(event) => event.preventDefault()}
+					onDrop={dropOnCategory}
+					onMove={moveCategory}
 				/>{:else}<div class="category-empty">
 					<strong>没有匹配分类</strong>
 					<p>调整搜索词或筛选条件后再试。</p>
@@ -216,6 +362,7 @@
 			<strong>使用提示</strong>
 			<ul>
 				<li>点击“快速新增子分类”会自动预选父级。</li>
+				<li>无筛选时可直接拖动 ⋮⋮ 或使用上下按钮调整同层顺序。</li>
 				<li>内容数包含当前分类及其子分类内容。</li>
 				<li>有子分类或直属内容的分类不能直接删除。</li>
 			</ul>

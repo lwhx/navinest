@@ -3,7 +3,29 @@
 	import { isManagedCategoryType } from '$lib/category-types';
 	import CategoryTreeNode from './CategoryTreeNode.svelte';
 	import type { CategoryWorkbenchNode } from '$lib/server/services/category-workbench';
-	let { node, database = true }: { node: CategoryWorkbenchNode; database?: boolean } = $props();
+	let {
+		node,
+		database = true,
+		sortable = false,
+		first = false,
+		last = false,
+		busy = false,
+		onDragStart,
+		onDragOver,
+		onDrop,
+		onMove
+	}: {
+		node: CategoryWorkbenchNode;
+		database?: boolean;
+		sortable?: boolean;
+		first?: boolean;
+		last?: boolean;
+		busy?: boolean;
+		onDragStart?: (id: number) => void;
+		onDragOver?: (event: DragEvent) => void;
+		onDrop?: (id: number) => void;
+		onMove?: (id: number, direction: -1 | 1) => void;
+	} = $props();
 	let expanded = $state(true);
 	const typeLabels: Record<string, string> = {
 		site: '网址',
@@ -14,8 +36,15 @@
 	};
 </script>
 
-<article class="category-tree-node" class:hidden-category={!node.isVisible}>
-	<div class="category-node-main">
+<article
+	class="category-tree-node"
+	class:hidden-category={!node.isVisible}
+	draggable={sortable}
+	ondragstart={() => onDragStart?.(node.id)}
+	ondragover={(event) => onDragOver?.(event)}
+	ondrop={() => onDrop?.(node.id)}
+>
+	<div class="category-node-main" class:sortable>
 		<button
 			class="category-expand"
 			type="button"
@@ -25,6 +54,26 @@
 			onclick={() => (expanded = !expanded)}
 			>{node.children.length ? (expanded ? '−' : '+') : '·'}</button
 		>
+		{#if sortable}<div class="category-node-sort">
+				<button
+					class="category-drag-handle"
+					type="button"
+					aria-label={`拖动分类${node.name}排序`}
+					title="拖动排序">⋮⋮</button
+				>
+				<button
+					type="button"
+					aria-label={`上移分类${node.name}`}
+					disabled={first || busy}
+					onclick={() => onMove?.(node.id, -1)}>↑</button
+				>
+				<button
+					type="button"
+					aria-label={`下移分类${node.name}`}
+					disabled={last || busy}
+					onclick={() => onMove?.(node.id, 1)}>↓</button
+				>
+			</div>{/if}
 		<span class="category-node-icon" aria-hidden="true"
 			>{node.icon?.slice(0, 2) || node.name.slice(0, 1)}</span
 		>
@@ -61,6 +110,17 @@
 			</div>{/if}
 	</div>
 	{#if expanded && node.children.length}<div class="category-tree-children">
-			{#each node.children as child (child.id)}<CategoryTreeNode node={child} {database} />{/each}
+			{#each node.children as child, index (child.id)}<CategoryTreeNode
+					node={child}
+					{database}
+					{sortable}
+					{busy}
+					first={index === 0}
+					last={index === node.children.length - 1}
+					{onDragStart}
+					{onDragOver}
+					{onDrop}
+					{onMove}
+				/>{/each}
 		</div>{/if}
 </article>

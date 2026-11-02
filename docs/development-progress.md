@@ -1,6 +1,17 @@
 # NaviNest 开发进度
 
-更新时间：2026-10-18
+更新时间：2026-11-02
+
+## 后台内容管理：常驻拖拽排序与批量移动（2026-11-02）
+
+对标一为导航的后台操作方式，拆掉排序模式的门槛，让“选中分类 → 直接拖动”成为默认体验。
+
+- 内容管理（`/admin/items`）废除 `?mode=sort` 专用排序模式：浏览单个分类且无搜索/状态筛选时即为完整排序视图（`orderComplete` 新判定，分类隐含其类型），拖动把手与上下按钮常驻；筛选/搜索视图明确提示不可整组排序及原因。类型页签下新增分类侧栏（含每分类内容计数，`categoryCounts`），点击即按分类浏览并清空筛选；移动端侧栏横向滚动。500 条上限与整组加载逻辑保持不变。
+- 分类管理（`/admin/categories`）新增同层拖拽排序：树节点带 ⋮⋮ 把手与上下按钮（仅 site/post、无筛选、未开编辑器时可用），本地草稿树乐观重排 + 失败回滚；新增 `reorderCategories` 服务与 `PUT /api/admin/categories/order`（完整兄弟范围原子校验，模式同 `content-order`）。遗留类型不参与排序。
+- 批量操作新增「移动到分类」：`PATCH /api/admin/items/bulk` 支持 `action: 'move'`，校验同类型与目标分类存在，单语句把所选内容追加到目标分类末尾（`MAX(sort_order)+(i+1)*10`），类型不一致/目标不存在/过期选择分别报错。选择栏加同类型分类下拉。
+- 操作反馈：items/categories/home-modules 读取 `?created=1/?updated=1/?deleted=1` 渲染成功提示；内容编辑弹窗保存后即时提示。
+- `reorderItems` 支持 `categoryId: null`（未分类整组排序）。旧 `?mode=sort` 链接自然降级为对应分类的普通浏览（仍可排序）。
+- 无新增依赖、迁移、绑定或 Cron，自定义 Worker 入口不变。服务端行为由 `category-order.spec`、`admin-content.spec`（排序视图边界、bulk move、类型/过期拒绝）、`content-order.spec`（未分类）覆盖；`admin-productization.spec` 改为断言常驻排序、侧栏与 bulk move；`admin-workspace-smoke.mjs` 更新为“选分类 → 直接下移 → 持久”与 bulk move/分类排序流程。
 
 ## 已收录网址：手动检查与修正（2026-10-18）
 

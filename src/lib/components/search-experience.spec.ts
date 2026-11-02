@@ -74,6 +74,7 @@ function adminFixture() {
 				},
 				source: 'database' as const,
 				mode: 'edit',
+				flash: null,
 				editing,
 				modules: [editing],
 				categories: []

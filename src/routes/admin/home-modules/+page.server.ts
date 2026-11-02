@@ -21,10 +21,13 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 	const database = getDatabase(platform);
 	const data = database ? await loadAdminHomeModules(database) : fallbackAdminHomeModules();
 	const editId = parsePositiveId(url.searchParams.get('edit') ?? '');
+	const flash =
+		['created', 'updated', 'deleted'].find((name) => url.searchParams.has(name)) ?? null;
 	return {
 		...data,
 		categories: database ? await listCategories(database, { visibleOnly: false }) : [],
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
+		flash,
 		editing: editId ? (data.modules.find((entry) => entry.id === editId) ?? null) : null
 	};
 };

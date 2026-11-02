@@ -57,8 +57,15 @@ export async function checkSubmissionReview({ page, baseUrl, command, screenshot
 		(_, i) =>
 			`(${2000 + i},2,'site',${quote('审核回归资源 ' + (i + 1))},${quote(payload)},'pending','2026-10-14 00:00:00')`
 	);
+	// Windows caps one argv entry near 32 KiB, so the seed runs in bounded batches.
+	for (let start = 0; start < values.length; start += 60)
+		execute(
+			`INSERT INTO submissions(id,user_id,type,title,payload_json,status,created_at) VALUES ${values
+				.slice(start, start + 60)
+				.join(',')};`
+		);
 	execute(
-		`INSERT INTO submissions(id,user_id,type,title,payload_json,status,created_at) VALUES ${values.join(',')}; INSERT INTO items(id,type,title,slug,status,visibility) VALUES(9000,'site','审核回归已有内容','review-existing','published','public');`
+		`INSERT INTO items(id,type,title,slug,status,visibility) VALUES(9000,'site','审核回归已有内容','review-existing','published','public');`
 	);
 
 	// Read and write endpoints require the real administrator session.

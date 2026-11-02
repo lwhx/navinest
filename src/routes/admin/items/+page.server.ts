@@ -37,9 +37,12 @@ export const load: PageServerLoad = async ({ platform, url }) => {
 			? ((await listItems(database, { status: null, visibility: null, limit: 1, id: editId }))[0] ??
 				null)
 			: null;
+	const flash =
+		['created', 'updated', 'deleted'].find((name) => url.searchParams.has(name)) ?? null;
 	return {
 		...data,
 		mode: url.searchParams.has('create') ? 'create' : editId ? 'edit' : null,
+		flash,
 		initialType: data.filters.type,
 		initialCategoryId: data.filters.category === 'all' ? '' : data.filters.category,
 		editing
